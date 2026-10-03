@@ -150,8 +150,9 @@ claude plugin validate .
 claude plugin test .
 ```
 
-`demo/` holds a six-step walkthrough with reference diagrams; `fixtures/` one
-diagram per type.
+`demo/` holds a six-step walkthrough with reference diagrams and their renders;
+`fixtures/` one diagram per type. `node scripts/render.mjs file.mmd...` renders
+any Mermaid file to PNG with the same renderer the pane uses.
 
 ## License
 

@@ -28,3 +28,27 @@ Moments worth catching on camera:
   show it on purpose, ask for a sequence diagram with a note containing a
   semicolon (`;` ends a statement there).
 - End with `p` stepping back through all six diagrams.
+
+## The six reference diagrams
+
+Rendered with the whiteboard's own renderer (Mermaid 12.1, `default` theme).
+Regenerate after editing a source with
+`node scripts/render.mjs --out demo/images demo/*.mmd`.
+
+### 1. System context
+![Shopwise system context](images/1-context.png)
+
+### 2. Containers
+![Shopwise containers](images/2-containers.png)
+
+### 3. Order service components
+![Order service components](images/3-components.png)
+
+### 4. Placing an order
+![Placing an order](images/4-checkout.png)
+
+### 5. Order lifecycle
+![Order lifecycle](images/5-lifecycle.png)
+
+### 6. Order data model
+![Order data model](images/6-data-model.png)
