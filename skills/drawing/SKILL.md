@@ -1,6 +1,6 @@
 ---
 name: drawing
-description: "Read before calling the whiteboard's show_diagram tool (mcp__whiteboard__show_diagram), which draws Mermaid diagrams on the Whiteboard pane beside the conversation. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
+description: "Read before calling the whiteboard's show_diagram tool (mcp__whiteboard__show_diagram), which draws Mermaid diagrams on the Whiteboard pane beside the conversation. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed (evidence-driven troubleshooting, review lenses such as risk), walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
 ---
 
 # Drawing on the whiteboard
@@ -9,7 +9,13 @@ description: "Read before calling the whiteboard's show_diagram tool (mcp__white
 Whiteboard pane beside the conversation. Each call adds a diagram to the pane's
 history (the person steps through it with `p` and `n`), so a sequence of calls
 tells a story. Draw when a picture explains structure, flow or state better than
-prose; answer in prose as well, briefly, and let the diagram carry the detail.
+prose: several services or modules, a flow with branches or retries, state
+transitions, a risky change. Not for a routine edit, where a diagram is
+decoration. Answer in prose as well, briefly, and let the diagram carry the
+detail.
+
+A polished diagram makes a guess look like a fact. Draw only what you know, and
+show the difference (see "Show what you know" below).
 
 ## Pick the type
 
@@ -87,6 +93,62 @@ Levels: context (people, the system as one box, external systems), containers
 (inside the dashed boundary: apps, services, stores), components (inside one
 container). Use `system` for the focus at context level, `container` below it,
 `component` inside one container, `external` for anything outside.
+
+## Show what you know
+
+When a diagram describes code or a system you are still learning, every box and
+edge is either confirmed (you read it in the code, a log, a test) or assumed
+(inferred from names, conventions, docs). Draw the difference, label with real
+names (`OrderService`, `orders/repo.ts`, `orders` table) and name each edge's
+mechanism (HTTP, queue, function call, query). Cite the `file:line` behind key
+edges in your answer, and draw a part you have not looked at as "not yet checked"
+rather than guessing its insides.
+
+**Confidence and evidence.** Four classes, each with its own border so they read
+without colour too:
+
+```
+  classDef confirmed fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px,color:#0d3b1a
+  classDef suspect fill:#fff4ce,stroke:#b58100,stroke-width:3px,color:#4d3800
+  classDef unverified fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4,color:#444444
+  classDef ruledout fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
+```
+
+Troubleshooting with it: draw the hypothesis first, every step `unverified`.
+As evidence arrives, redraw the same diagram (same title plus "step n", so the
+history reads as the investigation): a step a log or test confirms becomes
+`confirmed`, the step that looks wrong `suspect`, a disproved branch `ruledout`
+with a "✗" in its label and a dotted edge. Say in your answer which evidence
+moved which box. The last diagram should hold only what the evidence supports.
+
+**Review lenses.** Colour a change by one property at a time, the one asked
+about: risk, performance, test coverage, security. Never several at once; draw
+another diagram for another lens. A four-step scale reuses the same borders:
+
+```
+  classDef high fill:#fdecea,stroke:#c0392b,stroke-width:3px,color:#8a1f11
+  classDef medium fill:#fff4ce,stroke:#b58100,stroke-width:2px,color:#4d3800
+  classDef low fill:#e6f4ea,stroke:#1e7e34,color:#0d3b1a
+  classDef same fill:#f4f4f4,stroke:#bbbbbb,stroke-dasharray:5 4,color:#666666
+```
+
+For before and after, use `added` (green), `changed` (amber), `removed` (red,
+dashed) the same way.
+
+**Always a legend.** Mermaid has none, so add this small subgraph; the `~~~`
+invisible links keep its entries in one row:
+
+```
+  subgraph legend["Legend: risk"]
+    direction LR
+    r1["High"]:::high
+    r2["Medium"]:::medium
+    r3["Low"]:::low
+    r4["Unchanged"]:::same
+    r1 ~~~ r2 ~~~ r3 ~~~ r4
+  end
+  style legend fill:#ffffff,stroke:#cccccc,color:#666666
+```
 
 ## Walk from the big picture to detail
 

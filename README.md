@@ -128,10 +128,35 @@ Click the pane, then:
 | `0` | fit | `c` | Mermaid source |
 | `p` / `n` | previous / next diagram | | |
 
+## Reading the diagrams
+
+A polished diagram makes a guess look like a fact, so the bundled skill asks
+Claude to show the difference: real module, file and service names, the
+mechanism on each edge, `file:line` citations in the answer, and styles that say
+how much is known.
+
+- **Confidence.** Confirmed parts are solid green, suspects thick amber, parts
+  not yet checked dashed grey, ruled-out branches dotted red with a ✗. While
+  troubleshooting, Claude starts from a hypothesis and redraws it as evidence
+  comes in, so the whiteboard's history reads as the investigation.
+- **Review lenses.** A change can be coloured by one property at a time (risk,
+  performance, test coverage), or as before and after with added, changed and
+  removed parts.
+- Every coloured diagram carries a legend, and every colour has its own border
+  style, so it reads in grayscale too.
+
+These are conventions in the skill, not features of the renderer: any Mermaid
+works, and you can ask for other styles.
+
 ## Security and privacy
 
-- Rendering stays on your machine: no CDN, no network calls, nothing published.
-  Only `/whiteboard setup` goes online, to fetch packages from npm.
+- Rendering stays on your machine: nothing is published, and the renderer's
+  page may load nothing but inline data, so a diagram naming a remote image or
+  URL cannot make it reach the network (such a diagram fails with an error).
+- Only `/whiteboard setup` goes online: `puppeteer-core` and Mermaid's package
+  from the npm registry (integrity-checked by npm), and, only when no Chromium
+  browser is installed, a headless Chrome from Google's Chrome for Testing
+  downloads through Puppeteer's installer.
 - Mermaid runs with `securityLevel: strict` (no scripts or click callbacks) and
   labels as plain SVG text, in a headless browser with its sandbox on and a
   throwaway profile: your own browsing data is never read.

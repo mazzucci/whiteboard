@@ -66,6 +66,15 @@ if (!executablePath) {
 // person's own browsing is read or written. The browser's sandbox stays on.
 const browser = await puppeteer.launch({ executablePath, headless: true })
 const page = await browser.newPage()
+// No network: a diagram can name a remote image (an `img` node, a style's
+// url()), and loading it would send a request, maybe carrying data, from a
+// diagram Claude wrote. Only inline data and the page itself may load.
+await page.setRequestInterception(true)
+page.on('request', req => {
+  const url = req.url()
+  if (url.startsWith('data:') || url === 'about:blank') req.continue()
+  else req.abort('blockedbyclient')
+})
 const ROOM = { width: 4096, height: 4096 }
 await page.setViewport({ ...ROOM, deviceScaleFactor: 1 })
 await page.setContent('<!doctype html><html><body style="margin:0"><div id="out"></div></body></html>')
