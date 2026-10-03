@@ -15,6 +15,13 @@ diagram type, on a pane that keeps the whole conversation's diagrams.
 
 ## What it does
 
+More than a diagram renderer, the whiteboard is a visual companion to the
+conversation. Claude redraws as the conversation moves, and colours a diagram by
+whatever matters right now, with a legend that says what the colours mean: what
+is confirmed and what is still a guess while troubleshooting, where the risk sits
+in a change, which CI step has passed, is running or failed. Each redraw stays in
+the history, so the whiteboard becomes a timeline of how the picture changed.
+
 - **Claude draws while it explains.** A `show_diagram` tool lets Claude put a
   diagram on the whiteboard whenever a picture says it better.
 - **Exact Mermaid.** Mermaid 12.1 renders in a headless browser, so flowcharts,
@@ -135,18 +142,22 @@ Claude to show the difference: real module, file and service names, the
 mechanism on each edge, `file:line` citations in the answer, and styles that say
 how much is known.
 
+Beyond that, a diagram can be coloured by any **lens**: one property, a few
+levels, one style per level, and a legend. Some examples:
+
 - **Confidence.** Confirmed parts are solid green, suspects thick amber, parts
   not yet checked dashed grey, ruled-out branches dotted red with a ✗. While
   troubleshooting, Claude starts from a hypothesis and redraws it as evidence
-  comes in, so the whiteboard's history reads as the investigation.
-- **Review lenses.** A change can be coloured by one property at a time (risk,
-  performance, test coverage), or as before and after with added, changed and
-  removed parts.
-- Every coloured diagram carries a legend, and every colour has its own border
-  style, so it reads in grayscale too.
+  comes in, so the history reads as the investigation.
+- **Risk, performance or test coverage** across a change, or **before and after**
+  with added, changed and removed parts.
+- **Progress** of anything with steps: a CI pipeline (done, running, waiting,
+  failed), a rollout, a migration, a long task Claude is working through.
 
-These are conventions in the skill, not features of the renderer: any Mermaid
-works, and you can ask for other styles.
+Invent your own: ask for a diagram "coloured by owner", "by latency", "by what we
+have touched so far". Every colour gets its own border style, so diagrams read
+in grayscale too. These are conventions in the skill, not features of the
+renderer: any Mermaid works.
 
 ## Security and privacy
 

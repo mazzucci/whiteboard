@@ -1,6 +1,6 @@
 ---
 name: drawing
-description: "Read before calling the whiteboard's show_diagram tool (mcp__whiteboard__show_diagram), which draws Mermaid diagrams on the Whiteboard pane beside the conversation. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed (evidence-driven troubleshooting, review lenses such as risk), walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
+description: "Read before calling the whiteboard's show_diagram tool (mcp__whiteboard__show_diagram), which draws Mermaid diagrams on the Whiteboard pane beside the conversation. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
 ---
 
 # Drawing on the whiteboard
@@ -121,9 +121,21 @@ history reads as the investigation): a step a log or test confirms becomes
 with a "✗" in its label and a dotted edge. Say in your answer which evidence
 moved which box. The last diagram should hold only what the evidence supports.
 
-**Review lenses.** Colour a change by one property at a time, the one asked
-about: risk, performance, test coverage, security. Never several at once; draw
-another diagram for another lens. A four-step scale reuses the same borders:
+**Any lens.** Confidence is one lens; the same recipe colours a diagram by any
+property that helps the conversation: pick the property, three to five levels,
+one style per level (a fill plus its own border, so it reads without colour),
+and a legend. Show one lens per diagram; draw another diagram for another lens.
+Redraw as the property changes, and the history becomes a timeline. Examples,
+not a list to choose from:
+
+| Lens | Levels | Fits |
+|---|---|---|
+| Confidence, evidence | confirmed, suspect, not yet checked, ruled out | troubleshooting, learning a codebase |
+| Risk, performance, coverage | high, medium, low, unchanged | reviewing a change |
+| Before and after | added, changed, removed, unchanged | a refactor, a migration plan |
+| Progress | done, running, waiting, failed | a CI pipeline, a rollout, a multi-step task |
+
+A four-step scale that suits most lenses:
 
 ```
   classDef high fill:#fdecea,stroke:#c0392b,stroke-width:3px,color:#8a1f11
@@ -132,8 +144,14 @@ another diagram for another lens. A four-step scale reuses the same borders:
   classDef same fill:#f4f4f4,stroke:#bbbbbb,stroke-dasharray:5 4,color:#666666
 ```
 
-For before and after, use `added` (green), `changed` (amber), `removed` (red,
-dashed) the same way.
+and for progress, a "running" level in blue:
+
+```
+  classDef done fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px,color:#0d3b1a
+  classDef running fill:#e7f0fd,stroke:#1a5fb4,stroke-width:3px,color:#0b2e5c
+  classDef waiting fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4,color:#444444
+  classDef failed fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
+```
 
 **Always a legend.** Mermaid has none, so add this small subgraph; the `~~~`
 invisible links keep its entries in one row:
