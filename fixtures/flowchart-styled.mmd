@@ -1,0 +1,11 @@
+flowchart LR
+  classDef changed fill:#fff3c4,stroke:#d4a017,stroke-width:2px
+  classDef added fill:#d9f7d9,stroke:#2e9d4f
+  user([User]) --> gw[API Gateway]
+  gw --> auth[Auth service]:::changed
+  gw --> orders[Orders service]
+  orders --> cache[(Redis)]:::added
+  orders --> db[(Postgres)]
+  auth --> idp{{Identity provider}}
+  style gw fill:#e8f0ff,stroke:#4a6fd8
+  linkStyle 2 stroke:#d4a017,stroke-width:2px

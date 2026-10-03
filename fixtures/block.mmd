@@ -1,0 +1,7 @@
+block-beta
+  columns 3
+  frontend["Frontend"] api["API"] db[("DB")]
+  space worker["Worker"] space
+  frontend --> api
+  api --> db
+  api --> worker

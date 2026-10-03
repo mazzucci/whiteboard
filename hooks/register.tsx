@@ -1,0 +1,547 @@
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register, RenderInput } from 'claude-code'
+
+import type { DiagramDoc, DiagramView } from '../types'
+import { MERMAID_VERSION, outcomeOf, PUPPETEER_VERSION, SVG_LABELS } from './renderer'
+import type { RenderOutcome } from './renderer'
+import { FIT, fitSize, frame, panBy, SVG_CAP, ZOOMS, zoomStep, zoomTo } from './view'
+
+const PANE = 'whiteboard'
+const TOOL = 'show_diagram'
+const THEME_KEY = 'theme'
+const HISTORY_MAX = 30
+const THEMES = ['auto', 'default', 'dark', 'forest', 'neutral', 'base']
+
+const doc = atom({ plugin: 'whiteboard', key: 'doc' } as const, null)
+const history = atom({ plugin: 'whiteboard', key: 'history' } as const, [])
+const index = atom({ plugin: 'whiteboard', key: 'index' } as const, 0)
+const viewState = atom({ plugin: 'whiteboard', key: 'view' } as const, { mode: 'render', ...FIT })
+
+const SAMPLE: DiagramDoc = {
+  title: 'Sample: checkout',
+  source: `flowchart LR
+  shopper([Shopper]) --> web[Storefront]
+  web --> api[Orders API]
+  api --> pay{{Payment provider}}
+  api --> db[(Orders DB)]
+  api -. order placed .-> mail[Email service]`,
+}
+
+// ---------------------------------------------------------------- renderer
+//
+// Real Mermaid in a headless browser (renderer/renderd.mjs), started on first
+// use, kept warm, reached over a private Unix socket. Everything it needs is
+// installed by setup into ~/.cache/<plugin name>.
+
+let socket: Promise<string> | null = null
+
+async function rendererHome($: EngineInterface): Promise<string> {
+  return `${(await $.env.get('HOME')) ?? ''}/.cache/${$.plugin.name}`
+}
+
+async function isInstalled($: EngineInterface): Promise<boolean> {
+  const home = await rendererHome($)
+  return (
+    (await $.fs.exists(`${home}/mermaid.min.js`)) &&
+    (await $.fs.exists(`${home}/node_modules/puppeteer-core/package.json`))
+  )
+}
+
+/** The node binary: on PATH, or where installers put it when the app's PATH is thin. */
+async function nodePath($: EngineInterface): Promise<string> {
+  const dirs = ((await $.env.get('PATH')) ?? '').split(':').filter(Boolean)
+  for (const dir of [...dirs, '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']) {
+    if (await $.fs.exists(`${dir}/node`)) return `${dir}/node`
+  }
+  throw new Error('Node.js was not found; the diagram renderer needs it.')
+}
+
+function startRenderer($: EngineInterface): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    void (async () => {
+      try {
+        const argv = [await nodePath($), `${$.plugin.root}/renderer/renderd.mjs`, '--home', await rendererHome($)]
+        let out = ''
+        let err = ''
+        // The loop is the renderer's life: it ends with the child or the module.
+        for await (const piece of $.process.spawn({ argv })) {
+          if (piece.stream === 'stdout') {
+            out += piece.text
+            const ready = /\{[^\n]*"ready":true[^\n]*\}/.exec(out)
+            if (ready) resolve(String((JSON.parse(ready[0]) as { socket: string }).socket))
+          } else {
+            err = (err + piece.text).slice(-2000)
+          }
+        }
+        socket = null
+        reject(new Error(`The diagram renderer stopped. ${err.trim().split('\n').slice(-3).join(' ')}`))
+      } catch (error) {
+        socket = null
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    })()
+  })
+}
+
+async function postRender($: EngineInterface, body: string): Promise<RenderOutcome> {
+  socket ??= startRenderer($)
+  const path = await socket
+  const res = await $.http.fetch('http://renderer/render', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body,
+    socketPath: path,
+  })
+  return outcomeOf(res.status, res.text)
+}
+
+/** Renders Mermaid source exactly as Mermaid does; never throws. */
+async function render($: EngineInterface, source: string, theme: string): Promise<RenderOutcome> {
+  if (!(await isInstalled($))) {
+    return { ok: false, isSetup: true, error: 'The diagram renderer is not set up yet: run /whiteboard setup.' }
+  }
+  const body = JSON.stringify({ source, theme, config: SVG_LABELS })
+  try {
+    return await postRender($, body)
+  } catch {
+    // A renderer that went idle or died: start a fresh one, once.
+    socket = null
+    try {
+      return await postRender($, body)
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+}
+
+/** Runs renderer/setup.mjs, showing each step in the status line. */
+async function runSetup($: EngineInterface, downloadBrowser: boolean): Promise<{ ok: boolean; message: string }> {
+  const argv = [
+    await nodePath($),
+    `${$.plugin.root}/renderer/setup.mjs`,
+    '--home',
+    await rendererHome($),
+    '--mermaid',
+    MERMAID_VERSION,
+    '--puppeteer',
+    PUPPETEER_VERSION,
+    ...(downloadBrowser ? ['--download-browser'] : []),
+  ]
+  let buffer = ''
+  let last = { step: '', message: '' }
+  for await (const piece of $.process.spawn({ argv })) {
+    if (piece.stream !== 'stdout') continue
+    buffer += piece.text
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines.filter(Boolean)) {
+      last = JSON.parse(line) as { step: string; message: string }
+      $.ui.status(`diagram setup: ${last.message}`)
+    }
+  }
+  $.ui.status(undefined)
+  return { ok: last.step === 'done', message: last.message }
+}
+
+// ---------------------------------------------------------------- diagrams
+
+async function show($: EngineInterface, next: DiagramDoc) {
+  const list = await update($, history, h => [...h.filter(d => d.source !== next.source), next].slice(-HISTORY_MAX))
+  await goTo($, list.length - 1)
+  await $.ui.open({ id: PANE, title: 'Whiteboard' })
+}
+
+/** Shows one diagram of the history, fitted. */
+async function goTo($: EngineInterface, at: number) {
+  const list = await read($, history)
+  const i = Math.max(0, Math.min(list.length - 1, at))
+  const next = list[i]
+  if (!next) return
+  await update($, index, () => i)
+  await update($, doc, () => next)
+  await update($, viewState, () => ({ mode: 'render' as const, ...FIT }))
+}
+
+// One render per source and theme; a reload starts the cache over.
+const renders = new Map<string, Promise<RenderOutcome>>()
+function renderCached($: EngineInterface, source: string, theme: string): Promise<RenderOutcome> {
+  const key = `${theme}\n${source}`
+  let hit = renders.get(key)
+  if (!hit) {
+    hit = render($, source, theme)
+    renders.set(key, hit)
+    // A failure to reach the renderer is retried next time; a Mermaid error is kept.
+    void hit.then(out => {
+      if (!out.ok && (out.isSetup || /renderer|Node\.js|socket|ECONN|ENOENT/i.test(out.error))) renders.delete(key)
+    })
+  }
+  return hit
+}
+
+/** The theme to render with: the diagram's, else the person's choice, else the app's light or dark. */
+async function themeFor($: EngineInterface, d: DiagramDoc): Promise<string> {
+  if (d.theme && d.theme !== 'auto') return d.theme
+  const chosen = await $.store.get(THEME_KEY)
+  if (typeof chosen === 'string' && chosen !== 'auto') return chosen
+  try {
+    const row = (await $.config.list()).find(r => r.key === 'theme')
+    return /dark/i.test(String(row?.value ?? '')) ? 'dark' : 'default'
+  } catch {
+    return 'default'
+  }
+}
+
+/** The diagram type from its header line, for titles and messages. */
+function typeOf(source: string): string {
+  const body = source.replace(/^---[\s\S]*?\n---\s*\n/, '').replace(/%%\{[\s\S]*?\}%%/g, '')
+  const first = body.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('%%')) ?? ''
+  return first.split(/[\s:;{]/)[0] ?? ''
+}
+
+/** Mermaid's error, trimmed to what helps fix the source. */
+function mermaidError(error: string): string {
+  return error.replace(/\s+at\s.*$/s, '').trim().slice(0, 1200)
+}
+
+/** The first ```mermaid fence of a markdown file, or the whole text. */
+function mermaidOf(text: string): string {
+  const fence = /```mermaid\s*\n([\s\S]*?)```/.exec(text)
+  return (fence?.[1] ?? text).trim()
+}
+
+// Mermaid's names for its diagram types, as a header keyword (`sequenceDiagram`,
+// `graph`) or as the renderer reports them (`flowchart-v2`, `sequence`, `er`).
+const KIND_LABELS: [RegExp, string][] = [
+  [/^(flowchart|graph)/i, 'Flowchart'],
+  [/^sequence/i, 'Sequence diagram'],
+  [/^class/i, 'Class diagram'],
+  [/^state/i, 'State diagram'],
+  [/^er(Diagram)?$/i, 'Entity-relationship diagram'],
+  [/^c4/i, 'C4 diagram'],
+  [/^architecture/i, 'Architecture diagram'],
+  [/^block/i, 'Block diagram'],
+  [/^mindmap/i, 'Mind map'],
+  [/^timeline/i, 'Timeline'],
+  [/^gantt/i, 'Gantt chart'],
+  [/^journey/i, 'User journey'],
+  [/^gitGraph/i, 'Git graph'],
+  [/^quadrant/i, 'Quadrant chart'],
+  [/^xychart/i, 'XY chart'],
+  [/^sankey/i, 'Sankey diagram'],
+  [/^pie/i, 'Pie chart'],
+  [/^kanban/i, 'Kanban board'],
+  [/^packet/i, 'Packet diagram'],
+  [/^requirement/i, 'Requirement diagram'],
+  [/^zenuml/i, 'ZenUML sequence'],
+  [/^treemap/i, 'Treemap'],
+  [/^radar/i, 'Radar chart'],
+]
+
+/** A readable name for a diagram type: `sequenceDiagram` reads "Sequence diagram". */
+function kindLabel(kind: string): string {
+  const hit = KIND_LABELS.find(([re]) => re.test(kind))
+  if (hit) return hit[1]
+  const bare = kind.replace(/-(beta|v2|elk)$/i, '')
+  return bare ? bare[0]!.toUpperCase() + bare.slice(1) : 'Diagram'
+}
+
+/** Text as the Code element takes it: at most 10000 characters, tab and newline its only control characters. */
+function codeText(text: string): string {
+  return text.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').slice(0, 10000)
+}
+
+// ---------------------------------------------------------------- the pane
+
+async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
+  const { Box, Text, Button, Code } = $.ui.resolve(e)
+  const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
+
+  const current = await read($, doc)
+  if (!current) {
+    return (
+      <Box flexDirection="column" paddingY={1}>
+        <Text bold>No diagram yet</Text>
+        <Text dimColor>Ask Claude to draw one, or run /whiteboard sample.</Text>
+      </Box>
+    )
+  }
+  const list = await read($, history)
+  const at = await read($, index)
+  const v = await read($, viewState)
+  const theme = await themeFor($, current)
+  const kind = typeOf(current.source)
+  // The terminal draws no SVG: it shows the source, and renders nothing.
+  const out = Svg ? await renderCached($, current.source, theme) : undefined
+  const isRender = v.mode === 'render' && Boolean(Svg)
+  const canZoom = isRender && Boolean(out?.ok)
+  // Mermaid's own reading of the type when it rendered, else the header line's.
+  const label = kindLabel(out?.ok && out.value.type ? out.value.type : kind)
+  // An untitled diagram is titled by its type keyword: the readable name stands in, once.
+  const untitled = current.title.toLowerCase() === kind.toLowerCase()
+  const title = untitled ? label : current.title
+
+  const cols = Math.max(20, e.props.bodyColumns || e.viewport?.columns || 80)
+  const rows = e.viewport?.rows ?? 40
+  // Cells to CSS pixels on the desktop's code font: an estimate, used only to fit.
+  const room = { width: cols * 7.5, height: Math.max(8, rows - 6) * 17 }
+  const set = (f: (x: DiagramView) => DiagramView) => () => update($, viewState, f)
+
+  // Controls are drawn dim when they would do nothing right now (the first
+  // diagram's prev, pan at fit), never removed, so the layout never reflows.
+  const atFit = v.zoom <= 1
+  const first = at <= 0
+  const last = at >= list.length - 1
+
+  // The title row: what this is on the left, where it sits in the history on the right.
+  const titleRow = (
+    <Box justifyContent="space-between" alignItems="center" gap={2}>
+      <Box gap={2} alignItems="center" flexShrink={1}>
+        <Text bold wrap="truncate-end">
+          {title}
+        </Text>
+        {!untitled && <Text dimColor>{label}</Text>}
+      </Box>
+      {list.length > 1 && (
+        <Box gap={1} alignItems="center" flexShrink={0}>
+          <Button key="prev" plain hotkey="p" dimColor={first} label="◀" onPress={() => goTo($, at - 1)} />
+          <Text dimColor>{`${at + 1}/${list.length}`}</Text>
+          <Button key="next" plain hotkey="n" dimColor={last} label="▶" onPress={() => goTo($, at + 1)} />
+        </Box>
+      )}
+    </Box>
+  )
+
+  // The toolbar: view, zoom and pan as three groups. Remote surfaces send no
+  // raw keys to a plugin, so every control is a Button with a one-letter
+  // hotkey, live once the pane holds the keyboard (after a click in it).
+  // Groups are Boxes, since a fragment's children stack on the desktop.
+  const divider = () => <Text dimColor>│</Text>
+  const toolbar = Svg && (
+    <Box gap={2} alignItems="center" flexWrap="wrap">
+      <Box gap={1} alignItems="center">
+        <Button
+          key="mode"
+          plain
+          hotkey="c"
+          label={isRender ? 'Code' : 'Diagram'}
+          onPress={set(x => ({ ...x, mode: x.mode === 'render' ? 'code' : 'render' }))}
+        />
+      </Box>
+      {canZoom && divider()}
+      {canZoom && (
+        <Box gap={1} alignItems="center">
+          <Button
+            key="zoom-out"
+            plain
+            hotkey="o"
+            dimColor={v.zoom <= (ZOOMS[0] ?? 0.5)}
+            label="−"
+            onPress={set(x => zoomTo(x, zoomStep(x.zoom, -1)))}
+          />
+          <Button
+            key="fit"
+            plain
+            hotkey="0"
+            dimColor={atFit}
+            label={atFit ? 'Fit' : `${Math.round(v.zoom * 100)}%`}
+            onPress={set(x => ({ ...x, ...FIT }))}
+          />
+          <Button
+            key="zoom-in"
+            plain
+            hotkey="i"
+            dimColor={v.zoom >= (ZOOMS[ZOOMS.length - 1] ?? 6)}
+            label="+"
+            onPress={set(x => zoomTo(x, zoomStep(x.zoom, 1)))}
+          />
+        </Box>
+      )}
+      {canZoom && divider()}
+      {canZoom && (
+        <Box gap={1} alignItems="center">
+          <Button key="pan-left" plain dimColor={atFit} hotkey="a" label="←" onPress={set(x => panBy(x, -0.2, 0))} />
+          <Button key="pan-up" plain dimColor={atFit} hotkey="w" label="↑" onPress={set(x => panBy(x, 0, -0.2))} />
+          <Button key="pan-down" plain dimColor={atFit} hotkey="s" label="↓" onPress={set(x => panBy(x, 0, 0.2))} />
+          <Button key="pan-right" plain dimColor={atFit} hotkey="d" label="→" onPress={set(x => panBy(x, 0.2, 0))} />
+        </Box>
+      )}
+    </Box>
+  )
+
+  const header = (
+    <Box flexDirection="column">
+      {titleRow}
+      {toolbar}
+    </Box>
+  )
+
+  const code = <Code source={codeText(current.source)} path="diagram.mmd" startLine={1} />
+  let body
+  if (!Svg) {
+    body = (
+      <Box flexDirection="column" gap={1}>
+        <Text dimColor>
+          The terminal cannot draw diagrams: open this session in Claude desktop or VS Code to see it rendered. This
+          is its Mermaid source.
+        </Text>
+        {code}
+      </Box>
+    )
+  } else if (!isRender) {
+    body = code
+  } else if (!out?.ok) {
+    body = out?.isSetup ? (
+      <Box flexDirection="column">
+        <Text bold>The diagram renderer is not set up</Text>
+        <Text dimColor>Run /whiteboard setup to install it; it uses your installed Chrome when there is one.</Text>
+      </Box>
+    ) : (
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="column">
+          <Text bold color="red">
+            Mermaid could not render this diagram
+          </Text>
+          <Text dimColor>Mermaid's message, then the source it was given:</Text>
+        </Box>
+        <Code source={codeText(mermaidError(out?.error ?? '')) || 'No message.'} />
+        {code}
+      </Box>
+    )
+  } else {
+    const svg = frame(out.value.svg, out.value, v, out.value.background)
+    const size = fitSize(out.value, room)
+    body =
+      svg.length > SVG_CAP ? (
+        <Box flexDirection="column">
+          <Text bold color="yellow">
+            This diagram is too large to show here
+          </Text>
+          <Text dimColor>
+            {`${Math.round(svg.length / 1024)} KB of SVG; the pane takes up to ${Math.round(SVG_CAP / 1024)} KB. Split or simplify it, or press C for its source.`}
+          </Text>
+        </Box>
+      ) : (
+        <Svg source={svg} alt={untitled ? label : `${title} (${label})`} width={size.width} height={size.height} />
+      )
+  }
+
+  return (
+    <Box flexDirection="column" gap={1}>
+      {header}
+      {body}
+    </Box>
+  )
+}
+
+// ---------------------------------------------------------------- hooks
+
+export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    await $.command.register({
+      name: 'whiteboard',
+      description: 'Mermaid diagrams beside the conversation: /whiteboard [file.mmd|file.md|sample|setup|theme <name>]',
+    })
+    await $.tool.register({
+      name: TOOL,
+      description:
+        'Render a Mermaid diagram on the Whiteboard pane beside the conversation, exactly as Mermaid ' +
+        `${MERMAID_VERSION} draws it. Any diagram type works: flowchart, sequenceDiagram, ` +
+        'classDiagram, stateDiagram-v2, erDiagram, C4Context/C4Container, architecture-beta, ' +
+        'block-beta, mindmap, timeline, gantt, journey, gitGraph, quadrantChart, xychart-beta, ' +
+        'sankey-beta, pie, kanban, packet-beta, requirementDiagram. Use it whenever a picture ' +
+        'explains code or a system better than prose: architecture, data flow, call sequences, ' +
+        'state machines, schemas. Styling (classDef, style, themes, frontmatter config) is honoured. ' +
+        'The pane keeps a history, so each call adds a diagram rather than replacing the last. ' +
+        'Before drawing, read the whiteboard:drawing skill: it covers legible layouts, the syntax ' +
+        'traps that fail or render badly (HTML in labels, ";" in sequence notes), and a C4 style ' +
+        'that lays out cleanly. ' +
+        'If Mermaid rejects the source, the call fails with its error: fix the source and call again. ' +
+        'Very large diagrams (over ~128 KB of SVG) cannot be shown; split them.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'A short title shown above the diagram' },
+          mermaid: { type: 'string', description: 'The Mermaid source, starting with the diagram type' },
+          theme: {
+            type: 'string',
+            enum: THEMES,
+            description: "Mermaid theme; omit for the user's choice (auto follows light/dark)",
+          },
+        },
+        required: ['mermaid'],
+      },
+    })
+    return next(e)
+  })
+
+  on('command.run', { command: 'whiteboard' }, async ($, e) => {
+    const arg = e.args.trim()
+    if (!arg) {
+      const current = await read($, doc)
+      if (!current) await show($, SAMPLE)
+      else await $.ui.open({ id: PANE, title: 'Whiteboard' })
+      return { text: `Whiteboard opened (${current ? current.title : 'sample'}).` }
+    }
+    if (arg === 'setup' || arg === 'setup --download-browser') {
+      const done = await runSetup($, arg.endsWith('--download-browser'))
+      renders.clear()
+      socket = null
+      if (done.ok && (await read($, doc))) await $.ui.open({ id: PANE, title: 'Whiteboard' })
+      return { text: done.ok ? `Diagram renderer ready (Mermaid ${MERMAID_VERSION}).` : `Setup failed: ${done.message}` }
+    }
+    if (arg === 'theme' || arg.startsWith('theme ')) {
+      const name = arg.slice('theme'.length).trim()
+      if (!THEMES.includes(name)) {
+        const now = ((await $.store.get(THEME_KEY)) as string | undefined) ?? 'auto'
+        return { text: `Theme is ${now}. Choose one of: ${THEMES.join(', ')}.` }
+      }
+      await $.store.set(THEME_KEY, name)
+      await update($, viewState, x => ({ ...x }))
+      return { text: `Diagram theme set to ${name}.` }
+    }
+    if (arg === 'sample') {
+      await show($, SAMPLE)
+      return { text: 'Sample diagram opened in the pane.' }
+    }
+    let text: string
+    try {
+      text = await $.fs.read(arg)
+    } catch (err) {
+      return { text: `Couldn't read ${arg}: ${err instanceof Error ? err.message : String(err)}` }
+    }
+    const next = { title: arg.split('/').at(-1) ?? arg, source: mermaidOf(text) }
+    await show($, next)
+    return {
+      text: `Diagram from ${arg} opened in the pane (${typeOf(next.source) || 'unknown type'}).`,
+      context: [`The diagram the user is looking at (Mermaid):\n${next.source}`],
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__whiteboard__show_diagram' }, async ($, e) => {
+    const source = typeof e.mermaid === 'string' ? e.mermaid.trim() : ''
+    if (!source) return { deny: 'Nothing drawn: `mermaid` was empty.' }
+    const theme = typeof e.theme === 'string' && THEMES.includes(e.theme) ? e.theme : undefined
+    const kind = typeOf(source)
+    const title = typeof e.title === 'string' && e.title.trim() ? e.title.trim() : kind || 'Diagram'
+    const next: DiagramDoc = { title, source, ...(theme && { theme }) }
+
+    const out = await renderCached($, source, await themeFor($, next))
+    if (!out.ok && out.isSetup) {
+      await show($, next)
+      return { deny: `${out.error} Ask the user to run it; the diagram is queued in the pane.` }
+    }
+    if (!out.ok) {
+      return { deny: `Mermaid could not render this diagram:\n${mermaidError(out.error)}\nFix the source and call ${TOOL} again.` }
+    }
+    await show($, next)
+    const big =
+      out.value.svg.length > SVG_CAP
+        ? ` It is too large to display (${Math.round(out.value.svg.length / 1024)} KB of SVG, the pane takes 128 KB): split it or simplify it.`
+        : ''
+    return {
+      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).${big}`,
+    }
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawPane($, e))
+}

@@ -1,0 +1,9 @@
+C4Context
+  title System context for the order platform
+  Person(customer, "Customer", "Places orders from the mobile app")
+  System(orders, "Order platform", "Takes and tracks orders")
+  System_Ext(payments, "Payment provider", "Charges cards")
+  System_Ext(email, "Email service", "Sends receipts")
+  Rel(customer, orders, "Places orders")
+  Rel(orders, payments, "Charges", "HTTPS")
+  Rel(orders, email, "Sends receipts")

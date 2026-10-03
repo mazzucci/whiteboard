@@ -1,0 +1,15 @@
+---
+title: "Order lifecycle"
+---
+stateDiagram-v2
+  [*] --> Pending: order placed
+  Pending --> Paid: payment captured
+  Pending --> Cancelled: declined or<br/>hold expired
+  Paid --> Fulfilling: picked
+  Paid --> Refunded: cancelled<br/>before picking
+  Fulfilling --> Shipped: label printed
+  Shipped --> Delivered: carrier scan
+  Delivered --> Refunded: return received
+  Cancelled --> [*]
+  Delivered --> [*]
+  Refunded --> [*]

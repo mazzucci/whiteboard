@@ -1,0 +1,16 @@
+classDiagram
+  class Order {
+    +String id
+    +List~Item~ items
+    +total() Money
+  }
+  class Item {
+    +String sku
+    +int qty
+  }
+  class PaymentClient {
+    <<interface>>
+    +charge(Money) Receipt
+  }
+  Order "1" *-- "many" Item
+  Order ..> PaymentClient : uses

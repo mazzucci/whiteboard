@@ -1,0 +1,49 @@
+---
+title: "Order data model"
+---
+erDiagram
+  CUSTOMER ||--o{ ORDER : places
+  ORDER ||--|{ ORDER_LINE : contains
+  PRODUCT ||--o{ ORDER_LINE : "sold as"
+  ORDER ||--o{ PAYMENT : "paid by"
+  ORDER ||--o| SHIPMENT : "fulfilled by"
+  ORDER ||--o{ OUTBOX_EVENT : emits
+
+  CUSTOMER {
+    uuid id PK
+    string email
+  }
+  ORDER {
+    uuid id PK
+    uuid customer_id FK
+    string status
+    int total_cents
+    timestamptz placed_at
+  }
+  ORDER_LINE {
+    uuid order_id FK
+    string sku FK
+    int quantity
+    int unit_price_cents
+  }
+  PRODUCT {
+    string sku PK
+    string title
+  }
+  PAYMENT {
+    uuid id PK
+    uuid order_id FK
+    string provider_ref
+    string state
+  }
+  SHIPMENT {
+    uuid id PK
+    uuid order_id FK
+    string tracking_number
+  }
+  OUTBOX_EVENT {
+    bigint id PK
+    uuid order_id FK
+    string type
+    jsonb payload
+  }

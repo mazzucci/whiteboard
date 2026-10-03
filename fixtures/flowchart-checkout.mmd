@@ -1,0 +1,16 @@
+flowchart TD
+  subgraph client [Mobile app]
+    ui[Checkout screen] --> store[Cart store]
+  end
+  store -->|submit| api[Orders API]
+  api --> auth{Auth check}
+  auth -->|ok| svc[OrderService<br>new retry logic]
+  auth -->|denied| err[Error response]
+  subgraph backend [Backend]
+    svc --> db[(Orders DB)]
+    svc -.-> bus{{Event bus}}
+  end
+  bus --> mail[Email worker]
+  bus --> analytics[Analytics]
+  mail -.->|failure| svc
+  ui --> analytics

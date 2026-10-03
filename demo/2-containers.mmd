@@ -1,0 +1,56 @@
+---
+title: "Shopwise: containers"
+---
+flowchart LR
+  shopper["`**Shopper**
+  *Person*`"]
+  staff["`**Store staff**
+  *Person*`"]
+
+  subgraph platform["Shopwise platform"]
+    direction LR
+    web["`**Web storefront**
+    *Next.js*`"]
+    admin["`**Back office**
+    *React*`"]
+    gateway["`**API gateway**
+    *Envoy*`"]
+    catalog["`**Catalog service**
+    *Go*`"]
+    orders["`**Order service**
+    *Kotlin*`"]
+    fulfil["`**Fulfilment service**
+    *Python*`"]
+    search[("`**Search index**
+    *OpenSearch*`")]
+    db[("`**Orders DB**
+    *Postgres*`")]
+    bus{{"`**Event bus**
+    *Kafka*`"}}
+  end
+
+  payments["`**Payment provider**
+  *External*`"]
+  carrier["`**Shipping carrier**
+  *External*`"]
+
+  shopper -- HTTPS --> web
+  staff -- HTTPS --> admin
+  web --> gateway
+  admin --> gateway
+  gateway --> catalog
+  gateway --> orders
+  catalog --> search
+  orders --> db
+  orders -- events --> bus
+  bus -- events --> fulfil
+  orders -- "authorize, capture" --> payments
+  fulfil -- "book shipment" --> carrier
+
+  classDef person fill:#08427b,stroke:#052e56,color:#ffffff
+  classDef container fill:#438dd5,stroke:#2e6295,color:#ffffff
+  classDef external fill:#8a8a8a,stroke:#6b6b6b,color:#ffffff
+  class shopper,staff person
+  class web,admin,gateway,catalog,orders,fulfil,search,db,bus container
+  class payments,carrier external
+  style platform fill:#f5f9ff,stroke:#1168bd,stroke-dasharray:6 4,color:#0b4884

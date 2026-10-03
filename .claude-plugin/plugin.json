@@ -1,0 +1,6 @@
+{
+  "name": "whiteboard",
+  "version": "0.1.0",
+  "description": "A whiteboard beside the conversation: Claude draws Mermaid diagrams there, rendered exactly by Mermaid",
+  "types": "./types/index.d.ts"
+}

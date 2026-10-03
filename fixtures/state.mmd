@@ -1,0 +1,7 @@
+stateDiagram-v2
+  [*] --> Pending
+  Pending --> Paid: charge ok
+  Pending --> Failed: declined
+  Paid --> Shipped
+  Shipped --> [*]
+  Failed --> Pending: retry

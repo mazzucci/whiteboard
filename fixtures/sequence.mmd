@@ -1,0 +1,17 @@
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant App
+  participant API as Orders API
+  participant Pay as Payments
+  U->>App: Tap "Buy"
+  App->>API: POST /orders
+  API->>Pay: charge(card)
+  alt card declined
+    Pay-->>API: 402
+    API-->>App: error
+  else ok
+    Pay-->>API: 200
+    API-->>App: order id
+  end
+  Note over API,Pay: retried up to 3 times

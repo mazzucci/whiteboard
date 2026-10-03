@@ -1,0 +1,6 @@
+flowchart TD
+  A@{ shape: rounded, label: "Start" } --> B@{ shape: diam, label: "Valid?" }
+  B -->|yes| C@{ shape: cyl, label: "Save" }
+  B -->|no| D@{ shape: doc, label: "Report" }
+  C --> E@{ shape: circle, label: "Done" }
+  D --> E
