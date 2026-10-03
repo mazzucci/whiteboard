@@ -7,6 +7,9 @@ diagram type, on a pane that keeps the whole conversation's diagrams.
 
 <!-- GIF: the Shopwise walkthrough in demo/WALKTHROUGH.md -->
 
+> **Community project, not affiliated with or endorsed by Anthropic.** Claude and
+> Claude Code are trademarks of Anthropic, PBC.
+>
 > **Experimental.** Built on Claude Code's early-access mod API, which may change
 > between releases. Tested with Claude Code 2.1.286 on macOS.
 
@@ -158,3 +161,7 @@ any Mermaid file to PNG with the same renderer the pane uses.
 
 MIT. Mermaid (MIT) and Puppeteer (Apache 2.0) are downloaded by setup, not
 bundled.
+
+This is an independent, unofficial project. It is not affiliated with, endorsed
+by or supported by Anthropic. Claude and Claude Code are trademarks of
+Anthropic, PBC, used here only to describe what the project works with.
