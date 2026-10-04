@@ -4,7 +4,7 @@ import type { EngineInterface, Register, RenderInput } from 'claude-code'
 import type { DiagramDoc, DiagramView } from '../types'
 import { MERMAID_VERSION, outcomeOf, PUPPETEER_VERSION, SVG_LABELS } from './renderer'
 import type { RenderOutcome } from './renderer'
-import { FIT, fitSize, frame, imageBox, panBy, SVG_CAP, windowOf, ZOOMS, zoomStep, zoomTo } from './view'
+import { FIT, fitSize, frame, imageBox, panBy, SVG_CAP, windowOf, zoomBox, ZOOMS, zoomStep, zoomTo } from './view'
 import type { Box } from './view'
 
 /** A window of the drawing and the CSS size to draw it at: the terminal's picture. */
@@ -342,6 +342,11 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   // Controls are drawn dim when they would do nothing right now (the first
   // diagram's prev, pan at fit), never removed, so the layout never reflows.
   const atFit = v.zoom <= 1
+  // The desktop's box: grown with the zoom until it fills the pane.
+  const sized = Svg && out?.ok ? zoomBox(fitSize(out.value, room), v.zoom, room) : undefined
+  // Pan does something only while the window is smaller than the drawing.
+  const span = sized?.span ?? box?.span
+  const canPan = Boolean(span && (span.w < 0.999 || span.h < 0.999))
   const first = at <= 0
   const last = at >= list.length - 1
 
@@ -413,10 +418,10 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
       {canZoom && divider()}
       {canZoom && (
         <Box gap={1} alignItems="center">
-          <Button key="pan-left" plain dimColor={atFit} hotkey="a" label="←" onPress={set(x => panBy(x, -0.2, 0))} />
-          <Button key="pan-up" plain dimColor={atFit} hotkey="w" label="↑" onPress={set(x => panBy(x, 0, -0.2))} />
-          <Button key="pan-down" plain dimColor={atFit} hotkey="s" label="↓" onPress={set(x => panBy(x, 0, 0.2))} />
-          <Button key="pan-right" plain dimColor={atFit} hotkey="d" label="→" onPress={set(x => panBy(x, 0.2, 0))} />
+          <Button key="pan-left" plain dimColor={!canPan} hotkey="a" label="←" onPress={set(x => panBy(x, -0.2, 0))} />
+          <Button key="pan-up" plain dimColor={!canPan} hotkey="w" label="↑" onPress={set(x => panBy(x, 0, -0.2))} />
+          <Button key="pan-down" plain dimColor={!canPan} hotkey="s" label="↓" onPress={set(x => panBy(x, 0, 0.2))} />
+          <Button key="pan-right" plain dimColor={!canPan} hotkey="d" label="→" onPress={set(x => panBy(x, 0.2, 0))} />
         </Box>
       )}
     </Box>
@@ -478,8 +483,8 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
       </Box>
     )
   } else {
-    const svg = frame(out.value.svg, out.value, v, out.value.background)
-    const size = fitSize(out.value, room)
+    const size = sized ?? zoomBox(fitSize(out.value, room), v.zoom, room)
+    const svg = frame(out.value.svg, out.value, v, out.value.background, size)
     body =
       svg.length > SVG_CAP ? (
         <Box flexDirection="column">

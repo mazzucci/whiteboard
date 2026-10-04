@@ -88,6 +88,21 @@ export function imageBox(natural: { width: number; height: number }, zoom: numbe
   return { ...grown, span: { w: grown.columns / (columns * zoom), h: grown.rows / (rows * zoom) } }
 }
 
+/** A box on screen and the window of the drawing it shows (windowOf's span). */
+export type Sized = { width: number; height: number; span: { w: number; h: number } }
+
+/**
+ * The box a view draws in: the fitted box, grown by the zoom until it fills
+ * the room, then cropping. A small drawing zoomed in gets bigger; a wide one
+ * gets taller. Zoomed out, the box stays and the window widens.
+ */
+export function zoomBox(fit: { width: number; height: number }, zoom: number, room: { width: number; height: number }): Sized {
+  if (zoom <= 1) return { ...fit, span: { w: 1 / zoom, h: 1 / zoom } }
+  const width = Math.max(fit.width, Math.min(room.width, fit.width * zoom))
+  const height = Math.max(fit.height, Math.min(room.height, fit.height * zoom))
+  return { width, height, span: { w: width / (fit.width * zoom), h: height / (fit.height * zoom) } }
+}
+
 /**
  * The SVG to show for a view: its root's size fixed to the box it is drawn
  * in, its viewBox the window, and the theme's background painted behind.
@@ -97,16 +112,18 @@ export function frame(
   natural: { width: number; height: number },
   view: ViewState,
   background: string | undefined,
+  box?: Sized,
 ): string {
   const root = /<svg\b[^>]*>/.exec(svg)
   if (!root) return svg
-  const { x, y, w, h } = windowOf(svg, natural, view)
+  const { x, y, w, h } = windowOf(svg, natural, view, box?.span)
+  const size = box ?? natural
 
   let tag = root[0]
     .replace(/\s(width|height)="[^"]*"/g, '')
     .replace(/\sviewBox="[^"]*"/, '')
     .replace(/\sstyle="[^"]*"/, '')
-    .replace(/<svg\b/, `<svg width="${n(natural.width)}" height="${n(natural.height)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" preserveAspectRatio="xMidYMid meet"`)
+    .replace(/<svg\b/, `<svg width="${n(size.width)}" height="${n(size.height)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" preserveAspectRatio="xMidYMid meet"`)
   // Mermaid's SVG is transparent; the theme's background goes behind it,
   // wide enough to fill the window when zoomed out.
   const fill = background ? `<rect x="${n(x - w)}" y="${n(y - h)}" width="${n(w * 3)}" height="${n(h * 3)}" fill="${background}"/>` : ''
