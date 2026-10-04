@@ -285,6 +285,11 @@ test('the terminal shows the diagram as a PNG image, zooms by rendering a window
   const before = renders.length
   await ui.press({ key: 'refresh' })
   expect(renders.length).toBeGreaterThan(before)
+  // Inline, above the prompt, the pane has what the screen spares: the
+  // picture keeps within the rows it asked for (40 rows: 24 for the picture).
+  await ui.redraw({ ...pane(100).props, placement: 'inline' })
+  expect((await ui.find({ type: 'Image' }))?.props.rows).toBeLessThanOrEqual(24)
+  await ui.redraw({ ...pane(100).props })
   // A narrower pane (the terminal resized) draws a narrower picture.
   await ui.redraw({ ...pane(60).props, bodyColumns: 60 })
   expect((await ui.find({ type: 'Image' }))?.props.columns).toBe(60)

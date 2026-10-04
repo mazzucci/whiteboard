@@ -14,6 +14,8 @@ const PANE = 'whiteboard'
 const TOOL = 'show_diagram'
 const THEME_KEY = 'theme'
 const HISTORY_MAX = 30
+/** The body rows the pane asks for when it sits above the terminal's prompt (not docked). */
+const INLINE_ROWS = 30
 /** The terminal Image's cap on a PNG, decoded. */
 const PNG_CAP = 2 * 1024 * 1024
 const THEMES = ['auto', 'default', 'dark', 'forest', 'neutral', 'base']
@@ -258,7 +260,7 @@ async function uninstall($: EngineInterface): Promise<string> {
 async function show($: EngineInterface, next: DiagramDoc) {
   const list = await update($, history, h => [...h.filter(d => d.source !== next.source), next].slice(-HISTORY_MAX))
   await goTo($, list.length - 1)
-  await $.ui.open({ id: PANE, title: 'Whiteboard' })
+  await $.ui.open({ id: PANE, title: 'Whiteboard', rows: INLINE_ROWS })
 }
 
 /** Shows one diagram of the history, fitted. */
@@ -417,8 +419,10 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const cols = Math.max(20, e.props.bodyColumns || e.viewport?.columns || 80)
   const rows = e.viewport?.rows ?? 40
   // The terminal's picture: the pane's body below its header is about the
-  // screen less the prompt and the header.
-  const box = drawn?.ok ? imageBox(drawn.value, v.zoom, { columns: cols, rows: Math.max(4, rows - 10) }) : undefined
+  // screen less the prompt and the header, docked; inline, above the prompt,
+  // the rows it asked for (INLINE_ROWS), as far as the screen spares them.
+  const bodyRows = e.props.placement === 'inline' ? Math.min(INLINE_ROWS, rows - 12) - 4 : rows - 10
+  const box = drawn?.ok ? imageBox(drawn.value, v.zoom, { columns: cols, rows: Math.max(4, bodyRows) }) : undefined
   const out =
     Image && drawn?.ok && box && v.mode === 'render'
       ? await renderCached($, current.source, theme, true, pictureOf(drawn.value, v, box))
@@ -661,14 +665,14 @@ export const register: Register = on => {
     if (!arg) {
       const current = await read($, doc)
       if (!current) await show($, SAMPLE)
-      else await $.ui.open({ id: PANE, title: 'Whiteboard' })
+      else await $.ui.open({ id: PANE, title: 'Whiteboard', rows: INLINE_ROWS })
       return { text: `Whiteboard opened (${current ? current.title : 'sample'}).` }
     }
     if (arg === 'setup' || arg === 'setup --download-browser') {
       const text = await setup($, arg.endsWith('--download-browser'))
       renders.clear()
       socket = null
-      if (text.startsWith('Diagram renderer ready') && (await read($, doc))) await $.ui.open({ id: PANE, title: 'Whiteboard' })
+      if (text.startsWith('Diagram renderer ready') && (await read($, doc))) await $.ui.open({ id: PANE, title: 'Whiteboard', rows: INLINE_ROWS })
       return { text }
     }
     if (arg === 'uninstall') return { text: await uninstall($) }

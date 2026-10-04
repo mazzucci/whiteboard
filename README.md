@@ -116,7 +116,9 @@ support is limited: diagrams show as images only in terminals Claude Code
 draws images in (the kitty graphics protocol: Ghostty, kitty), and each zoom,
 pan or resize renders a new image, so it lags; a terminal resized in height
 alone needs Refresh (`r`). Other terminals, iTerm2 among them for now, show
-the Mermaid source.
+the Mermaid source. In a terminal, run `/tui fullscreen` once to have the
+whiteboard dock on the right of the conversation; in the classic layout it
+opens above the prompt.
 
 Install it with one command in Claude Code:
 
