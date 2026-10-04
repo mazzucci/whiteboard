@@ -1,0 +1,18 @@
+---
+config:
+  flowchart:
+    wrappingWidth: 420
+---
+flowchart LR
+  topic(["notifications"])
+  proc["Notification processor"]
+  dlq(["dead-letter"])
+  topic --> proc
+  proc -- "fails" --> dlq
+  classDef same fill:#f4f4f4,stroke:#bbbbbb,stroke-dasharray:5 4,color:#666666
+  classDef added fill:#e6f4ea,stroke:#1e7e34,stroke-width:3px,color:#0d3b1a
+  classDef changed fill:#fff4ce,stroke:#b58100,stroke-width:3px,color:#4d3800
+  classDef high fill:#fdecea,stroke:#c0392b,stroke-width:3px,color:#8a1f11
+  classDef low fill:#e6f4ea,stroke:#1e7e34,color:#0d3b1a
+  classDef component fill:#85bbf0,stroke:#5d82a8,color:#0b2540
+  class topic,proc,dlq component

@@ -5,7 +5,9 @@ flow or a schema, and it draws a diagram there while it answers: real
 [Mermaid](https://mermaid.js.org), rendered exactly as Mermaid draws it, every
 diagram type, on a pane that keeps the whole conversation's diagrams.
 
-<!-- GIF: the Shopwise walkthrough in demo/WALKTHROUGH.md -->
+![Claude maps a slow request, finds an N+1 in the trace, and proposes a fix, on a whiteboard beside the conversation](media/whiteboard.gif)
+
+<sub>Animated illustration, not a screen recording; the diagrams are real Mermaid renders. Sources in `media/explainer/`.</sub>
 
 > **Community project, not affiliated with or endorsed by Anthropic.** Claude and
 > Claude Code are trademarks of Anthropic, PBC.

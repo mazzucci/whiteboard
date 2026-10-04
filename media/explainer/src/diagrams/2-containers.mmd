@@ -1,0 +1,48 @@
+---
+title: "Nimbus: containers"
+---
+flowchart TB
+  subgraph platform["Nimbus booking platform"]
+    direction TB
+    web["`**Guest web app**
+    *Next.js*`"]
+    desk["`**Front desk app**
+    *React*`"]
+    gateway["`**API gateway**
+    *Envoy*`"]
+    booking["`**Booking service**
+    *Go*`"]
+    inventory["`**Inventory service**
+    *Rust*`"]
+    pricing["`**Pricing service**
+    *Python*`"]
+    db[("`**Bookings DB**
+    *Postgres*`")]
+    bus{{"`**Event bus**
+    *NATS*`"}}
+    cache[("`**Availability cache**
+    *Redis*`")]
+  end
+
+  payments["`**Payment provider**
+  *External*`"]
+  channels["`**Channel manager**
+  *External*`"]
+
+  web --> gateway
+  desk --> gateway
+  gateway --> booking
+  gateway --> inventory
+  booking --> pricing
+  booking --> db
+  booking -- events --> bus
+  inventory -- events --> bus
+  inventory --> cache
+  booking -- "authorize, capture" --> payments
+  inventory -- "sync rooms" --> channels
+
+  classDef container fill:#438dd5,stroke:#2e6295,color:#ffffff
+  classDef external fill:#8a8a8a,stroke:#6b6b6b,color:#ffffff
+  class web,desk,gateway,booking,inventory,pricing,db,cache,bus container
+  class payments,channels external
+  style platform fill:#f5f9ff,stroke:#1168bd,stroke-dasharray:6 4,color:#0b4884

@@ -102,7 +102,15 @@ async function render({ source, theme = 'default', config = {}, png = false, sca
       // no click callbacks, HTML in labels escaped.
       window.mermaid.initialize({ startOnLoad: false, theme, ...config, securityLevel: 'strict' })
       try {
-        const { svg } = await window.mermaid.render(id, src)
+        const rendered = await window.mermaid.render(id, src)
+        // Mermaid paints an edge label's background half transparent (opacity
+        // 0.5 over a fill with alpha 0.8), so the line it sits on shows through
+        // the text. Make that one rule solid, in the colour the theme chose.
+        const svg = rendered.svg.replace(/(\.edgeLabel rect\{)([^}]*)\}/g, (_, head, body) =>
+          `${head}${body
+            .replace(/opacity:\s*[\d.]+/g, 'opacity:1')
+            .replace(/rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*[\d.]+\s*\)/g, 'rgb($1,$2,$3)')}}`,
+        )
         const host = document.getElementById('out')
         host.innerHTML = svg
         // The drawing's own size: its viewBox, which Mermaid sizes to the content.

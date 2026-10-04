@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    wrappingWidth: 420
+---
+flowchart LR
+  subgraph inputs[" "]
+    topic(["notifications"])
+    retry(["notifications.retry"])
+  end
+  proc["Notification processor"]
+  subgraph outputs[" "]
+    dlq(["dead-letter"])
+  end
+  topic --> proc
+  retry -- "after 5 min" --> proc
+  proc -- "fails" --> retry
+  proc -- "fails again" --> dlq
+  style inputs fill:none,stroke:none
+  style outputs fill:none,stroke:none
+  classDef same fill:#f4f4f4,stroke:#bbbbbb,stroke-dasharray:5 4,color:#666666
+  classDef added fill:#e6f4ea,stroke:#1e7e34,stroke-width:3px,color:#0d3b1a
+  classDef changed fill:#fff4ce,stroke:#b58100,stroke-width:3px,color:#4d3800
+  class topic,dlq same
+  class proc changed
+  class retry added

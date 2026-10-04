@@ -1,0 +1,24 @@
+flowchart LR
+  claude["`**Claude**
+  writes Mermaid`"]
+  tool["`**show_diagram**
+  tool in the mod`"]
+  renderd["`**Renderer**
+  Node, kept warm`"]
+  chrome["`**Headless Chrome**
+  Mermaid 12.1`"]
+  pane["`**Whiteboard pane**
+  SVG, history, zoom`"]
+
+  claude -- "Mermaid source" --> tool
+  tool -- "private socket" --> renderd
+  renderd --> chrome
+  chrome -- "SVG" --> renderd
+  renderd -- "SVG or error" --> tool
+  tool -- "SVG" --> pane
+  tool -. "Mermaid's error" .-> claude
+
+  classDef part fill:#438dd5,stroke:#2e6295,color:#ffffff
+  classDef local fill:#85bbf0,stroke:#5d82a8,color:#0b2540
+  class claude,tool,pane part
+  class renderd,chrome local

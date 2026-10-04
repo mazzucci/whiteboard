@@ -1,0 +1,41 @@
+---
+title: "PR #214 by risk"
+---
+flowchart TB
+  subgraph flow[" "]
+    direction LR
+    pay["`**Payment client**
+    charge(key)`"]
+    queue{{"`**Retry queue**
+    retries money on its own`"}}
+    recon["`**Reconciler**
+    settles unknown outcomes`"]
+    provider["`**Payment provider**
+    *External*`"]
+
+    pay -- "same key · HTTPS" --> provider
+    pay -- "on timeout" --> queue
+    queue -- "retry" --> pay
+    queue -- "after 5 tries" --> recon
+    recon -- "lookup · HTTPS" --> provider
+  end
+
+  subgraph legend["Legend: risk"]
+    direction LR
+    r1["High"]:::high
+    r2["Medium"]:::medium
+    r3["Low"]:::low
+    r4["Unchanged"]:::same
+    r1 ~~~ r2 ~~~ r3 ~~~ r4
+  end
+  flow ~~~ legend
+  style flow fill:none,stroke:none
+  style legend fill:#ffffff,stroke:#cccccc,color:#666666
+
+  classDef high fill:#fdecea,stroke:#c0392b,stroke-width:3px,color:#8a1f11
+  classDef medium fill:#fff4ce,stroke:#b58100,stroke-width:2px,color:#4d3800
+  classDef low fill:#e6f4ea,stroke:#1e7e34,color:#0d3b1a
+  classDef same fill:#f4f4f4,stroke:#bbbbbb,stroke-dasharray:5 4,color:#666666
+  class queue high
+  class pay,recon medium
+  class provider same

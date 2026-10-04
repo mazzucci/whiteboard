@@ -1,0 +1,30 @@
+---
+config:
+  flowchart:
+    wrappingWidth: 420
+---
+flowchart TB
+  root["`**POST /checkout**
+  …`"]
+  auth["`**auth.verify**
+  20 ms`"]
+  quote["`**pricing.quote**
+  …`"]
+  pay["`**payment.authorize**
+  180 ms`"]
+  plans["`**db.select rate_plans**
+  100 ms`"]
+  inv["`**inventory.check_batch**
+  proposed: 1 call`"]
+  root --> auth
+  root --> quote
+  root --> pay
+  quote --> plans
+  quote --> inv
+  classDef unverified fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4,color:#444444
+  classDef high fill:#fdecea,stroke:#c0392b,stroke-width:3px,color:#8a1f11
+  classDef low fill:#e6f4ea,stroke:#1e7e34,color:#0d3b1a
+  classDef proposed fill:#f3faf5,stroke:#1e7e34,stroke-dasharray:5 4,color:#0d3b1a
+  class root,quote unverified
+  class auth,pay,plans low
+  class inv proposed
