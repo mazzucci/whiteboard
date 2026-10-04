@@ -37,6 +37,9 @@ than that is scaled down until text is hard to read.
 - Choose the direction by shape: a long chain reads best `TB`; a wide fan-out or
   a pipeline across a few lanes reads best `LR`. A diagram that renders as a thin
   strip (say 2000 × 250) or a tall column has the wrong direction.
+- The pane is taller than it is wide. When one node calls four or more others,
+  draw it `LR` so they stack down the pane; side by side in `TB` they shrink the
+  whole diagram to fit the width.
 - Short labels: a name, then a second line of detail at most. Put explanations in your prose.
   A line wraps on its own only past about 400 px, so break with `<br/>` where you
   want it: `pay["payments.charge<br/>180 ms"]`, a file path on its own line.
@@ -163,20 +166,12 @@ and for progress, a "running" level in blue:
   classDef failed fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
 ```
 
-**Always a legend.** Mermaid has none, so add this small subgraph; the `~~~`
-invisible links keep its entries in one row:
-
-```
-  subgraph legend["Legend: risk"]
-    direction LR
-    r1["High"]:::high
-    r2["Medium"]:::medium
-    r3["Low"]:::low
-    r4["Unchanged"]:::same
-    r1 ~~~ r2 ~~~ r3 ~~~ r4
-  end
-  style legend fill:#ffffff,stroke:#cccccc,color:#666666
-```
+**Always a legend, in the header.** Pass `legend` to `show_diagram`: one entry
+per class the diagram uses, `{ "label": "Suspect", "class": "suspect" }`, in
+reading order. The pane draws it as one line above the diagram, a swatch in
+each class's colour, so the diagram keeps its whole canvas and zooming never
+crops the key. Don't draw a legend inside the diagram. The tool says if an
+entry names a class with no `classDef`.
 
 ## Walk from the big picture to detail
 

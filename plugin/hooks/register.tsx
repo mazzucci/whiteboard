@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderInput, UiOpenResult } from 'claude-code'
 
-import type { DiagramDoc, DiagramView } from '../types'
+import type { DiagramDoc, DiagramView, LegendEntry } from '../types'
 import { MERMAID_VERSION, outcomeOf, PUPPETEER_VERSION, SVG_LABELS } from './renderer'
 import type { RenderOutcome } from './renderer'
 import { docBox, FIT, frame, imageBox, panBy, SVG_CAP, windowOf, ZOOMS, zoomStep, zoomTo } from './view'
@@ -325,6 +325,26 @@ function pictureOf(drawn: { svg: string; width: number; height: number }, v: Dia
   return { ...win, width: Math.max(1, Math.round(width * shrink)), height: Math.max(1, Math.round(height * shrink)) }
 }
 
+/** A classDef's colours, read from the Mermaid source: its stroke, and whether it is dashed. */
+function classStyle(source: string, name: string): { stroke?: string; isDashed: boolean } | undefined {
+  const def = new RegExp(`^\\s*classDef\\s+${name.replace(/[^\w-]/g, '')}\\s+([^\\n]+)`, 'm').exec(source)
+  if (!def) return undefined
+  const props = def[1] ?? ''
+  const stroke = /(?:^|,)\s*stroke\s*:\s*(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)/.exec(props)?.[1]
+  return { stroke, isDashed: /stroke-dasharray/.test(props) }
+}
+
+/** The legend Claude passed, kept to what the pane can show: at most six short entries. */
+function legendOf(value: unknown): LegendEntry[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const entries = value
+    .filter((x): x is LegendEntry => typeof x?.label === 'string' && typeof x?.class === 'string')
+    .map(x => ({ label: x.label.trim().slice(0, 40), class: x.class.trim() }))
+    .filter(x => x.label && /^[\w-]+$/.test(x.class))
+    .slice(0, 6)
+  return entries.length ? entries : undefined
+}
+
 /** Forgets every render of a diagram and draws the pane again: Refresh. */
 async function refresh($: EngineInterface, source: string) {
   for (const key of [...renders.keys()]) if (key.endsWith(`\n${source}`)) renders.delete(key)
@@ -544,11 +564,28 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
 
   // The desktop frames the header as a card; the terminal, where rows are
   // scarce, rules it off with one dim line. No colours: both themes work.
+  // The key to the diagram's colours, one line under the toolbar: a swatch
+  // in each class's stroke colour (dashed as an outline), then its label.
+  const legend = current.legend?.length ? (
+    <Box gap={2} alignItems="center" flexWrap="wrap">
+      {current.legend.map(entry => {
+        const style = classStyle(current.source, entry.class)
+        return (
+          <Box key={`legend-${entry.class}`} gap={1} alignItems="center">
+            <Text color={style?.stroke}>{style?.isDashed ? '⬚' : '■'}</Text>
+            <Text dimColor>{entry.label}</Text>
+          </Box>
+        )
+      })}
+    </Box>
+  ) : undefined
+
   const header =
     e.surface === 'terminal' ? (
       <Box flexDirection="column">
         {titleRow}
         {toolbar}
+        {legend}
         <Text dimColor wrap="truncate">
           {'─'.repeat(cols)}
         </Text>
@@ -557,6 +594,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
       <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
         {titleRow}
         {toolbar}
+        {legend}
       </Box>
     )
 
@@ -671,6 +709,21 @@ export const register: Register = on => {
         properties: {
           title: { type: 'string', description: 'A short title shown above the diagram' },
           mermaid: { type: 'string', description: 'The Mermaid source, starting with the diagram type' },
+          legend: {
+            type: 'array',
+            maxItems: 6,
+            description:
+              "A key to the diagram's colours, drawn in the pane's header instead of inside the diagram: " +
+              'one entry per classDef the diagram uses, in reading order.',
+            items: {
+              type: 'object',
+              properties: {
+                label: { type: 'string', description: 'What the colour means, in a few words' },
+                class: { type: 'string', description: 'The name of a classDef in the diagram' },
+              },
+              required: ['label', 'class'],
+            },
+          },
           theme: {
             type: 'string',
             enum: THEMES,
@@ -733,7 +786,10 @@ export const register: Register = on => {
     const theme = typeof e.theme === 'string' && THEMES.includes(e.theme) ? e.theme : undefined
     const kind = typeOf(source)
     const title = typeof e.title === 'string' && e.title.trim() ? e.title.trim() : kind || 'Diagram'
-    const next: DiagramDoc = { title, source, ...(theme && { theme }) }
+    const legend = legendOf(e.legend)
+    const next: DiagramDoc = { title, source, ...(theme && { theme }), ...(legend && { legend }) }
+    // A legend entry naming no classDef in the source draws a blank swatch: say which.
+    const unknownClasses = (legend ?? []).filter(l => !classStyle(source, l.class)).map(l => l.class)
 
     if (!(await canShowPane($))) return { deny: NO_PANE }
 
@@ -758,8 +814,9 @@ export const register: Register = on => {
     const opened = await show($, next)
     if (isNowhere(opened)) return { deny: NO_PANE }
     const waiting = opened.isPlaced ? '' : ' The pane opens once the terminal is wider, or when the user runs /whiteboard.'
+    const unknown = unknownClasses.length ? ` The legend names classes with no classDef: ${unknownClasses.join(', ')}.` : ''
     return {
-      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).${waiting}`,
+      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).${waiting}${unknown}`,
     }
   })
 

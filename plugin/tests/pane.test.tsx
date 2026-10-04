@@ -250,6 +250,36 @@ test('a narrow terminal: drawn, and the pane opens once it is wider', async ($, 
   expect(shown).toContain('once the terminal is wider')
 })
 
+test('a legend draws as one line in the header, each swatch in its class colour', async ($, on) => {
+  host(on)
+  const source = `${SOURCE}
+  classDef confirmed fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px
+  classDef unverified fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4
+  class app confirmed
+  class api unverified`
+  const shown = await $.tool.call({
+    tool: 'mcp__whiteboard__show_diagram',
+    mermaid: source,
+    legend: [
+      { label: 'Confirmed fine', class: 'confirmed' },
+      { label: 'Not yet checked', class: 'unverified' },
+      { label: 'Ruled out', class: 'ruledout' },
+    ],
+  })
+  // A class with no classDef is reported, so Claude can fix it.
+  expect(JSON.stringify(shown)).toContain('no classDef: ruledout')
+  const ui = await $.ui.mount({ ...pane(120), surface: 'desktop' })
+  const drawn = JSON.stringify(await ui.drawn())
+  expect(drawn).toContain('Confirmed fine')
+  expect(drawn).toContain('Not yet checked')
+  const swatches = (await ui.findAll({ type: 'Text' })).filter(t => ['■', '⬚'].includes(String(t.children?.[0])))
+  expect(swatches.map(t => [t.children?.[0], t.props.color])).toEqual([
+    ['■', '#1e7e34'],
+    ['⬚', '#888888'],
+    ['■', undefined],
+  ])
+})
+
 test('without the renderer the pane says how to set it up', async ($, on) => {
   host(on, { isInstalled: false })
   const shown = await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE })
