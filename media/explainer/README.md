@@ -33,4 +33,3 @@ Needs `/whiteboard setup` to have run (puppeteer-core and Mermaid in
   (`11-lifecycle`). `9-pr-before/after` are kept for a future review clip, unused.
 - `build.mjs`: Puppeteer -> ffmpeg; warns about captions shorter than
   3 s + 0.3 s per word.
-- `out/YOUTUBE.md`: suggested title, description, chapters and tags.
