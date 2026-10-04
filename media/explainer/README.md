@@ -33,3 +33,16 @@ Needs `/whiteboard setup` to have run (puppeteer-core and Mermaid in
   (`11-lifecycle`). `9-pr-before/after` are kept for a future review clip, unused.
 - `build.mjs`: Puppeteer -> ffmpeg; warns about captions shorter than
   3 s + 0.3 s per word.
+
+## The demo video from a screen recording
+
+The published demo is a real screen recording (see `demo/RECORDING.md`)
+between the 30 s cut's splash and outro cards:
+
+```
+node media/explainer/build.mjs --mode s30 --name whiteboard-30s-1080p
+python3 media/explainer/edit-recording.py take.mov build/recording.mp4 build
+ffmpeg -i out/whiteboard-30s-1080p.mp4 -i build/recording.mp4 -filter_complex \
+  "[0:v]trim=3.2:6.4,setpts=PTS-STARTPTS,fps=30,format=yuv420p,setsar=1,tpad=start_duration=1:start_mode=clone,fade=t=in:st=0:d=0.5:color=0xe7eaf0[a];[1:v]fps=30,format=yuv420p,setsar=1[b];[0:v]trim=23.6:30,setpts=PTS-STARTPTS,fps=30,format=yuv420p,setsar=1[c];[a][b][c]concat=n=3:v=1:a=0[v]" \
+  -map "[v]" -c:v libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart out/whiteboard-demo-1080p.mp4
+```

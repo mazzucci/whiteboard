@@ -215,7 +215,9 @@
 
   // Reveals a Mermaid SVG piece by piece: nodes and edges in `order` appear
   // one after another from spec.t0, every spec.step seconds. Anything not in
-  // the order (a legend, say) stays visible.
+  // the order (a legend, say) stays visible. `states` then cross-fades it, in
+  // place, through renders of the same diagram with other classes (the same
+  // layout), each { name, t0 }.
   const reveals = []
   function initReveal(spec) {
     const d = D[spec.name]
@@ -227,6 +229,20 @@
     const s = Math.min(spec.w / d.width, spec.h / d.height)
     svg.setAttribute('width', d.width * s)
     svg.setAttribute('height', d.height * s)
+    // Each state is the same layout over the last, fading in from its t0.
+    const states = (spec.states || []).map(st => {
+      const sd = D[st.name]
+      if (!sd) return null
+      const layer = document.createElement('div')
+      layer.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0'
+      layer.innerHTML = sd.svg
+      const ssvg = layer.querySelector('svg')
+      ssvg.removeAttribute('style')
+      ssvg.setAttribute('width', sd.width * s)
+      ssvg.setAttribute('height', sd.height * s)
+      host.appendChild(layer)
+      return { ...st, layer }
+    }).filter(Boolean)
     const items = spec.order.map(key => {
       if (key.startsWith('L_')) {
         const path = [...svg.querySelectorAll('g.edgePaths path')].find(p => p.id.includes(key))
@@ -243,7 +259,7 @@
       if (node) node.style.opacity = 0
       return { kind: 'node', node }
     })
-    reveals.push({ ...spec, items })
+    reveals.push({ ...spec, items, states })
   }
 
   function renderReveals(t) {
@@ -265,6 +281,7 @@
           if (it.label) it.label.style.opacity = clamp((p - 0.5) * 2, 0, 1)
         }
       })
+      for (const st of r.states) st.layer.style.opacity = ease(clamp((t - st.t0) / 0.35, 0, 1))
     }
     if (TL.arch) document.querySelector('#arch .local-note').style.opacity = clamp((t - TL.arch.local) / 0.5, 0, 1)
   }

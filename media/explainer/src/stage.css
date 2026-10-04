@@ -52,7 +52,7 @@ body.s30 #board { left: 492px; }
 body.s30 #board-empty { display: none; }
 body.s30 .msg { font-size: 23px; }
 body.s30 .chip { font-size: 20px; }
-#life-canvas { position: absolute; left: 0; right: 0; top: 130px; height: 380px; display: flex; align-items: center; justify-content: center; }
+#life-canvas { position: absolute; /* anchors the state layers */ left: 0; right: 0; top: 130px; height: 380px; display: flex; align-items: center; justify-content: center; }
 #life-title { position: absolute; left: 0; right: 0; top: 590px; text-align: center; opacity: 0; }
 #life-title h1 { font-size: 92px; }
 #life-title .line2 { font-size: 38px; color: var(--ink); margin: 26px 0 0; }
