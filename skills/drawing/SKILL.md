@@ -114,6 +114,14 @@ without colour too:
   classDef ruledout fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
 ```
 
+**Redraw without reshuffling.** Mermaid lays a diagram out from the order of its
+lines, so reordering them can flip the whole layout even when nothing else
+changed. When you redraw a diagram from earlier in the conversation, start from
+its source: keep every node id, label and line in the same order, add new nodes
+and edges after the existing ones, and change what a step means through its
+`class` assignments at the bottom. Then stepping through the history with `p`
+and `n` shows only what changed.
+
 Troubleshooting with it: draw the hypothesis first, every step `unverified`.
 As evidence arrives, redraw the same diagram (same title plus "step n", so the
 history reads as the investigation): a step a log or test confirms becomes
@@ -180,4 +188,5 @@ colours consistent between levels, so the history reads as one zoom.
 The tool fails with Mermaid's message, which names the line and what it
 expected. Fix that line (usually a trap above) and call again with the whole
 corrected source; do not change the diagram's content to work around it. A
-diagram over about 128 KB of SVG cannot be shown: split it.
+diagram over about 128 KB of SVG is refused the same way: redraw it as an
+overview of 8 to 12 nodes and offer closer diagrams of its parts.

@@ -456,7 +456,7 @@ export const register: Register = on => {
         'traps that fail or render badly (HTML in labels, ";" in sequence notes), and a C4 style ' +
         'that lays out cleanly. ' +
         'If Mermaid rejects the source, the call fails with its error: fix the source and call again. ' +
-        'Very large diagrams (over ~128 KB of SVG) cannot be shown; split them.',
+        'A diagram over ~128 KB of SVG is refused the same way: redraw it as an overview.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -533,13 +533,16 @@ export const register: Register = on => {
     if (!out.ok) {
       return { deny: `Mermaid could not render this diagram:\n${mermaidError(out.error)}\nFix the source and call ${TOOL} again.` }
     }
+    // Too large for the pane: back to Claude like a syntax error, and kept out
+    // of the history, where it would be a diagram nobody can see.
+    if (out.value.svg.length > SVG_CAP) {
+      return {
+        deny: `This diagram renders to ${Math.round(out.value.svg.length / 1024)} KB of SVG; the pane shows up to ${Math.round(SVG_CAP / 1024)} KB, so it was not shown. Redraw it as an overview of about 8 to 12 nodes, then offer to draw the parts that matter as separate, closer diagrams.`,
+      }
+    }
     await show($, next)
-    const big =
-      out.value.svg.length > SVG_CAP
-        ? ` It is too large to display (${Math.round(out.value.svg.length / 1024)} KB of SVG, the pane takes 128 KB): split it or simplify it.`
-        : ''
     return {
-      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).${big}`,
+      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).`,
     }
   })
 

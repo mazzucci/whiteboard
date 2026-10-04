@@ -99,6 +99,22 @@ test("Mermaid's error goes back to Claude, and nothing is shown", async ($, on) 
   expect(JSON.stringify(shown)).toContain('Parse error on line 2')
 })
 
+test('a diagram too large for the pane goes back to Claude, and stays out of the history', async ($, on) => {
+  const huge = `<svg viewBox="0 0 400 200">${'<g/>'.repeat(40000)}</svg>`
+  host(on, {
+    reply: source => ({
+      status: 200,
+      body: { svg: source === SOURCE ? SVG : huge, width: 400, height: 200, type: 'flowchart-v2', ms: 5 },
+    }),
+  })
+  await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', title: 'Small', mermaid: SOURCE })
+  const shown = await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', title: 'Huge', mermaid: 'flowchart TD\n  A --> B' })
+  expect(JSON.stringify(shown)).toContain('Redraw it as an overview')
+  const ui = await $.ui.mount({ ...pane(120), surface: 'desktop' })
+  expect(JSON.stringify(await ui.drawn())).toContain('Small')
+  expect(JSON.stringify(await ui.drawn())).not.toContain('Huge')
+})
+
 test("a file that Mermaid rejects: the pane shows Mermaid's message as code, then the source", async ($, on) => {
   host(on, { reply: () => ({ status: 400, body: { error: 'Parse error on line 2:\n...A -->\n-----^\nExpecting NODE_STRING' } }) })
   on('fs.read', () => ({ value: 'flowchart TD\n  A -->' }))
