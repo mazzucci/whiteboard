@@ -9,7 +9,7 @@ diagram type, on a pane that keeps the whole conversation's diagrams.
 
 <sub>Animated illustration, not a screen recording; the diagrams are real Mermaid renders. Sources in `media/explainer/`.</sub>
 
-> **Community project, not affiliated with or endorsed by Anthropic.** Claude and
+> **Open source project, not affiliated with or endorsed by Anthropic.** Claude and
 > Claude Code are trademarks of Anthropic, PBC.
 >
 > **Experimental.** Built on Claude Code's early-access mod API, which may change
@@ -109,12 +109,61 @@ sequenceDiagram
 Requirements: Claude Code desktop with mods, Node.js 22.12 or later, and macOS
 (Linux should work but is untested; Windows is not supported yet).
 
-1. Load the plugin: `claude --plugin-dir /path/to/whiteboard-for-claude-code`.
-2. In a session, run `/whiteboard setup`. It installs into `~/.cache/whiteboard`:
-   `puppeteer-core` and Mermaid's script (about 35 MB). It uses the Chrome, Edge,
-   Brave or Chromium already installed; only without one does it download a
-   headless Chrome (about 150 MB). `/whiteboard setup --download-browser` forces
-   the download.
+### Ask Claude to install it
+
+In Claude Code, paste:
+
+```
+Install the whiteboard mod from https://github.com/mazzucci/whiteboard-for-claude-code,
+following the "Instructions for Claude" in its README.
+```
+
+Claude checks the requirements, tells you what it will download, and sets it
+up. Then start a new session and ask for a diagram.
+
+### Instructions for Claude
+
+You are installing this mod for the person you are working with. Follow these
+steps in order, and stop to tell them if one fails.
+
+1. **Check the requirements.** Run `node --version`: it must be 22.12 or
+   later. The OS must be macOS or Linux. If either check fails, stop and say
+   which.
+2. **Tell the person what will happen, and wait for their go-ahead:** the
+   repository is cloned into `~/.claude/skills/whiteboard`, and setup downloads
+   `puppeteer-core` and Mermaid's script from npm into `~/.cache/whiteboard`
+   (about 35 MB). It uses an installed Chrome, Edge, Brave or Chromium; only if
+   none is found does it also download a headless Chrome (about 150 MB).
+3. **Get the code.**
+   - If `~/.claude/skills/whiteboard` does not exist:
+     `git clone https://github.com/mazzucci/whiteboard-for-claude-code ~/.claude/skills/whiteboard`
+   - If it exists and is a clone of this repository, update it instead:
+     `git -C ~/.claude/skills/whiteboard pull --ff-only`
+   - If it exists and is something else, stop and ask.
+4. **Install the renderer:**
+   `node ~/.claude/skills/whiteboard/renderer/setup.mjs --home ~/.cache/whiteboard --mermaid 12.1.0 --puppeteer 25.12.0`
+   It prints one JSON line per step and ends with `"step":"done"`. If it
+   reports `"step":"error"`, show the person the message.
+5. **Check the result:** `~/.cache/whiteboard/mermaid.min.js` and
+   `~/.cache/whiteboard/node_modules/puppeteer-core` exist.
+6. **Tell the person to start a new Claude Code session.** Plugins in
+   `~/.claude/skills` load when a session starts. In the new session, `/whiteboard`
+   opens the pane, and asking for a diagram draws one. If `/whiteboard` is
+   missing there, the mod did not load: Claude Code's mod API is in early
+   access, so check that their Claude Code version supports mods (tested with
+   2.1.286).
+
+Do not change their Claude Code settings, permissions or other plugins as part
+of this install.
+
+### Install by hand
+
+The same steps without Claude: clone the repository into
+`~/.claude/skills/whiteboard`, start a new session, and run `/whiteboard setup`
+there (it runs step 4 above). To try it without installing, load it for one
+session with `claude --plugin-dir /path/to/whiteboard-for-claude-code`.
+`/whiteboard setup --download-browser` downloads the headless Chrome even when
+a browser is installed.
 
 ## Use
 
