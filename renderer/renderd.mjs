@@ -11,6 +11,7 @@
 //   {"ready":true,"socket":"...","browser":"...","mermaid":"12.1.0"}
 //
 //   GET  /health                                   -> { ok, mermaid, browser }
+//   POST /quit                                     -> stops, as when idle
 //   POST /render { source, theme?, config?, png?, scale?, view? }
 //        view { x, y, w, h, width?, height? }: the PNG shows only that window
 //        of the drawing (SVG coordinates), drawn width × height CSS px (the
@@ -177,6 +178,11 @@ const server = createServer((req, res) => {
   }
   if (req.method === 'GET' && req.url === '/health') {
     return reply(200, { ok: true, mermaid: mermaidVersion, browser: executablePath })
+  }
+  // Before its files are deleted (/whiteboard uninstall): stop now, not when idle.
+  if (req.method === 'POST' && req.url === '/quit') {
+    reply(200, { ok: true })
+    return setTimeout(shutdown, 10)
   }
   if (req.method !== 'POST' || req.url !== '/render') return reply(404, { error: 'not found' })
   let body = ''

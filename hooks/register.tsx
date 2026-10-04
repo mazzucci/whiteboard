@@ -127,8 +127,19 @@ async function render($: EngineInterface, source: string, theme: string, png = f
   return out
 }
 
-/** Runs renderer/setup.mjs, showing each step in the status line. */
-async function runSetup($: EngineInterface, downloadBrowser: boolean): Promise<{ ok: boolean; message: string }> {
+/** What setup downloads, said before it does: in the pane, and to Claude. */
+const SETUP_NOTE =
+  `/whiteboard setup downloads puppeteer-core ${PUPPETEER_VERSION} (about 29 MB) and Mermaid ${MERMAID_VERSION}'s ` +
+  'script (about 5 MB) from npm into ~/.cache/whiteboard, asking before each. It uses an installed Chrome, Edge, ' +
+  'Brave or Chromium, and offers a headless Chrome (about 150 MB) only if none is found. It needs Node.js 22.12 or later.'
+
+/** The plugin's two commands that finish an uninstall. */
+const UNINSTALL_NEXT =
+  'To remove the plugin too: claude plugin uninstall whiteboard@whiteboard-for-claude-code, ' +
+  'then, if you like, claude plugin marketplace remove whiteboard-for-claude-code.'
+
+/** Runs renderer/setup.mjs with `args`, each line in the status line; resolves to its last JSON line. */
+async function setupScript($: EngineInterface, args: string[]): Promise<Record<string, unknown>> {
   const argv = [
     await nodePath($),
     `${$.plugin.root}/renderer/setup.mjs`,
@@ -138,22 +149,108 @@ async function runSetup($: EngineInterface, downloadBrowser: boolean): Promise<{
     MERMAID_VERSION,
     '--puppeteer',
     PUPPETEER_VERSION,
-    ...(downloadBrowser ? ['--download-browser'] : []),
+    ...args,
   ]
   let buffer = ''
-  let last = { step: '', message: '' }
+  let last: Record<string, unknown> = { step: 'error', message: 'setup printed nothing' }
   for await (const piece of $.process.spawn({ argv })) {
     if (piece.stream !== 'stdout') continue
     buffer += piece.text
     const lines = buffer.split('\n')
     buffer = lines.pop() ?? ''
     for (const line of lines.filter(Boolean)) {
-      last = JSON.parse(line) as { step: string; message: string }
-      $.ui.status(`diagram setup: ${last.message}`)
+      last = JSON.parse(line) as Record<string, unknown>
+      if (typeof last.message === 'string') $.ui.status(`whiteboard setup: ${last.message}`)
     }
   }
   $.ui.status(undefined)
-  return { ok: last.step === 'done', message: last.message }
+  return last
+}
+
+/** Whether this machine's Node.js can run the renderer: 22.12 or later. */
+async function checkNode($: EngineInterface): Promise<string | undefined> {
+  let node: string
+  try {
+    node = await nodePath($)
+  } catch {
+    return 'Node.js 22.12 or later is needed, and none was found. Install it from https://nodejs.org, then run /whiteboard setup again.'
+  }
+  const version = (await $.process.run([node, '--version'])).stdout.trim()
+  const [major = 0, minor = 0] = version.replace(/^v/, '').split('.').map(Number)
+  if (major > 22 || (major === 22 && minor >= 12)) return undefined
+  return `Node.js 22.12 or later is needed; ${node} is ${version || 'an unknown version'}. Update it from https://nodejs.org, then run /whiteboard setup again.`
+}
+
+/** Asks the person; true only for the one answer that goes ahead. */
+async function confirm($: EngineInterface, question: string, yes: string): Promise<boolean> {
+  try {
+    return (await $.ui.ask(question, { options: [yes, 'Cancel'], header: 'Whiteboard' })) === yes
+  } catch {
+    // Dismissed, or no one to ask (a -p run): no.
+    return false
+  }
+}
+
+/** /whiteboard setup: checks, then downloads only what is missing, each after a yes. */
+async function setup($: EngineInterface, downloadBrowser: boolean): Promise<string> {
+  const nodeProblem = await checkNode($)
+  if (nodeProblem) return nodeProblem
+  const plan = await setupScript($, ['--plan'])
+  if (plan.step !== 'plan') return `Setup failed: ${String(plan.message)}`
+  const home = `~/.cache/${$.plugin.name}`
+  const browser = typeof plan.browser === 'string' ? plan.browser : undefined
+  const steps: { step: string; question: string }[] = []
+  if (!plan.puppeteer) {
+    steps.push({
+      step: 'puppeteer',
+      question: `Download puppeteer-core ${PUPPETEER_VERSION} from npm (about 29 MB) into ${home}? It drives a browser to render diagrams.`,
+    })
+  }
+  if (!plan.mermaid) {
+    steps.push({
+      step: 'mermaid',
+      question: `Download Mermaid ${MERMAID_VERSION}'s script from npm (about 5 MB) into ${home}? It draws the diagrams.`,
+    })
+  }
+  if (downloadBrowser || !browser) {
+    steps.push({
+      step: 'browser',
+      question:
+        `${browser ? '' : 'No Chrome, Edge, Brave or Chromium was found. '}Download a headless Chrome ` +
+        `(about 150 MB) from Google's Chrome for Testing into ${home}/browsers?`,
+    })
+  }
+  const done: string[] = []
+  for (const { step, question } of steps) {
+    if (!(await confirm($, question, 'Download'))) {
+      const so = done.length ? ` (${done.join(' and ')} done)` : ''
+      return `Setup stopped; nothing more was downloaded${so}. Run /whiteboard setup again to continue.`
+    }
+    const out = await setupScript($, ['--step', step])
+    if (out.step !== 'done') return `Setup failed while installing ${step}: ${String(out.message)}`
+    done.push(step)
+  }
+  const using = browser && !downloadBrowser ? `, using ${browser}` : ''
+  return `Diagram renderer ready (Mermaid ${MERMAID_VERSION}${using}).`
+}
+
+/** /whiteboard uninstall: after a yes, stops the renderer and deletes its folder. */
+async function uninstall($: EngineInterface): Promise<string> {
+  const home = await rendererHome($)
+  if (!(await $.fs.exists(home))) return `Nothing to delete: ${home} does not exist. ${UNINSTALL_NEXT}`
+  const question = `Delete the diagram renderer's files in ${home}? The plugin stays installed until you remove it.`
+  if (!(await confirm($, question, 'Delete'))) return 'Nothing was deleted.'
+  if (socket) {
+    try {
+      await $.http.fetch('http://renderer/quit', { method: 'POST', socketPath: await socket })
+    } catch {
+      // Already stopped.
+    }
+    socket = null
+  }
+  renders.clear()
+  const out = await setupScript($, ['--remove'])
+  return out.step === 'done' ? `Deleted ${home}. ${UNINSTALL_NEXT}` : `Nothing was deleted: ${String(out.message)}`
 }
 
 // ---------------------------------------------------------------- diagrams
@@ -453,7 +550,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     ) : out?.isSetup ? (
       <Box flexDirection="column">
         <Text bold>The diagram renderer is not set up</Text>
-        <Text dimColor>Run /whiteboard setup to install it; it uses your installed Chrome when there is one.</Text>
+        <Text dimColor>{`Run /whiteboard setup to install it. ${SETUP_NOTE.replace('/whiteboard setup downloads', 'It downloads')}`}</Text>
       </Box>
     ) : (
       <Box flexDirection="column" gap={1}>
@@ -524,7 +621,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'whiteboard',
-      description: 'Mermaid diagrams beside the conversation: /whiteboard [file.mmd|file.md|sample|setup|theme <name>]',
+      description: 'Mermaid diagrams beside the conversation: /whiteboard [file.mmd|file.md|sample|setup|theme <name>|uninstall]',
     })
     await $.tool.register({
       name: TOOL,
@@ -568,12 +665,13 @@ export const register: Register = on => {
       return { text: `Whiteboard opened (${current ? current.title : 'sample'}).` }
     }
     if (arg === 'setup' || arg === 'setup --download-browser') {
-      const done = await runSetup($, arg.endsWith('--download-browser'))
+      const text = await setup($, arg.endsWith('--download-browser'))
       renders.clear()
       socket = null
-      if (done.ok && (await read($, doc))) await $.ui.open({ id: PANE, title: 'Whiteboard' })
-      return { text: done.ok ? `Diagram renderer ready (Mermaid ${MERMAID_VERSION}).` : `Setup failed: ${done.message}` }
+      if (text.startsWith('Diagram renderer ready') && (await read($, doc))) await $.ui.open({ id: PANE, title: 'Whiteboard' })
+      return { text }
     }
+    if (arg === 'uninstall') return { text: await uninstall($) }
     if (arg === 'theme' || arg.startsWith('theme ')) {
       const name = arg.slice('theme'.length).trim()
       if (!THEMES.includes(name)) {
@@ -613,7 +711,9 @@ export const register: Register = on => {
     const out = await renderCached($, source, await themeFor($, next))
     if (!out.ok && out.isSetup) {
       await show($, next)
-      return { deny: `${out.error} Ask the user to run it; the diagram is queued in the pane.` }
+      return {
+        deny: `${out.error} Ask the user to run it (you cannot run it yourself); the diagram is queued in the pane. Tell them what it does: ${SETUP_NOTE}`,
+      }
     }
     if (!out.ok) {
       if (out.isTransient) return { deny: `The diagram renderer failed (${out.error.split('\n')[0]}). Call ${TOOL} again; it restarts the renderer.` }

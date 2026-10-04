@@ -21,7 +21,15 @@ type On = Parameters<Parameters<typeof test>[1]>[1]
  * The host beneath the plugin: Node on PATH, an installed renderer that
  * answers every render with SVG unless `reply` says otherwise, a store in memory.
  */
-function host(on: On, options: { isInstalled?: boolean; reply?: (source: string) => { status: number; body: object } } = {}) {
+function host(
+  on: On,
+  options: {
+    isInstalled?: boolean
+    reply?: (source: string) => { status: number; body: object }
+    node?: string
+    plan?: { puppeteer?: boolean; mermaid?: boolean; browser?: string | null }
+  } = {},
+) {
   const store = new Map<string, unknown>()
   const renders: { source: string; theme: string }[] = []
   const spawned: string[][] = []
@@ -32,13 +40,23 @@ function host(on: On, options: { isInstalled?: boolean; reply?: (source: string)
     return { value: undefined }
   })
   on('config.list', () => ({ value: [] }))
+  on('ui.status', () => ({ value: undefined }))
   on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? '/Users/someone' : e.name === 'PATH' ? '/usr/local/bin' : undefined }))
   on('fs.exists', (_$, e) => ({ value: e.path.endsWith('/node') || (options.isInstalled ?? true) }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: options.node ?? 'v22.12.0\n', stderr: '' } }))
   on('process.spawn', async function* (_$, e) {
     spawned.push([...e.argv])
-    // Ready, then gone: the next render starts it again, as after an idle exit.
-    yield { stream: 'stdout' as const, text: '{"ready":true,"socket":"/Users/someone/.cache/whiteboard/run/ab.sock"}\n' }
-    return { code: 0, signal: null }
+    if (e.argv.includes('--plan')) {
+      // setup.mjs --plan: what is missing, downloading nothing.
+      const plan = { puppeteer: false, mermaid: false, browser: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ...options.plan }
+      yield { stream: 'stdout' as const, text: `${JSON.stringify({ step: 'plan', ...plan })}\n` }
+    } else if (e.argv.includes('--step') || e.argv.includes('--remove')) {
+      yield { stream: 'stdout' as const, text: '{"step":"done","message":"done."}\n' }
+    } else {
+      // Ready, then gone: the next render starts it again, as after an idle exit.
+      yield { stream: 'stdout' as const, text: '{"ready":true,"socket":"/Users/someone/.cache/whiteboard/run/ab.sock"}\n' }
+    }
+    return { value: { code: 0, signal: null } }
   })
   on('http.fetch', (_$, e) => {
     expect(e.init?.socketPath).toBe('/Users/someone/.cache/whiteboard/run/ab.sock')
@@ -156,6 +174,57 @@ test('a renderer failure is not taken for a Mermaid error, and Refresh recovers'
   isDown = false
   await ui.press({ key: 'refresh' })
   expect(await ui.find({ type: 'Svg' })).toBeDefined()
+})
+
+/** Answers the question dialogs ($.ui.ask) in turn, recording each question. */
+function answer(on: On, replies: string[]) {
+  const asked: string[] = []
+  on('tool.call', { tool: 'AskUserQuestion' }, (_$, e) => {
+    const { questions } = e as unknown as { questions: { question: string }[] }
+    asked.push(JSON.stringify(questions))
+    const question = questions[0]?.question ?? ''
+    return { result: { questions, answers: { [question]: replies.shift() ?? 'Cancel' } } }
+  })
+  return asked
+}
+
+test('setup asks before each download, and stops at the first Cancel', async ($, on) => {
+  const { spawned } = host(on, { isInstalled: false })
+  const asked = answer(on, ['Download', 'Cancel'])
+  const out = await $.command.run({ command: 'whiteboard', args: 'setup' })
+  expect(asked.length).toBe(2)
+  expect(asked[0]).toContain('puppeteer-core')
+  expect(asked[1]).toContain('Mermaid')
+  // Downloaded only what was agreed to; Chrome is installed, so never offered.
+  const steps = spawned.filter(a => a.includes('--step')).map(a => a[a.indexOf('--step') + 1])
+  expect(steps).toEqual(['puppeteer'])
+  expect(JSON.stringify(out)).toContain('Setup stopped')
+})
+
+test('setup offers a browser only when none is installed, and checks Node first', async ($, on) => {
+  const { spawned } = host(on, { isInstalled: false, plan: { browser: null } })
+  const asked = answer(on, ['Download', 'Download', 'Download'])
+  const out = await $.command.run({ command: 'whiteboard', args: 'setup' })
+  expect(asked[2]).toContain('No Chrome, Edge, Brave or Chromium was found')
+  const steps = spawned.filter(a => a.includes('--step')).map(a => a[a.indexOf('--step') + 1])
+  expect(steps).toEqual(['puppeteer', 'mermaid', 'browser'])
+  expect(JSON.stringify(out)).toContain('Diagram renderer ready')
+})
+
+test('setup refuses an old Node.js before downloading anything', async ($, on) => {
+  const { spawned } = host(on, { isInstalled: false, node: 'v20.11.0\n' })
+  const asked = answer(on, [])
+  const out = await $.command.run({ command: 'whiteboard', args: 'setup' })
+  expect(JSON.stringify(out)).toContain('Node.js 22.12 or later is needed')
+  expect(asked.length).toBe(0)
+  expect(spawned.length).toBe(0)
+})
+
+test('uninstall asks, then deletes only after a yes', async ($, on) => {
+  const { spawned } = host(on)
+  answer(on, ['Cancel'])
+  expect(JSON.stringify(await $.command.run({ command: 'whiteboard', args: 'uninstall' }))).toContain('Nothing was deleted')
+  expect(spawned.some(a => a.includes('--remove'))).toBe(false)
 })
 
 test('without the renderer the pane says how to set it up', async ($, on) => {

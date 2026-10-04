@@ -131,16 +131,30 @@ claude plugin marketplace add mazzucci/whiteboard-for-claude-code
 claude plugin install whiteboard@whiteboard-for-claude-code
 ```
 
-Then start a new session and run `/whiteboard setup` once. It downloads
-`puppeteer-core` and Mermaid's script from npm into `~/.cache/whiteboard`
-(about 35 MB) and uses an installed Chrome, Edge, Brave or Chromium; only if
-none is found does it also download a headless Chrome (about 150 MB).
-`/whiteboard setup --download-browser` downloads it even when a browser is
-installed.
+Then start a new session and run `/whiteboard setup` once. It first checks
+for Node.js 22.12 or later, then **asks before each download**, naming what it
+is, its size and where it goes:
+
+1. `puppeteer-core` from npm (about 29 MB), into `~/.cache/whiteboard`
+2. Mermaid's script from npm (about 5 MB), into `~/.cache/whiteboard`
+3. only if no Chrome, Edge, Brave or Chromium is installed: a headless Chrome
+   (about 150 MB) from Google's Chrome for Testing
+
+Cancel stops it there; nothing else is downloaded, and running it again
+picks up where it stopped. `/whiteboard setup --download-browser` offers the
+headless Chrome even when a browser is installed.
 
 To update later: `claude plugin update whiteboard@whiteboard-for-claude-code`,
-then start a new session. To remove it: `claude plugin uninstall
-whiteboard@whiteboard-for-claude-code`, and delete `~/.cache/whiteboard`.
+then start a new session.
+
+To uninstall:
+
+1. `/whiteboard uninstall` stops the renderer and, after asking, deletes
+   `~/.cache/whiteboard`.
+2. `claude plugin uninstall whiteboard@whiteboard-for-claude-code` removes the
+   plugin.
+3. Optionally, `claude plugin marketplace remove whiteboard-for-claude-code`
+   forgets this repository as a marketplace.
 
 ### Ask Claude to install it
 
@@ -165,10 +179,10 @@ these steps in order, and stop to tell them if one fails.
 2. **Tell the person what will happen, and wait for their go-ahead:** Claude
    Code adds this repository as a plugin marketplace and installs the
    `whiteboard` plugin from it. Later, `/whiteboard setup` downloads
-   `puppeteer-core` and Mermaid's script from npm into `~/.cache/whiteboard`
-   (about 35 MB), plus a headless Chrome (about 150 MB) only if no Chrome,
-   Edge, Brave or Chromium is installed. Nothing is sent anywhere: diagrams
-   render locally.
+   `puppeteer-core` (about 29 MB) and Mermaid's script (about 5 MB) from npm
+   into `~/.cache/whiteboard`, plus a headless Chrome (about 150 MB) only if
+   no Chrome, Edge, Brave or Chromium is installed, asking them before each
+   download. Nothing is sent anywhere: diagrams render locally.
 3. **Install with Claude Code's plugin manager.** If `claude` is on the PATH,
    run:
    - `claude plugin marketplace add mazzucci/whiteboard-for-claude-code`
@@ -181,8 +195,9 @@ these steps in order, and stop to tell them if one fails.
    `/plugin install whiteboard --marketplace mazzucci/whiteboard-for-claude-code`
    in the conversation themselves.
 4. **Tell the person the next steps:** start a new Claude Code session (plugins
-   load when a session starts), run `/whiteboard setup` there once, then ask
-   for a diagram. If `/whiteboard` is missing in the new session, the mod did
+   load when a session starts), run `/whiteboard setup` there once (it asks
+   before each download; you cannot run it for them), then ask for a
+   diagram. If `/whiteboard` is missing in the new session, the mod did
    not load: check that their Claude Code version supports mods.
 
 Do not clone the repository by hand, and do not change their Claude Code
@@ -206,6 +221,8 @@ questions about a system: Claude draws when a diagram helps. The bundled
 | `/whiteboard path/to/file.mmd` | Show a Mermaid file (or the first `mermaid` block of a Markdown file) |
 | `/whiteboard theme <name>` | `auto` (light; in a terminal, the terminal's theme), `default`, `dark`, `forest`, `neutral`, `base` |
 | `/whiteboard sample` | Draw a sample |
+| `/whiteboard setup` | Install the renderer, asking before each download |
+| `/whiteboard uninstall` | Stop the renderer and delete its files, after asking |
 
 Click the pane, then:
 
@@ -244,10 +261,11 @@ renderer: any Mermaid works.
 - Rendering stays on your machine: nothing is published, and the renderer's
   page may load nothing but inline data, so a diagram naming a remote image or
   URL cannot make it reach the network (such a diagram fails with an error).
-- Only `/whiteboard setup` goes online: `puppeteer-core` and Mermaid's package
-  from the npm registry (integrity-checked by npm), and, only when no Chromium
-  browser is installed, a headless Chrome from Google's Chrome for Testing
-  downloads through Puppeteer's installer.
+- Only `/whiteboard setup` goes online, and only after you agree to each
+  download: `puppeteer-core` and Mermaid's package from the npm registry
+  (integrity-checked by npm), and, only when no Chromium browser is installed,
+  a headless Chrome from Google's Chrome for Testing through Puppeteer's
+  installer. `/whiteboard uninstall` deletes all of it.
 - Mermaid runs with `securityLevel: strict` (no scripts or click callbacks) and
   labels as plain SVG text, in a headless browser with its sandbox on and a
   throwaway profile: your own browsing data is never read.
