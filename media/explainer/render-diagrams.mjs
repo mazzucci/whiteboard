@@ -20,7 +20,7 @@ const src = join(here, 'src', 'diagrams')
 const build = join(here, 'build')
 mkdirSync(join(build, 'png'), { recursive: true })
 
-const renderer = spawn(process.execPath, [join(root, 'renderer/renderd.mjs'), '--home', join(homedir(), '.cache/whiteboard')], {
+const renderer = spawn(process.execPath, [join(root, 'plugin/renderer/renderd.mjs'), '--home', join(homedir(), '.cache/whiteboard')], {
   stdio: ['ignore', 'pipe', 'inherit'],
 })
 renderer.on('exit', code => code && process.exit(code))

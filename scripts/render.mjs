@@ -30,7 +30,7 @@ if (!files.length) {
 }
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const renderer = spawn(process.execPath, [join(root, 'renderer/renderd.mjs'), '--home', join(homedir(), '.cache/whiteboard')], {
+const renderer = spawn(process.execPath, [join(root, 'plugin/renderer/renderd.mjs'), '--home', join(homedir(), '.cache/whiteboard')], {
   stdio: ['ignore', 'pipe', 'inherit'],
 })
 renderer.on('exit', code => code && process.exit(code))

@@ -5,7 +5,7 @@ flow or a schema, and it draws a diagram there while it answers: real
 [Mermaid](https://mermaid.js.org), rendered exactly as Mermaid draws it, every
 diagram type, on a pane that keeps the whole conversation's diagrams.
 
-![Claude maps a slow request, finds an N+1 in the trace, and proposes a fix, on a whiteboard beside the conversation](https://raw.githubusercontent.com/mazzucci/whiteboard-for-claude-code/media/whiteboard.gif)
+![Claude maps a slow request, finds an N+1 in the trace, and proposes a fix, on a whiteboard beside the conversation](media/whiteboard.gif)
 
 <sub>Animated illustration, not a screen recording; the diagrams are real Mermaid renders. Sources in `media/explainer/`.</sub>
 
@@ -127,8 +127,8 @@ Install it with one command in Claude Code:
 ```
 
 This repository is its own plugin source: Claude Code reads the plugin list
-in `.claude-plugin/marketplace.json` here and installs `whiteboard` from it,
-nothing else. Or, from a terminal:
+in `.claude-plugin/marketplace.json` here and installs `whiteboard` from the
+`plugin/` folder, nothing else. Or, from a terminal:
 
 ```bash
 claude plugin marketplace add mazzucci/whiteboard-for-claude-code
@@ -210,7 +210,7 @@ settings, permissions or other plugins as part of this install.
 ### Try it from a clone
 
 To try a local copy without installing it, load it for one session:
-`claude --plugin-dir /path/to/whiteboard-for-claude-code`, then run
+`claude --plugin-dir /path/to/whiteboard-for-claude-code/plugin`, then run
 `/whiteboard setup`.
 
 ## Use
@@ -291,10 +291,13 @@ renderer: any Mermaid works.
 ## Development
 
 ```
-claude plugin validate .
-claude plugin test .
+claude plugin validate --strict .
+claude plugin test plugin
 ```
 
+`plugin/` is everything Claude Code loads, and all an install copies: the mod
+(`hooks/`), the renderer it runs (`renderer/`), the drawing skill (`skills/`),
+its types and tests. The rest of the repository is the project around it:
 `demo/` holds a six-step walkthrough with reference diagrams and their renders;
 `fixtures/` one diagram per type. `node scripts/render.mjs file.mmd...` renders
 any Mermaid file to PNG with the same renderer the pane uses.
