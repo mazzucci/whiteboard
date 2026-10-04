@@ -211,8 +211,8 @@ Click the pane, then:
 
 | Key | | Key | |
 |---|---|---|---|
-| `i` / `o` | zoom in / out | `w` `a` `s` `d` | pan |
-| `0` | fit | `c` | Mermaid source |
+| `i` / `o` | zoom in / out (out all the way is fit) | `w` `a` `s` `d` | pan |
+| `c` | Mermaid source | `r` | refresh |
 | `p` / `n` | previous / next diagram | | |
 
 ## Reading the diagrams

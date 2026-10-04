@@ -351,7 +351,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const first = at <= 0
   const last = at >= list.length - 1
 
-  // The title row: what this is on the left, where it sits in the history on the right.
+  // Row 1, the document: what this is on the left, where it sits in the history on the right.
   const titleRow = (
     <Box justifyContent="space-between" alignItems="center" gap={2}>
       <Box gap={2} alignItems="center" flexShrink={1}>
@@ -370,14 +370,44 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     </Box>
   )
 
-  // The toolbar: view, zoom and pan as three groups. Remote surfaces send no
-  // raw keys to a plugin, so every control is a Button with a one-letter
-  // hotkey, live once the pane holds the keyboard (after a click in it).
-  // Groups are Boxes, since a fragment's children stack on the desktop.
-  const divider = () => <Text dimColor>│</Text>
+  // Row 2, the view: zoom and pan on the left, the document's toggles on the
+  // right. Remote surfaces send no raw keys to a plugin, so every control is a
+  // Button with a one-letter hotkey, live once the pane holds the keyboard
+  // (after a click in it). Inert controls are dimmed, never removed, so the
+  // row never reflows; groups are Boxes, since a fragment's children stack on
+  // the desktop. Zooming out all the way is fit: there is no reset to learn.
+  const atMax = v.zoom >= (ZOOMS[ZOOMS.length - 1] ?? 6)
   const toolbar = (Svg || Image) && (
-    <Box gap={2} alignItems="center" flexWrap="wrap">
-      <Box gap={1} alignItems="center">
+    <Box justifyContent="space-between" alignItems="center" gap={2} flexWrap="wrap">
+      <Box gap={2} alignItems="center">
+        <Box gap={1} alignItems="center">
+          <Button
+            key="zoom-in"
+            plain
+            hotkey="i"
+            dimColor={!canZoom || atMax}
+            label="+"
+            onPress={set(x => zoomTo(x, zoomStep(x.zoom, 1)))}
+          />
+          <Button
+            key="zoom-out"
+            plain
+            hotkey="o"
+            dimColor={!canZoom || atFit}
+            label="−"
+            onPress={set(x => zoomTo(x, zoomStep(x.zoom, -1)))}
+          />
+          <Text dimColor>{atFit ? 'Fit' : `${Math.round(v.zoom * 100)}%`}</Text>
+        </Box>
+        <Text dimColor>│</Text>
+        <Box gap={1} alignItems="center">
+          <Button key="pan-left" plain dimColor={!canZoom || !canPan} hotkey="a" label="←" onPress={set(x => panBy(x, -0.2, 0))} />
+          <Button key="pan-up" plain dimColor={!canZoom || !canPan} hotkey="w" label="↑" onPress={set(x => panBy(x, 0, -0.2))} />
+          <Button key="pan-down" plain dimColor={!canZoom || !canPan} hotkey="s" label="↓" onPress={set(x => panBy(x, 0, 0.2))} />
+          <Button key="pan-right" plain dimColor={!canZoom || !canPan} hotkey="d" label="→" onPress={set(x => panBy(x, 0.2, 0))} />
+        </Box>
+      </Box>
+      <Box gap={2} alignItems="center" flexShrink={0}>
         <Button
           key="mode"
           plain
@@ -387,53 +417,26 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
         />
         {isRender && <Button key="refresh" plain hotkey="r" label="Refresh" onPress={() => refresh($, current.source)} />}
       </Box>
-      {canZoom && divider()}
-      {canZoom && (
-        <Box gap={1} alignItems="center">
-          <Button
-            key="zoom-out"
-            plain
-            hotkey="o"
-            dimColor={v.zoom <= (ZOOMS[0] ?? 0.5)}
-            label="−"
-            onPress={set(x => zoomTo(x, zoomStep(x.zoom, -1)))}
-          />
-          <Button
-            key="fit"
-            plain
-            hotkey="0"
-            dimColor={atFit}
-            label={atFit ? 'Fit' : `${Math.round(v.zoom * 100)}%`}
-            onPress={set(x => ({ ...x, ...FIT }))}
-          />
-          <Button
-            key="zoom-in"
-            plain
-            hotkey="i"
-            dimColor={v.zoom >= (ZOOMS[ZOOMS.length - 1] ?? 6)}
-            label="+"
-            onPress={set(x => zoomTo(x, zoomStep(x.zoom, 1)))}
-          />
-        </Box>
-      )}
-      {canZoom && divider()}
-      {canZoom && (
-        <Box gap={1} alignItems="center">
-          <Button key="pan-left" plain dimColor={!canPan} hotkey="a" label="←" onPress={set(x => panBy(x, -0.2, 0))} />
-          <Button key="pan-up" plain dimColor={!canPan} hotkey="w" label="↑" onPress={set(x => panBy(x, 0, -0.2))} />
-          <Button key="pan-down" plain dimColor={!canPan} hotkey="s" label="↓" onPress={set(x => panBy(x, 0, 0.2))} />
-          <Button key="pan-right" plain dimColor={!canPan} hotkey="d" label="→" onPress={set(x => panBy(x, 0.2, 0))} />
-        </Box>
-      )}
     </Box>
   )
 
-  const header = (
-    <Box flexDirection="column">
-      {titleRow}
-      {toolbar}
-    </Box>
-  )
+  // The desktop frames the header as a card; the terminal, where rows are
+  // scarce, rules it off with one dim line. No colours: both themes work.
+  const header =
+    e.surface === 'terminal' ? (
+      <Box flexDirection="column">
+        {titleRow}
+        {toolbar}
+        <Text dimColor wrap="truncate">
+          {'─'.repeat(cols)}
+        </Text>
+      </Box>
+    ) : (
+      <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+        {titleRow}
+        {toolbar}
+      </Box>
+    )
 
   const code = <Code source={codeText(current.source)} path="diagram.mmd" startLine={1} />
   let body

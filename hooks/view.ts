@@ -4,7 +4,8 @@
 /** The Svg element's cap on its source. */
 export const SVG_CAP = 131072
 
-export const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6]
+/** Zoom steps; fit is the least, since smaller than fit only wastes the pane. */
+export const ZOOMS = [1, 1.25, 1.5, 2, 3, 4, 6]
 
 /** Where the view looks: zoom 1 shows the whole drawing; cx, cy is the
  *  centre of the window as a fraction of the drawing (0.5, 0.5 is the middle). */
@@ -26,6 +27,8 @@ export function panBy<T extends ViewState>(view: T, dx: number, dy: number): T {
 
 /** Zooms keeping the window's centre, then clamps. */
 export function zoomTo<T extends ViewState>(view: T, zoom: number): T {
+  // Back at fit, back to the whole drawing, centred.
+  if (zoom <= 1) return { ...view, ...FIT }
   return panBy({ ...view, zoom }, 0, 0)
 }
 

@@ -93,8 +93,11 @@ test('zoom, pan and the code view by button and hotkey', async ($, on) => {
   expect((await ui.find({ key: 'pan-right' }))?.props.hotkey).toBe('d')
   await ui.press({ key: 'pan-right' })
   expect(await svgOf(ui)).toContain('viewBox="60 0 300 200"')
-  await ui.press({ key: 'fit' })
+  // No reset: zooming out all the way is fit, centred again.
+  for (let i = 0; i < 4; i++) await ui.press({ key: 'zoom-out' })
   expect(await svgOf(ui)).toContain('viewBox="0 0 400 200"')
+  expect((await ui.find({ key: 'zoom-out' }))?.props.dimColor).toBe(true)
+  expect(await ui.find({ key: 'fit' })).toBeUndefined()
 
   await ui.press({ key: 'mode' })
   expect((await ui.find({ type: 'Code' }))?.props.source).toBe(SOURCE)
@@ -133,7 +136,7 @@ test("a file that Mermaid rejects: the pane shows Mermaid's message as code, the
   const blocks = await ui.findAll({ type: 'Code' })
   expect(blocks.map(b => b.props.source)).toEqual(['Parse error on line 2:\n...A -->\n-----^\nExpecting NODE_STRING', 'flowchart TD\n  A -->'])
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
-  expect(await ui.find({ key: 'zoom-in' })).toBeUndefined()
+  expect((await ui.find({ key: 'zoom-in' }))?.props.dimColor).toBe(true)
 })
 
 test('a renderer failure is not taken for a Mermaid error, and Refresh recovers', async ($, on) => {
@@ -227,5 +230,5 @@ test('the terminal shows the source and says where to see the diagram', async ($
   const ui = await $.ui.mount({ ...pane(100), surface: 'terminal' })
   expect((await ui.find({ type: 'Code' }))?.props.source).toBe(SOURCE)
   expect(JSON.stringify(await ui.drawn())).toContain('open this session in Claude desktop')
-  expect(await ui.find({ key: 'zoom-in' })).toBeUndefined()
+  expect((await ui.find({ key: 'zoom-in' }))?.props.dimColor).toBe(true)
 })
