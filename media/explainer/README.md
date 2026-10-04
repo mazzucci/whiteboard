@@ -33,3 +33,12 @@ Needs `/whiteboard setup` to have run (puppeteer-core and Mermaid in
   (`11-lifecycle`). `9-pr-before/after` are kept for a future review clip, unused.
 - `build.mjs`: Puppeteer -> ffmpeg; warns about captions shorter than
   3 s + 0.3 s per word.
+
+## Publishing the README's GIF
+
+The GIF at the top of the README lives on the `media` branch, not on `main`:
+installing the plugin clones `main` shallowly, so nothing on `media` is ever
+downloaded by an install. The README loads it from
+`https://raw.githubusercontent.com/mazzucci/whiteboard-for-claude-code/media/whiteboard.gif`.
+To replace it, commit the new file to `media` as `whiteboard.gif` and push that
+branch; `main` needs no change.
