@@ -92,15 +92,14 @@ export function imageBox(natural: { width: number; height: number }, zoom: numbe
 export type Sized = { width: number; height: number; span: { w: number; h: number } }
 
 /**
- * The box a view draws in: the fitted box, grown by the zoom until it fills
- * the room, then cropping. A small drawing zoomed in gets bigger; a wide one
- * gets taller. Zoomed out, the box stays and the window widens.
+ * The desktop's box: the whole pane, always. At fit the drawing sits centred
+ * in it at its own size or smaller; zoom scales it from there, and the window
+ * (span) is whatever of the drawing the pane holds at that scale.
  */
-export function zoomBox(fit: { width: number; height: number }, zoom: number, room: { width: number; height: number }): Sized {
-  if (zoom <= 1) return { ...fit, span: { w: 1 / zoom, h: 1 / zoom } }
-  const width = Math.max(fit.width, Math.min(room.width, fit.width * zoom))
-  const height = Math.max(fit.height, Math.min(room.height, fit.height * zoom))
-  return { width, height, span: { w: width / (fit.width * zoom), h: height / (fit.height * zoom) } }
+export function paneBox(natural: { width: number; height: number }, zoom: number, room: { width: number; height: number }): Sized {
+  const fit = Math.min(1, room.width / natural.width, room.height / natural.height)
+  const scale = fit * zoom
+  return { ...room, span: { w: room.width / (scale * natural.width), h: room.height / (scale * natural.height) } }
 }
 
 /**
@@ -129,10 +128,4 @@ export function frame(
   const fill = background ? `<rect x="${n(x - w)}" y="${n(y - h)}" width="${n(w * 3)}" height="${n(h * 3)}" fill="${background}"/>` : ''
   tag += fill
   return svg.slice(0, root.index) + tag + svg.slice(root.index + root[0].length)
-}
-
-/** The size to draw at: the drawing's own, shrunk to fit the room, never enlarged. */
-export function fitSize(natural: { width: number; height: number }, room: { width: number; height: number }) {
-  const s = Math.min(1, room.width / natural.width, room.height / natural.height)
-  return { width: Math.max(40, Math.floor(natural.width * s)), height: Math.max(40, Math.floor(natural.height * s)) }
 }

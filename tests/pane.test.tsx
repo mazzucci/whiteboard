@@ -66,9 +66,11 @@ test('Claude draws a diagram: the desktop pane shows the exact SVG', async ($, o
 
   const ui = await $.ui.mount({ ...pane(120), surface: 'desktop' })
   const svg = await svgOf(ui)
-  // Sized to the drawing, its window the whole drawing, the theme's background behind.
-  expect(svg).toContain('width="400" height="200" viewBox="0 0 400 200"')
-  expect(svg).toContain('<rect x="-400" y="-200" width="1200" height="600" fill="white"/>')
+  // The whole pane (900 × 648 px): the drawing centred at its own size, the
+  // theme's background behind; no width given, so it fills the pane's width.
+  expect(svg).toContain('width="4000" height="2880" viewBox="-250 -224 900 648"')
+  expect(svg).toContain('<rect x="-1150" y="-872" width="2700" height="1944" fill="white"/>')
+  expect((await ui.find({ type: 'Svg' }))?.props.width).toBeUndefined()
   expect(svg).not.toContain('max-width')
 })
 
@@ -78,20 +80,20 @@ test('zoom, pan and the code view by button and hotkey', async ($, on) => {
   const ui = await $.ui.mount({ ...pane(120), surface: 'desktop' })
   expect((await ui.find({ key: 'pan-right' }))?.props.dimColor).toBe(true)
 
-  // Zooming in first grows the box (the pane is 900 × 578 px): the whole
-  // drawing, bigger, and nothing to pan yet.
+  // The pane (900 × 648 px) is the window: zooming in scales the drawing in
+  // it, still whole at 125%, so nothing to pan yet.
   await ui.press({ key: 'zoom-in' })
-  expect(await svgOf(ui)).toContain('width="500" height="250" viewBox="0 0 400 200"')
+  expect(await svgOf(ui)).toContain('viewBox="-160 -159.2 720 518.4"')
   expect((await ui.find({ key: 'pan-right' }))?.props.dimColor).toBe(true)
-  // At 300% the box fills the pane, and the window crops the drawing.
+  // At 300% the drawing overflows the pane, and the window crops it.
   for (let i = 0; i < 3; i++) await ui.press({ key: 'zoom-in' })
-  expect(await svgOf(ui)).toContain('width="900" height="578" viewBox="50 ')
+  expect(await svgOf(ui)).toContain('viewBox="50 -8 300 216"')
   expect((await ui.find({ key: 'pan-right' }))?.props.dimColor).toBe(false)
   expect((await ui.find({ key: 'pan-right' }))?.props.hotkey).toBe('d')
   await ui.press({ key: 'pan-right' })
   expect(await svgOf(ui)).toContain('viewBox="60 ')
   await ui.press({ key: 'fit' })
-  expect(await svgOf(ui)).toContain('width="400" height="200" viewBox="0 0 400 200"')
+  expect(await svgOf(ui)).toContain('viewBox="-250 -224 900 648"')
 
   await ui.press({ key: 'mode' })
   expect((await ui.find({ type: 'Code' }))?.props.source).toBe(SOURCE)
@@ -177,9 +179,9 @@ test('VS Code shows the SVG with the same buttons', async ($, on) => {
   host(on)
   await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE })
   const ui = await $.ui.mount({ ...pane(120), surface: 'vscode' })
-  expect(await svgOf(ui)).toContain('viewBox="0 0 400 200"')
+  expect(await svgOf(ui)).toContain('viewBox="-250 -224 900 648"')
   await ui.press({ key: 'zoom-in' })
-  expect(await svgOf(ui)).toContain('width="500" height="250" viewBox="0 0 400 200"')
+  expect(await svgOf(ui)).toContain('viewBox="-160 -159.2 720 518.4"')
 })
 
 test('the terminal shows the diagram as a PNG image, zooms by rendering a window, and toggles to code', async ($, on) => {

@@ -4,7 +4,7 @@ import type { EngineInterface, Register, RenderInput } from 'claude-code'
 import type { DiagramDoc, DiagramView } from '../types'
 import { MERMAID_VERSION, outcomeOf, PUPPETEER_VERSION, SVG_LABELS } from './renderer'
 import type { RenderOutcome } from './renderer'
-import { FIT, fitSize, frame, imageBox, panBy, SVG_CAP, windowOf, zoomBox, ZOOMS, zoomStep, zoomTo } from './view'
+import { FIT, frame, imageBox, panBy, paneBox, SVG_CAP, windowOf, ZOOMS, zoomStep, zoomTo } from './view'
 import type { Box } from './view'
 
 /** A window of the drawing and the CSS size to draw it at: the terminal's picture. */
@@ -14,6 +14,8 @@ const PANE = 'whiteboard'
 const TOOL = 'show_diagram'
 const THEME_KEY = 'theme'
 const HISTORY_MAX = 30
+/** The markup width of the desktop's SVG: wider than any pane, so it fills the pane's width. */
+const SVG_WIDTH = 4000
 /** The terminal Image's cap on a PNG, decoded. */
 const PNG_CAP = 2 * 1024 * 1024
 const THEMES = ['auto', 'default', 'dark', 'forest', 'neutral', 'base']
@@ -335,15 +337,17 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const untitled = current.title.toLowerCase() === kind.toLowerCase()
   const title = untitled ? label : current.title
 
-  // Cells to CSS pixels on the desktop's code font: an estimate, used only to fit.
-  const room = { width: cols * 7.5, height: Math.max(8, rows - 6) * 17 }
+  // Cells to CSS pixels on the desktop's code font: an estimate. The width is
+  // only the window's shape (the Svg fills the pane's real width); the height
+  // leans tall, since a pane that scrolls a little beats one left half empty.
+  const room = { width: cols * 7.5, height: Math.max(8, rows - 4) * 18 }
   const set = (f: (x: DiagramView) => DiagramView) => () => update($, viewState, f)
 
   // Controls are drawn dim when they would do nothing right now (the first
   // diagram's prev, pan at fit), never removed, so the layout never reflows.
   const atFit = v.zoom <= 1
-  // The desktop's box: grown with the zoom until it fills the pane.
-  const sized = Svg && out?.ok ? zoomBox(fitSize(out.value, room), v.zoom, room) : undefined
+  // The desktop's box: the whole pane, the drawing centred and zoomed in it.
+  const sized = Svg && out?.ok ? paneBox(out.value, v.zoom, room) : undefined
   // Pan does something only while the window is smaller than the drawing.
   const span = sized?.span ?? box?.span
   const canPan = Boolean(span && (span.w < 0.999 || span.h < 0.999))
@@ -483,8 +487,14 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
       </Box>
     )
   } else {
-    const size = sized ?? zoomBox(fitSize(out.value, room), v.zoom, room)
-    const svg = frame(out.value.svg, out.value, v, out.value.background, size)
+    const size = sized ?? paneBox(out.value, v.zoom, room)
+    // Drawn with no width the Svg fills the pane's width exactly, its height
+    // following the markup's shape: the room's, wide enough never to shrink.
+    const svg = frame(out.value.svg, out.value, v, out.value.background, {
+      width: SVG_WIDTH,
+      height: (SVG_WIDTH * size.height) / size.width,
+      span: size.span,
+    })
     body =
       svg.length > SVG_CAP ? (
         <Box flexDirection="column">
@@ -496,7 +506,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
           </Text>
         </Box>
       ) : (
-        <Svg source={svg} alt={untitled ? label : `${title} (${label})`} width={size.width} height={size.height} />
+        <Svg source={svg} alt={untitled ? label : `${title} (${label})`} />
       )
   }
 
