@@ -15,7 +15,14 @@ export type Rendered = {
   /** The drawing as a PNG, base64, when one was asked for (the terminal's Image). */
   png?: string
 }
-export type RenderOutcome = { ok: true; value: Rendered } | { ok: false; error: string; isSetup?: boolean }
+/**
+ * A failure is Mermaid rejecting the source (kept: the same source fails the
+ * same way), the renderer not set up, or `isTransient`: the renderer itself
+ * failed (stopped, crashed, cut off), so drawing again starts a fresh one.
+ */
+export type RenderOutcome =
+  | { ok: true; value: Rendered }
+  | { ok: false; error: string; isSetup?: boolean; isTransient?: boolean }
 
 export const MERMAID_VERSION = '12.1.0'
 export const PUPPETEER_VERSION = '25.12.0'
@@ -30,10 +37,11 @@ export function outcomeOf(status: number, text: string): RenderOutcome {
   try {
     data = JSON.parse(text) as Record<string, unknown>
   } catch {
-    return { ok: false, error: `renderer answered ${status} with no JSON` }
+    return { ok: false, error: `renderer answered ${status} with no JSON`, isTransient: true }
   }
   if (status !== 200 || typeof data.svg !== 'string') {
-    return { ok: false, error: String(data.error ?? `renderer answered ${status}`) }
+    // 400 is Mermaid's verdict on the source; anything else is the renderer's own trouble.
+    return { ok: false, error: String(data.error ?? `renderer answered ${status}`), ...(status !== 400 && { isTransient: true }) }
   }
   return {
     ok: true,

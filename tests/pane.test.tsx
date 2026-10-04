@@ -127,6 +127,25 @@ test("a file that Mermaid rejects: the pane shows Mermaid's message as code, the
   expect(await ui.find({ key: 'zoom-in' })).toBeUndefined()
 })
 
+test('a renderer failure is not taken for a Mermaid error, and Refresh recovers', async ($, on) => {
+  let isDown = true
+  host(on, {
+    reply: () =>
+      isDown
+        ? { status: 500, body: { error: 'Target closed' } }
+        : { status: 200, body: { svg: SVG, width: 400, height: 200, type: 'flowchart-v2', ms: 5 } },
+  })
+  const shown = await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE })
+  expect(JSON.stringify(shown)).toContain('renderer failed')
+  await $.command.run({ command: 'whiteboard', args: 'sample' })
+  const ui = await $.ui.mount({ ...pane(120), surface: 'desktop' })
+  expect(JSON.stringify(await ui.drawn())).toContain('renderer stopped')
+  expect(JSON.stringify(await ui.drawn())).not.toContain('Mermaid could not render')
+  isDown = false
+  await ui.press({ key: 'refresh' })
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+})
+
 test('without the renderer the pane says how to set it up', async ($, on) => {
   host(on, { isInstalled: false })
   const shown = await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE })

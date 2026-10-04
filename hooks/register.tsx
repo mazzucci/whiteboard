@@ -113,7 +113,7 @@ async function render($: EngineInterface, source: string, theme: string, png = f
       try {
         return await postRender($, body)
       } catch (error) {
-        return { ok: false as const, error: error instanceof Error ? error.message : String(error) }
+        return { ok: false as const, error: error instanceof Error ? error.message : String(error), isTransient: true }
       }
     }
   }
@@ -183,7 +183,7 @@ function renderCached($: EngineInterface, source: string, theme: string, png = f
     renders.set(key, hit)
     // A failure to reach the renderer is retried next time; a Mermaid error is kept.
     void hit.then(out => {
-      if (!out.ok && (out.isSetup || /renderer|Node\.js|socket|ECONN|ENOENT/i.test(out.error))) renders.delete(key)
+      if (!out.ok && (out.isSetup || out.isTransient)) renders.delete(key)
     })
   }
   return hit
@@ -192,8 +192,9 @@ function renderCached($: EngineInterface, source: string, theme: string, png = f
 /** Forgets every render of a diagram and draws the pane again: Refresh. */
 async function refresh($: EngineInterface, source: string) {
   for (const key of [...renders.keys()]) if (key.endsWith(`\n${source}`)) renders.delete(key)
+  // An ordinary redraw: $.ui.invalidate would also cut off the draw that
+  // started the warm renderer, and the renderer with it.
   await update($, viewState, x => ({ ...x }))
-  $.ui.invalidate('ui.render')
 }
 
 /**
@@ -414,7 +415,14 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   if (!isRender) {
     body = code
   } else if (!out?.ok) {
-    body = out?.isSetup ? (
+    body = out?.isTransient ? (
+      <Box flexDirection="column">
+        <Text bold color="yellow">
+          The diagram renderer stopped
+        </Text>
+        <Text dimColor>{`Press r to refresh; it starts again. (${out.error.split('\n')[0]?.slice(0, 200)})`}</Text>
+      </Box>
+    ) : out?.isSetup ? (
       <Box flexDirection="column">
         <Text bold>The diagram renderer is not set up</Text>
         <Text dimColor>Run /whiteboard setup to install it; it uses your installed Chrome when there is one.</Text>
@@ -585,6 +593,7 @@ export const register: Register = on => {
       return { deny: `${out.error} Ask the user to run it; the diagram is queued in the pane.` }
     }
     if (!out.ok) {
+      if (out.isTransient) return { deny: `The diagram renderer failed (${out.error.split('\n')[0]}). Call ${TOOL} again; it restarts the renderer.` }
       return { deny: `Mermaid could not render this diagram:\n${mermaidError(out.error)}\nFix the source and call ${TOOL} again.` }
     }
     // Too large for the pane: back to Claude like a syntax error, and kept out
