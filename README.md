@@ -118,13 +118,15 @@ pan or resize renders a new image, so it lags; a terminal resized in height
 alone needs Refresh (`r`). Other terminals, iTerm2 among them for now, show
 the Mermaid source.
 
-In Claude Code, type:
+Install it with one command in Claude Code:
 
 ```
 /plugin install whiteboard --marketplace mazzucci/whiteboard-for-claude-code
 ```
 
-or, from a terminal:
+This repository is its own plugin source: Claude Code reads the plugin list
+in `.claude-plugin/marketplace.json` here and installs `whiteboard` from it,
+nothing else. Or, from a terminal:
 
 ```bash
 claude plugin marketplace add mazzucci/whiteboard-for-claude-code
