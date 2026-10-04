@@ -1,0 +1,14 @@
+{
+  "name": "whiteboard-for-claude-code",
+  "description": "Open source, unofficial: a whiteboard beside the Claude Code conversation",
+  "owner": {
+    "name": "Stelian Matei"
+  },
+  "plugins": [
+    {
+      "name": "whiteboard",
+      "source": "./",
+      "description": "Claude draws Mermaid diagrams on a whiteboard beside the conversation, rendered exactly by Mermaid"
+    }
+  ]
+}

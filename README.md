@@ -106,64 +106,86 @@ sequenceDiagram
 
 ## Install
 
-Requirements: Claude Code desktop with mods, Node.js 22.12 or later, and macOS
-(Linux should work but is untested; Windows is not supported yet).
+Requirements: the Claude Code **desktop app** (the whiteboard is a mod, an early
+access Claude Code feature that runs in the desktop app only; tested with
+2.1.286), Node.js 22.12 or later, and macOS (Linux should work but is untested;
+Windows is not supported yet).
+
+In Claude Code, type:
+
+```
+/plugin install whiteboard --marketplace mazzucci/whiteboard-for-claude-code
+```
+
+or, from a terminal:
+
+```bash
+claude plugin marketplace add mazzucci/whiteboard-for-claude-code
+claude plugin install whiteboard@whiteboard-for-claude-code
+```
+
+Then start a new session and run `/whiteboard setup` once. It downloads
+`puppeteer-core` and Mermaid's script from npm into `~/.cache/whiteboard`
+(about 35 MB) and uses an installed Chrome, Edge, Brave or Chromium; only if
+none is found does it also download a headless Chrome (about 150 MB).
+`/whiteboard setup --download-browser` downloads it even when a browser is
+installed.
+
+To update later: `claude plugin update whiteboard@whiteboard-for-claude-code`,
+then start a new session. To remove it: `claude plugin uninstall
+whiteboard@whiteboard-for-claude-code`, and delete `~/.cache/whiteboard`.
 
 ### Ask Claude to install it
 
 In Claude Code, paste:
 
 ```
-Install the whiteboard mod from https://github.com/mazzucci/whiteboard-for-claude-code,
+Install the whiteboard plugin from https://github.com/mazzucci/whiteboard-for-claude-code,
 following the "Instructions for Claude" in its README.
 ```
 
-Claude checks the requirements, tells you what it will download, and sets it
-up. Then start a new session and ask for a diagram.
+Claude checks the requirements, tells you what it will install, and installs it
+through Claude Code's plugin manager.
 
 ### Instructions for Claude
 
-You are installing this mod for the person you are working with. Follow these
-steps in order, and stop to tell them if one fails.
+You are installing this plugin for the person you are working with. Follow
+these steps in order, and stop to tell them if one fails.
 
 1. **Check the requirements.** Run `node --version`: it must be 22.12 or
    later. The OS must be macOS or Linux. If either check fails, stop and say
    which.
-2. **Tell the person what will happen, and wait for their go-ahead:** the
-   repository is cloned into `~/.claude/skills/whiteboard`, and setup downloads
+2. **Tell the person what will happen, and wait for their go-ahead:** Claude
+   Code adds this repository as a plugin marketplace and installs the
+   `whiteboard` plugin from it. Later, `/whiteboard setup` downloads
    `puppeteer-core` and Mermaid's script from npm into `~/.cache/whiteboard`
-   (about 35 MB). It uses an installed Chrome, Edge, Brave or Chromium; only if
-   none is found does it also download a headless Chrome (about 150 MB).
-3. **Get the code.**
-   - If `~/.claude/skills/whiteboard` does not exist:
-     `git clone https://github.com/mazzucci/whiteboard-for-claude-code ~/.claude/skills/whiteboard`
-   - If it exists and is a clone of this repository, update it instead:
-     `git -C ~/.claude/skills/whiteboard pull --ff-only`
-   - If it exists and is something else, stop and ask.
-4. **Install the renderer:**
-   `node ~/.claude/skills/whiteboard/renderer/setup.mjs --home ~/.cache/whiteboard --mermaid 12.1.0 --puppeteer 25.12.0`
-   It prints one JSON line per step and ends with `"step":"done"`. If it
-   reports `"step":"error"`, show the person the message.
-5. **Check the result:** `~/.cache/whiteboard/mermaid.min.js` and
-   `~/.cache/whiteboard/node_modules/puppeteer-core` exist.
-6. **Tell the person to start a new Claude Code session.** Plugins in
-   `~/.claude/skills` load when a session starts. In the new session, `/whiteboard`
-   opens the pane, and asking for a diagram draws one. If `/whiteboard` is
-   missing there, the mod did not load: Claude Code's mod API is in early
-   access, so check that their Claude Code version supports mods (tested with
-   2.1.286).
+   (about 35 MB), plus a headless Chrome (about 150 MB) only if no Chrome,
+   Edge, Brave or Chromium is installed. Nothing is sent anywhere: diagrams
+   render locally.
+3. **Install with Claude Code's plugin manager.** If `claude` is on the PATH,
+   run:
+   - `claude plugin marketplace add mazzucci/whiteboard-for-claude-code`
+   - `claude plugin install whiteboard@whiteboard-for-claude-code`
 
-Do not change their Claude Code settings, permissions or other plugins as part
-of this install.
+   If it is already installed, update it instead with
+   `claude plugin marketplace update whiteboard-for-claude-code` and
+   `claude plugin update whiteboard@whiteboard-for-claude-code`. If `claude`
+   is not on the PATH, ask the person to type
+   `/plugin install whiteboard --marketplace mazzucci/whiteboard-for-claude-code`
+   in the conversation themselves.
+4. **Tell the person the next steps:** start a new Claude Code session (plugins
+   load when a session starts), run `/whiteboard setup` there once, then ask
+   for a diagram. If `/whiteboard` is missing in the new session, the mod did
+   not load: check that their Claude Code version supports mods.
 
-### Install by hand
+Do not clone the repository by hand, and do not change their Claude Code
+settings, permissions or other plugins as part of this install.
 
-The same steps without Claude: clone the repository into
-`~/.claude/skills/whiteboard`, start a new session, and run `/whiteboard setup`
-there (it runs step 4 above). To try it without installing, load it for one
-session with `claude --plugin-dir /path/to/whiteboard-for-claude-code`.
-`/whiteboard setup --download-browser` downloads the headless Chrome even when
-a browser is installed.
+### Try it from a clone
+
+To try a local copy without installing it, load it for one session:
+`claude --plugin-dir /path/to/whiteboard-for-claude-code`, then run
+`/whiteboard setup`.
 
 ## Use
 

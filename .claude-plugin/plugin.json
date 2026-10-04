@@ -2,5 +2,12 @@
   "name": "whiteboard",
   "version": "0.1.0",
   "description": "A whiteboard beside the conversation: Claude draws Mermaid diagrams there, rendered exactly by Mermaid",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Stelian Matei",
+    "url": "https://github.com/mazzucci"
+  },
+  "homepage": "https://github.com/mazzucci/whiteboard-for-claude-code",
+  "repository": "https://github.com/mazzucci/whiteboard-for-claude-code",
+  "license": "MIT"
 }
