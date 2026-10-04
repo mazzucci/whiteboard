@@ -4,20 +4,13 @@ import type { EngineInterface, Register, RenderInput, UiOpenResult } from 'claud
 import type { DiagramDoc, DiagramView, LegendEntry } from '../types'
 import { MERMAID_VERSION, outcomeOf, PUPPETEER_VERSION, SVG_LABELS } from './renderer'
 import type { RenderOutcome } from './renderer'
-import { docBox, FIT, frame, imageBox, panBy, SVG_CAP, windowOf, ZOOMS, zoomStep, zoomTo } from './view'
-import type { Box } from './view'
+import { docBox, FIT, frame, panBy, SVG_CAP, ZOOMS, zoomStep, zoomTo } from './view'
 
-/** A window of the drawing and the CSS size to draw it at: the terminal's picture. */
-type Picture = Box & { width: number; height: number }
 
 const PANE = 'whiteboard'
 const TOOL = 'show_diagram'
 const THEME_KEY = 'theme'
 const HISTORY_MAX = 30
-/** The body rows the pane asks for when it sits above the terminal's prompt (not docked). */
-const INLINE_ROWS = 30
-/** The terminal Image's cap on a PNG, decoded. */
-const PNG_CAP = 2 * 1024 * 1024
 const THEMES = ['auto', 'default', 'dark', 'forest', 'neutral', 'base']
 
 const doc = atom({ plugin: 'whiteboard', key: 'doc' } as const, null)
@@ -104,12 +97,12 @@ async function postRender($: EngineInterface, body: string): Promise<RenderOutco
 }
 
 /** Renders Mermaid source exactly as Mermaid does; never throws. */
-async function render($: EngineInterface, source: string, theme: string, png = false, view?: Picture): Promise<RenderOutcome> {
+async function render($: EngineInterface, source: string, theme: string): Promise<RenderOutcome> {
   if (!(await isInstalled($))) {
     return { ok: false, isSetup: true, error: 'The diagram renderer is not set up yet: run /whiteboard setup.' }
   }
-  const bodyAt = (scale: number) => JSON.stringify({ source, theme, config: SVG_LABELS, ...(png && { png: true, scale, view }) })
-  const attempt = async (body: string) => {
+  const body = JSON.stringify({ source, theme, config: SVG_LABELS })
+  const attempt = async () => {
     try {
       return await postRender($, body)
     } catch {
@@ -122,11 +115,7 @@ async function render($: EngineInterface, source: string, theme: string, png = f
       }
     }
   }
-  const out = await attempt(bodyAt(2))
-  // The terminal's Image takes at most 2 MiB of PNG: a large drawing at
-  // double density can pass that, at single density rarely.
-  if (out.ok && out.value.png && out.value.png.length * 0.75 > PNG_CAP) return attempt(bodyAt(1))
-  return out
+  return attempt()
 }
 
 /** What setup downloads, said before it does: in the pane, and to Claude. */
@@ -260,28 +249,28 @@ async function uninstall($: EngineInterface): Promise<string> {
 async function show($: EngineInterface, next: DiagramDoc) {
   const list = await update($, history, h => [...h.filter(d => d.source !== next.source), next].slice(-HISTORY_MAX))
   await goTo($, list.length - 1)
-  return $.ui.open({ id: PANE, title: 'Whiteboard', rows: INLINE_ROWS })
+  return $.ui.open({ id: PANE, title: 'Whiteboard' })
 }
 
 /**
- * What Claude is told where nothing can show the pane. Mods draw only in a
- * terminal and the desktop app's Code tab; elsewhere (the desktop app's chat,
- * the VS Code extension, a -p run) the tool still loads, so Claude must not be
- * sent after a /whiteboard command or setup that does not exist there.
+ * What Claude is told where nothing can show the pane. The whiteboard draws in
+ * the desktop app's Code tab; elsewhere (a terminal, for now, the desktop
+ * app's chat, the VS Code extension, a -p run) the tool still loads, so Claude
+ * must not be sent after a /whiteboard command or setup that cannot help.
  */
 const NO_PANE =
-  'Nothing can show the Whiteboard here: its pane appears only in Claude Code in a terminal or in the ' +
-  "Claude desktop app's Code tab, and this session has neither. Do not suggest /whiteboard commands or setup. " +
+  "Nothing can show the Whiteboard here: its pane appears only in the Claude desktop app's Code tab, " +
+  'and this session is not there. Do not suggest /whiteboard commands or setup. ' +
   'Explain in prose instead, or draw the diagram another way if this app can.'
 
-/** Whether a surface this session draws on can show a pane: a terminal or the desktop's Code tab. */
+/** Whether this session draws in the desktop app, the one surface the whiteboard supports. */
 async function canShowPane($: EngineInterface): Promise<boolean> {
-  return (await $.session.surfaces()).some(s => s === 'terminal' || s === 'desktop')
+  return (await $.session.surfaces()).includes('desktop')
 }
 
-/** A pane that waits because no attached surface places panes, not because the terminal is narrow. */
+/** A pane that waits undrawn: no attached surface places panes (an older desktop app, say). */
 function isNowhere(opened: UiOpenResult): boolean {
-  return !opened.isPlaced && !/column|wid/i.test(opened.reason)
+  return !opened.isPlaced
 }
 
 /** Shows one diagram of the history, fitted. */
@@ -297,12 +286,11 @@ async function goTo($: EngineInterface, at: number) {
 
 // One render per source and theme; a reload starts the cache over.
 const renders = new Map<string, Promise<RenderOutcome>>()
-function renderCached($: EngineInterface, source: string, theme: string, png = false, view?: Picture): Promise<RenderOutcome> {
-  const at = view ? [view.x, view.y, view.w, view.h, view.width, view.height].map(n => n.toFixed(2)).join(' ') : ''
-  const key = `${png ? `png ${at}` : 'svg'}\n${theme}\n${source}`
+function renderCached($: EngineInterface, source: string, theme: string): Promise<RenderOutcome> {
+  const key = `${theme}\n${source}`
   let hit = renders.get(key)
   if (!hit) {
-    hit = render($, source, theme, png, view)
+    hit = render($, source, theme)
     renders.set(key, hit)
     // A failure to reach the renderer is retried next time; a Mermaid error is kept.
     void hit.then(out => {
@@ -310,19 +298,6 @@ function renderCached($: EngineInterface, source: string, theme: string, png = f
     })
   }
   return hit
-}
-
-/**
- * What the terminal's picture of a view shows: the window, and the size in CSS
- * pixels to draw it at, the drawing's own density times the zoom, so zooming in
- * sharpens; at most 2400 px a side.
- */
-function pictureOf(drawn: { svg: string; width: number; height: number }, v: DiagramView, box: ReturnType<typeof imageBox>): Picture {
-  const win = windowOf(drawn.svg, drawn, v, box.span)
-  const width = drawn.width * box.span.w * Math.max(1, v.zoom)
-  const height = (width * win.h) / win.w
-  const shrink = Math.min(1, 2400 / Math.max(width, height))
-  return { ...win, width: Math.max(1, Math.round(width * shrink)), height: Math.max(1, Math.round(height * shrink)) }
 }
 
 /** A classDef's colours, read from the Mermaid source: its stroke, and whether it is dashed. */
@@ -355,21 +330,13 @@ async function refresh($: EngineInterface, source: string) {
 
 /**
  * The theme to render with: the diagram's, else the person's choice, else
- * automatic. Automatic is light, except in the terminal, where it follows the
- * Claude Code theme: that setting is the terminal's (it reads "dark" even
- * where it was never set), not the desktop app's appearance.
+ * light. (Claude Code's own theme setting is the terminal's, and reads "dark"
+ * even where it was never set, so it says nothing of the desktop app's look.)
  */
-async function themeFor($: EngineInterface, d: DiagramDoc, surface?: string): Promise<string> {
+async function themeFor($: EngineInterface, d: DiagramDoc): Promise<string> {
   if (d.theme && d.theme !== 'auto') return d.theme
   const chosen = await $.store.get(THEME_KEY)
-  if (typeof chosen === 'string' && chosen !== 'auto') return chosen
-  if (surface !== 'terminal') return 'default'
-  try {
-    const row = (await $.config.list()).find(r => r.key === 'theme')
-    return /dark/i.test(String(row?.value ?? '')) ? 'dark' : 'default'
-  } catch {
-    return 'default'
-  }
+  return typeof chosen === 'string' && chosen !== 'auto' ? chosen : 'default'
 }
 
 /** The diagram type from its header line, for titles and messages. */
@@ -435,10 +402,9 @@ function codeText(text: string): string {
 
 async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const { Box, Text, Button, Code } = $.ui.resolve(e)
+  // The desktop app draws the SVG; the terminal shows the source (terminal
+  // support is in development, on the terminal branch).
   const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
-  // The terminal has no SVG, but draws a PNG as an Image where it can (the
-  // kitty graphics protocol), and the Image's alt text elsewhere.
-  const Image = e.surface === 'terminal' ? $.ui.resolve(e).Image : undefined
 
   const current = await read($, doc)
   if (!current) {
@@ -452,25 +418,12 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const list = await read($, history)
   const at = await read($, index)
   const v = await read($, viewState)
-  const theme = await themeFor($, current, e.surface)
+  const theme = await themeFor($, current)
   const kind = typeOf(current.source)
-  // The terminal shows a PNG of the view's window: the SVG render gives the
-  // drawing's coordinates, then the renderer draws just that window.
-  const drawn = Svg || Image ? await renderCached($, current.source, theme) : undefined
+  const out = Svg ? await renderCached($, current.source, theme) : undefined
   const cols = Math.max(20, e.props.bodyColumns || e.viewport?.columns || 80)
-  const rows = e.viewport?.rows ?? 40
-  // The terminal's picture: the pane's body below its header is about the
-  // screen less the prompt and the header, docked; inline, above the prompt,
-  // the rows it asked for (INLINE_ROWS), as far as the screen spares them.
-  const bodyRows = e.props.placement === 'inline' ? Math.min(INLINE_ROWS, rows - 12) - 4 : rows - 10
-  const box = drawn?.ok ? imageBox(drawn.value, v.zoom, { columns: cols, rows: Math.max(4, bodyRows) }) : undefined
-  const out =
-    Image && drawn?.ok && box && v.mode === 'render'
-      ? await renderCached($, current.source, theme, true, pictureOf(drawn.value, v, box))
-      : drawn
-  const isRender = v.mode === 'render' && Boolean(Svg || Image)
-  // Zoom and pan need a picture: the SVG, or the terminal's PNG.
-  const canZoom = isRender && Boolean(out?.ok) && Boolean(Svg || (out?.ok && out.value.png))
+  const isRender = v.mode === 'render' && Boolean(Svg)
+  const canZoom = isRender && Boolean(out?.ok)
   // Mermaid's own reading of the type when it rendered, else the header line's.
   const label = kindLabel(out?.ok && out.value.type ? out.value.type : kind)
   // An untitled diagram is titled by its type keyword: the readable name stands in, once.
@@ -488,7 +441,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   // The desktop's box: the drawing at fit times the zoom, cropped across to the pane.
   const sized = Svg && out?.ok ? docBox(out.value, v.zoom, paneWidth) : undefined
   // Pan does something only while the window is smaller than the drawing.
-  const span = sized?.span ?? box?.span
+  const span = sized?.span
   // Each way separately: something to the sides, or above and below.
   const canPanX = Boolean(span && span.w < 0.999)
   const canPanY = Boolean(span && span.h < 0.999)
@@ -521,7 +474,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   // row never reflows; groups are Boxes, since a fragment's children stack on
   // the desktop. Zooming out all the way is fit: there is no reset to learn.
   const atMax = v.zoom >= (ZOOMS[ZOOMS.length - 1] ?? 6)
-  const toolbar = (Svg || Image) && (
+  const toolbar = Svg && (
     <Box justifyContent="space-between" alignItems="center" gap={2} flexWrap="wrap">
       <Box gap={2} alignItems="center">
         <Box gap={1} alignItems="center">
@@ -564,8 +517,6 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     </Box>
   )
 
-  // The desktop frames the header as a card; the terminal, where rows are
-  // scarce, rules it off with one dim line. No colours: both themes work.
   // The key to the diagram's colours, one line under the toolbar: a swatch
   // in each class's stroke colour (dashed as an outline), then its label.
   const legend = current.legend?.length ? (
@@ -582,27 +533,25 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     </Box>
   ) : undefined
 
-  const header =
-    e.surface === 'terminal' ? (
-      <Box flexDirection="column">
-        {titleRow}
-        {toolbar}
-        {legend}
-        <Text dimColor wrap="truncate">
-          {'─'.repeat(cols)}
-        </Text>
-      </Box>
-    ) : (
-      <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
-        {titleRow}
-        {toolbar}
-        {legend}
-      </Box>
-    )
+  // The header as a card with a dim rounded border; no colours, so both themes work.
+  const header = (
+    <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+      {titleRow}
+      {toolbar}
+      {legend}
+    </Box>
+  )
 
   const code = <Code source={codeText(current.source)} path="diagram.mmd" startLine={1} />
   let body
-  if (!isRender) {
+  if (!Svg) {
+    body = (
+      <Box flexDirection="column" gap={1}>
+        <Text dimColor>The whiteboard draws in the Claude desktop app's Code tab. This is the diagram's Mermaid source.</Text>
+        {code}
+      </Box>
+    )
+  } else if (!isRender) {
     body = code
   } else if (!out?.ok) {
     body = out?.isTransient ? (
@@ -626,25 +575,6 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
           <Text dimColor>Mermaid's message, then the source it was given:</Text>
         </Box>
         <Code source={codeText(mermaidError(out?.error ?? '')) || 'No message.'} />
-        {code}
-      </Box>
-    )
-  } else if (Image && out.value.png && box) {
-    body = (
-      <Image
-        source={{ png: out.value.png }}
-        columns={box.columns}
-        rows={box.rows}
-        alt={`${title} (${label}): this terminal cannot show images. Press c for the Mermaid source, or open this session in Claude desktop.`}
-      />
-    )
-  } else if (!Svg) {
-    body = (
-      <Box flexDirection="column" gap={1}>
-        <Text dimColor>
-          The terminal cannot draw this diagram: open this session in Claude desktop or VS Code to see it rendered.
-          This is its Mermaid source.
-        </Text>
         {code}
       </Box>
     )
@@ -703,7 +633,7 @@ export const register: Register = on => {
         'traps that fail or render badly (HTML in labels, ";" in sequence notes), and a C4 style ' +
         'that lays out cleanly. ' +
         'If Mermaid rejects the source, the call fails with its error: fix the source and call again. ' +
-        "The pane shows only in Claude Code in a terminal or the desktop app's Code tab; elsewhere the call " +
+        "The pane shows only in the Claude desktop app's Code tab; elsewhere the call " +
         'says so, and you explain in prose instead. ' +
         'A diagram over ~128 KB of SVG is refused the same way: redraw it as an overview.',
       inputSchema: {
@@ -729,7 +659,7 @@ export const register: Register = on => {
           theme: {
             type: 'string',
             enum: THEMES,
-            description: "Mermaid theme; omit for the user's choice (auto: light, or the terminal's theme in a terminal)",
+            description: "Mermaid theme; omit for the user's choice (auto: light)",
           },
         },
         required: ['mermaid'],
@@ -743,14 +673,14 @@ export const register: Register = on => {
     if (!arg) {
       const current = await read($, doc)
       if (!current) await show($, SAMPLE)
-      else await $.ui.open({ id: PANE, title: 'Whiteboard', rows: INLINE_ROWS })
+      else await $.ui.open({ id: PANE, title: 'Whiteboard' })
       return { text: `Whiteboard opened (${current ? current.title : 'sample'}).` }
     }
     if (arg === 'setup' || arg === 'setup --download-browser') {
       const text = await setup($, arg.endsWith('--download-browser'))
       renders.clear()
       socket = null
-      if (text.startsWith('Diagram renderer ready') && (await read($, doc))) await $.ui.open({ id: PANE, title: 'Whiteboard', rows: INLINE_ROWS })
+      if (text.startsWith('Diagram renderer ready') && (await read($, doc))) await $.ui.open({ id: PANE, title: 'Whiteboard' })
       return { text }
     }
     if (arg === 'uninstall') return { text: await uninstall($) }
@@ -815,10 +745,9 @@ export const register: Register = on => {
     }
     const opened = await show($, next)
     if (isNowhere(opened)) return { deny: NO_PANE }
-    const waiting = opened.isPlaced ? '' : ' The pane opens once the terminal is wider, or when the user runs /whiteboard.'
     const unknown = unknownClasses.length ? ` The legend names classes with no classDef: ${unknownClasses.join(', ')}.` : ''
     return {
-      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).${waiting}${unknown}`,
+      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).${unknown}`,
     }
   })
 

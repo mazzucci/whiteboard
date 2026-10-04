@@ -12,10 +12,7 @@
 //
 //   GET  /health                                   -> { ok, mermaid, browser }
 //   POST /quit                                     -> stops, as when idle
-//   POST /render { source, theme?, config?, png?, scale?, view? }
-//        view { x, y, w, h, width?, height? }: the PNG shows only that window
-//        of the drawing (SVG coordinates), drawn width × height CSS px (the
-//        drawing's own size when absent): zoomed in, sharper
+//   POST /render { source, theme?, config?, png?, scale? }
 //        -> { svg, png?, width, height, background, type, ms } | 400 { error }
 
 import { createServer } from 'node:http'
@@ -94,7 +91,7 @@ const serial = fn => {
   return run
 }
 
-async function render({ source, theme = 'default', config = {}, png = false, scale = 2, view }) {
+async function render({ source, theme = 'default', config = {}, png = false, scale = 2 }) {
   const id = `d${++count}`
   // Lay out in the same large room every time, so no diagram is measured
   // against the size of the last snapshot.
@@ -141,24 +138,10 @@ async function render({ source, theme = 'default', config = {}, png = false, sca
     id,
   )
   if (out.error || !png) return out
-  const isView = view && [view.x, view.y, view.w, view.h].every(Number.isFinite) && view.w > 0 && view.h > 0
-  const size = isView && view.width > 0 && view.height > 0 ? { width: view.width, height: view.height } : out
-  await page.setViewport({ width: Math.max(1, Math.ceil(size.width)), height: Math.max(1, Math.ceil(size.height)), deviceScaleFactor: scale })
+  await page.setViewport({ width: Math.max(1, out.width), height: Math.max(1, out.height), deviceScaleFactor: scale })
   // Mermaid's SVG is transparent: paint the theme's own background behind it,
   // so a dark theme is not drawn over the page's white.
-  await page.evaluate(
-    (bg, view, size) => {
-      document.body.style.background = bg
-      if (!view) return
-      const el = document.querySelector('#out svg')
-      el.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`)
-      el.style.width = `${size.width}px`
-      el.style.height = `${size.height}px`
-    },
-    out.background || 'white',
-    isView ? view : null,
-    size,
-  )
+  await page.evaluate(bg => (document.body.style.background = bg), out.background || 'white')
   const el = await page.$('#out svg')
   const shot = await el.screenshot({ encoding: 'base64', omitBackground: false })
   return { ...out, png: shot }

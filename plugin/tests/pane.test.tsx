@@ -252,13 +252,6 @@ test('a surface that places no panes counts as nowhere; a narrow terminal only w
   expect(JSON.stringify(await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE }))).toContain('Nothing can show the Whiteboard here')
 })
 
-test('a narrow terminal: drawn, and the pane opens once it is wider', async ($, on) => {
-  host(on, { surfaces: ['terminal'], opened: { isPlaced: false, reason: 'unasked panes need 144 columns; the terminal has 100' } })
-  const shown = JSON.stringify(await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE }))
-  expect(shown).toContain('Rendered the')
-  expect(shown).toContain('once the terminal is wider')
-})
-
 test('a legend draws as one line in the header, each swatch in its class colour', async ($, on) => {
   host(on)
   const source = `${SOURCE}
@@ -319,52 +312,15 @@ test('VS Code shows the SVG with the same buttons', async ($, on) => {
   expect(await svgOf(ui)).toContain('width="500" height="250" viewBox="0 0 400 200"')
 })
 
-test('the terminal shows the diagram as a PNG image, zooms by rendering a window, and toggles to code', async ($, on) => {
-  const { renders } = host(on, {
-    reply: () => ({
-      status: 200,
-      body: { svg: SVG, png: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=', width: 400, height: 200, type: 'flowchart-v2', ms: 5 },
-    }),
-  })
-  await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE })
+test('the terminal shows the source with a note, and Claude is told there is no whiteboard there', async ($, on) => {
+  host(on, { surfaces: ['terminal'] })
+  // Terminal support is in development: Claude explains in prose instead.
+  expect(JSON.stringify(await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE }))).toContain(
+    'Nothing can show the Whiteboard here',
+  )
+  await $.command.run({ command: 'whiteboard', args: 'sample' })
   const ui = await $.ui.mount({ ...pane(100), surface: 'terminal' })
-  const image = await ui.find({ type: 'Image' })
-  expect(image?.props.source).toEqual({ png: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=' })
-  // 400 × 200 px: as wide as the pane, half as many rows (cells are about twice as tall as wide).
-  expect(image?.props.columns).toBe(100)
-  expect(image?.props.rows).toBe(25)
-  // Zoom renders a window of the drawing as a new PNG: as wide as the
-  // desktop's (320 of 400), and taller, since the picture grows to the pane.
-  await ui.press({ key: 'zoom-in' })
-  const zoomed = (renders.at(-1) as { view?: { x: number; w: number; h: number } }).view
-  expect(Math.round(zoomed?.x ?? NaN)).toBe(40)
-  expect(Math.round(zoomed?.w ?? NaN)).toBe(320)
-  expect(zoomed?.h ?? 0).toBeGreaterThan(160)
-  expect((await ui.find({ type: 'Image' }))?.props.rows).toBe(30)
-  await ui.press({ key: 'pan-right' })
-  expect(Math.round((renders.at(-1) as { view?: { x: number } }).view?.x ?? NaN)).toBe(80)
-  // Refresh draws it again from the renderer, not from the cache.
-  const before = renders.length
-  await ui.press({ key: 'refresh' })
-  expect(renders.length).toBeGreaterThan(before)
-  // Inline, above the prompt, the pane has what the screen spares: the
-  // picture keeps within the rows it asked for (40 rows: 24 for the picture).
-  await ui.redraw({ ...pane(100).props, placement: 'inline' })
-  expect((await ui.find({ type: 'Image' }))?.props.rows).toBeLessThanOrEqual(24)
-  await ui.redraw({ ...pane(100).props })
-  // A narrower pane (the terminal resized) draws a narrower picture.
-  await ui.redraw({ ...pane(60).props, bodyColumns: 60 })
-  expect((await ui.find({ type: 'Image' }))?.props.columns).toBe(60)
-  await ui.press({ key: 'mode' })
-  expect((await ui.find({ type: 'Code' }))?.props.source).toBe(SOURCE)
-  expect(await ui.find({ type: 'Image' })).toBeUndefined()
-})
-
-test('the terminal shows the source and says where to see the diagram', async ($, on) => {
-  host(on)
-  await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE })
-  const ui = await $.ui.mount({ ...pane(100), surface: 'terminal' })
-  expect((await ui.find({ type: 'Code' }))?.props.source).toBe(SOURCE)
-  expect(JSON.stringify(await ui.drawn())).toContain('open this session in Claude desktop')
-  expect((await ui.find({ key: 'zoom-in' }))?.props.dimColor).toBe(true)
+  expect(JSON.stringify(await ui.drawn())).toContain("draws in the Claude desktop app's Code tab")
+  expect(await ui.find({ type: 'Code' })).toBeDefined()
+  expect(await ui.find({ key: 'zoom-in' })).toBeUndefined()
 })

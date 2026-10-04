@@ -110,18 +110,13 @@ Requirements: Claude Code 2.1.287 or later (mods are on by default from that
 version), Node.js 22.12 or later, and macOS (Linux should work but is
 untested; Windows is not supported yet).
 
-**Works best in the Claude Code desktop app's Code tab**, where the diagram is
-live SVG and zooming and panning are instant. Mods draw only there and in a
-terminal: in the desktop app's chat, the VS Code extension or `claude -p`, the
-plugin loads but no whiteboard appears, and Claude is told to explain in prose
-instead. Terminal
-support is limited: diagrams show as images only in terminals Claude Code
-draws images in (the kitty graphics protocol: Ghostty, kitty), and each zoom,
-pan or resize renders a new image, so it lags; a terminal resized in height
-alone needs Refresh (`r`). Other terminals, iTerm2 among them for now, show
-the Mermaid source. In a terminal, run `/tui fullscreen` once to have the
-whiteboard dock on the right of the conversation; in the classic layout it
-opens above the prompt.
+**Works in the Claude Code desktop app's Code tab**, where the diagram is live
+SVG and zooming and panning are instant. Elsewhere (Claude Code in a terminal,
+the desktop app's chat, the VS Code extension, `claude -p`) the plugin loads
+but no whiteboard appears, and Claude is told to explain in prose instead.
+Terminal support is in development on the
+[`terminal`](https://github.com/mazzucci/whiteboard-for-claude-code/tree/terminal)
+branch.
 
 This repository is its own plugin source: Claude Code reads the plugin list
 in `.claude-plugin/marketplace.json` here and installs `whiteboard` from the
@@ -155,8 +150,11 @@ Cancel stops it there; nothing else is downloaded, and running it again
 picks up where it stopped. `/whiteboard setup --download-browser` offers the
 headless Chrome even when a browser is installed.
 
-To update later: `claude plugin update whiteboard@whiteboard-for-claude-code`,
-then start a new session.
+To update later, refresh the marketplace first, so Claude Code sees the new
+version, then update the plugin and start a new session: in the desktop app's
+Settings, plugins section, or with
+`claude plugin marketplace update whiteboard-for-claude-code` and
+`claude plugin update whiteboard@whiteboard-for-claude-code`.
 
 To uninstall:
 
@@ -230,7 +228,7 @@ questions about a system: Claude draws when a diagram helps. The bundled
 |---|---|
 | `/whiteboard` | Open the whiteboard |
 | `/whiteboard path/to/file.mmd` | Show a Mermaid file (or the first `mermaid` block of a Markdown file) |
-| `/whiteboard theme <name>` | `auto` (light; in a terminal, the terminal's theme), `default`, `dark`, `forest`, `neutral`, `base` |
+| `/whiteboard theme <name>` | `auto` (light), `default`, `dark`, `forest`, `neutral`, `base` |
 | `/whiteboard sample` | Draw a sample |
 | `/whiteboard setup` | Install the renderer, asking before each download |
 | `/whiteboard uninstall` | Stop the renderer and delete its files, after asking |
@@ -285,12 +283,9 @@ renderer: any Mermaid works.
 
 ## Limits
 
-- Terminal support is limited. The diagram shows as an image only where
-  Claude Code draws images (the kitty graphics protocol: Ghostty, kitty); each
-  zoom or pan step renders a new image, which takes a moment, and a change of
-  height alone is not redrawn until Refresh (`r`). Elsewhere, iTerm2 included,
-  the whiteboard shows the Mermaid source: iTerm2 can draw these images, but
-  Claude Code does not use them there yet.
+- The Claude desktop app's Code tab only, for now: in a terminal the pane
+  shows the Mermaid source. Terminal support is in development on the
+  `terminal` branch.
 - Diagrams over about 128 KB of SVG are too large for the pane; split them.
 - Mermaid's own C4 syntax is experimental and lays out poorly; the skill steers
   Claude to C4-styled flowcharts instead.

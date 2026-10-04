@@ -46,8 +46,8 @@ const n = (v: number) => String(Math.round(v * 100) / 100)
  * The part of the drawing a view shows, in the SVG's own coordinates.
  *
  * `span` is the window's size as a fraction of the drawing, across and down;
- * absent, 1 / zoom both ways. A window narrower than 1 / zoom (the terminal's
- * picture, grown to fill the pane) still pans from edge to edge.
+ * absent, 1 / zoom both ways. A window narrower than 1 / zoom still pans from
+ * edge to edge.
  */
 export function windowOf(
   svg: string,
@@ -69,30 +69,6 @@ export function windowOf(
   }
   return { x: place(vb.x, vb.w, view.cx, sw), y: place(vb.y, vb.h, view.cy, sh), w: vb.w * sw, h: vb.h * sh }
 }
-
-/**
- * Cells for the terminal's picture: at fit, the drawing's own shape, as wide as
- * the room allows; zoomed in, that box grown by the zoom until it fills the
- * room. `span` is the window it shows, for windowOf. Cells are about twice as
- * tall as wide.
- */
-export function imageBox(natural: { width: number; height: number }, zoom: number, room: { columns: number; rows: number }) {
-  const maxCols = Math.max(1, Math.min(255, Math.floor(room.columns)))
-  const maxRows = Math.max(1, Math.min(255, Math.floor(room.rows)))
-  const aspect = natural.height / natural.width
-  let columns = maxCols
-  let rows = Math.max(1, Math.round((columns * aspect) / 2))
-  if (rows > maxRows) {
-    rows = maxRows
-    columns = Math.max(1, Math.min(maxCols, Math.round((rows * 2) / aspect)))
-  }
-  if (zoom <= 1) return { columns, rows, span: { w: 1 / zoom, h: 1 / zoom } }
-  const grown = { columns: Math.min(maxCols, Math.round(columns * zoom)), rows: Math.min(maxRows, Math.round(rows * zoom)) }
-  return { ...grown, span: { w: grown.columns / (columns * zoom), h: grown.rows / (rows * zoom) } }
-}
-
-/** A box on screen and the window of the drawing it shows (windowOf's span). */
-export type Sized = { width: number; height: number; span: { w: number; h: number } }
 
 /** How tall a zoomed box may grow, as a share of its width, before it crops down. */
 export const ZOOM_SHAPE = 0.75
