@@ -189,6 +189,13 @@ function renderCached($: EngineInterface, source: string, theme: string, png = f
   return hit
 }
 
+/** Forgets every render of a diagram and draws the pane again: Refresh. */
+async function refresh($: EngineInterface, source: string) {
+  for (const key of [...renders.keys()]) if (key.endsWith(`\n${source}`)) renders.delete(key)
+  await update($, viewState, x => ({ ...x }))
+  $.ui.invalidate('ui.render')
+}
+
 /**
  * The theme to render with: the diagram's, else the person's choice, else
  * automatic. Automatic is light, except in the terminal, where it follows the
@@ -352,6 +359,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
           label={isRender ? 'Code' : 'Diagram'}
           onPress={set(x => ({ ...x, mode: x.mode === 'render' ? 'code' : 'render' }))}
         />
+        {isRender && <Button key="refresh" plain hotkey="r" label="Refresh" onPress={() => refresh($, current.source)} />}
       </Box>
       {canZoom && divider()}
       {canZoom && (

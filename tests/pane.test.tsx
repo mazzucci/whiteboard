@@ -177,6 +177,13 @@ test('the terminal shows the diagram as a PNG image, zooms by rendering a window
   await ui.press({ key: 'pan-right' })
   expect((renders.at(-1) as { view?: { x: number } }).view?.x).toBe(80)
   expect(await ui.find({ type: 'Image' })).toBeDefined()
+  // Refresh draws it again from the renderer, not from the cache.
+  const before = renders.length
+  await ui.press({ key: 'refresh' })
+  expect(renders.length).toBeGreaterThan(before)
+  // A narrower pane (the terminal resized) draws a narrower picture.
+  await ui.redraw({ ...pane(60).props, bodyColumns: 60 })
+  expect((await ui.find({ type: 'Image' }))?.props.columns).toBe(60)
   await ui.press({ key: 'mode' })
   expect((await ui.find({ type: 'Code' }))?.props.source).toBe(SOURCE)
   expect(await ui.find({ type: 'Image' })).toBeUndefined()
