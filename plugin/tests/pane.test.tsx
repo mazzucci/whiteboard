@@ -112,10 +112,19 @@ test('zoom, pan and the code view by button and hotkey', async ($, on) => {
   expect(await svgOf(ui)).toContain('width="900" height="600" viewBox="50 0 300 200"')
   expect((await ui.find({ key: 'pan-right' }))?.props.dimColor).toBe(false)
   expect((await ui.find({ key: 'pan-right' }))?.props.hotkey).toBe('d')
+  // Wider than the pane: pan across; not yet taller than 3/4 of its width: nothing above or below.
+  expect((await ui.find({ key: 'pan-down' }))?.props.dimColor).toBe(true)
   await ui.press({ key: 'pan-right' })
   expect(await svgOf(ui)).toContain('viewBox="60 0 300 200"')
+  // At 600% it would be 1200 px tall: cropped to 675 (3/4 of 900), and pan works down too.
+  for (let i = 0; i < 2; i++) await ui.press({ key: 'zoom-in' })
+  expect(await svgOf(ui)).toContain('width="900" height="675"')
+  expect((await ui.find({ key: 'pan-down' }))?.props.dimColor).toBe(false)
+  const before = await svgOf(ui)
+  await ui.press({ key: 'pan-down' })
+  expect(await svgOf(ui)).not.toBe(before)
   // No reset: zooming out all the way is fit, centred again.
-  for (let i = 0; i < 4; i++) await ui.press({ key: 'zoom-out' })
+  for (let i = 0; i < 6; i++) await ui.press({ key: 'zoom-out' })
   expect(await svgOf(ui)).toContain('viewBox="0 0 400 200"')
   expect((await ui.find({ key: 'zoom-out' }))?.props.dimColor).toBe(true)
   expect(await ui.find({ key: 'fit' })).toBeUndefined()

@@ -94,16 +94,23 @@ export function imageBox(natural: { width: number; height: number }, zoom: numbe
 /** A box on screen and the window of the drawing it shows (windowOf's span). */
 export type Sized = { width: number; height: number; span: { w: number; h: number } }
 
+/** How tall a zoomed box may grow, as a share of its width, before it crops down. */
+export const ZOOM_SHAPE = 0.75
+
 /**
  * The desktop's box, with no guess at the pane's height: the drawing at fit
- * (its own size, or the pane's width if wider) times the zoom. Once that is
- * wider than the pane the window crops across, for pan; its height is the
- * whole drawing's, and the pane scrolls.
+ * (its own size, or the pane's width if wider) times the zoom. Wider than the
+ * pane, the window crops across; taller than its fit height or three
+ * quarters of its width, whichever is more, it crops down. So pan works both
+ * ways, a zoomed view keeps the toolbar in sight, and a drawing that is tall
+ * at fit still scrolls as it is.
  */
 export function docBox(natural: { width: number; height: number }, zoom: number, paneWidth: number): Sized {
-  const scale = Math.min(1, paneWidth / natural.width) * zoom
-  const w = Math.min(1, paneWidth / (scale * natural.width))
-  return { width: natural.width * w * scale, height: natural.height * scale, span: { w, h: 1 } }
+  const fit = Math.min(1, paneWidth / natural.width)
+  const scale = fit * zoom
+  const width = Math.min(natural.width * scale, paneWidth)
+  const height = Math.min(natural.height * scale, Math.max(natural.height * fit, width * ZOOM_SHAPE))
+  return { width, height, span: { w: width / (natural.width * scale), h: height / (natural.height * scale) } }
 }
 
 /**

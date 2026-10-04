@@ -489,7 +489,9 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const sized = Svg && out?.ok ? docBox(out.value, v.zoom, paneWidth) : undefined
   // Pan does something only while the window is smaller than the drawing.
   const span = sized?.span ?? box?.span
-  const canPan = Boolean(span && (span.w < 0.999 || span.h < 0.999))
+  // Each way separately: something to the sides, or above and below.
+  const canPanX = Boolean(span && span.w < 0.999)
+  const canPanY = Boolean(span && span.h < 0.999)
   const first = at <= 0
   const last = at >= list.length - 1
 
@@ -543,10 +545,10 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
         </Box>
         <Text dimColor>│</Text>
         <Box gap={1} alignItems="center">
-          <Button key="pan-left" plain dimColor={!canZoom || !canPan} hotkey="a" label="←" onPress={set(x => panBy(x, -0.2, 0))} />
-          <Button key="pan-up" plain dimColor={!canZoom || !canPan} hotkey="w" label="↑" onPress={set(x => panBy(x, 0, -0.2))} />
-          <Button key="pan-down" plain dimColor={!canZoom || !canPan} hotkey="s" label="↓" onPress={set(x => panBy(x, 0, 0.2))} />
-          <Button key="pan-right" plain dimColor={!canZoom || !canPan} hotkey="d" label="→" onPress={set(x => panBy(x, 0.2, 0))} />
+          <Button key="pan-left" plain dimColor={!canZoom || !canPanX} hotkey="a" label="←" onPress={set(x => panBy(x, -0.2, 0))} />
+          <Button key="pan-up" plain dimColor={!canZoom || !canPanY} hotkey="w" label="↑" onPress={set(x => panBy(x, 0, -0.2))} />
+          <Button key="pan-down" plain dimColor={!canZoom || !canPanY} hotkey="s" label="↓" onPress={set(x => panBy(x, 0, 0.2))} />
+          <Button key="pan-right" plain dimColor={!canZoom || !canPanX} hotkey="d" label="→" onPress={set(x => panBy(x, 0.2, 0))} />
         </Box>
       </Box>
       <Box gap={2} alignItems="center" flexShrink={0}>
