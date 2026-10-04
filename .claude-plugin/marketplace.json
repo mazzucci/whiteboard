@@ -8,7 +8,7 @@
     {
       "name": "whiteboard",
       "source": "./plugin",
-      "description": "Claude draws Mermaid diagrams on a whiteboard beside the conversation, rendered exactly by Mermaid"
+      "description": "Claude draws Mermaid diagrams on a whiteboard beside the conversation, rendered exactly by Mermaid. For the Claude desktop app's Code tab"
     }
   ]
 }

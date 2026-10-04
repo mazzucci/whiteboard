@@ -1,16 +1,21 @@
 # Whiteboard for Claude Code
 
-A whiteboard beside your Claude Code conversation. Ask Claude about a system, a
-flow or a schema, and it draws a diagram there while it answers: real
+A whiteboard beside your Claude Code conversation, in the **Code** tab of the
+Claude desktop app. Ask Claude about a system, a flow or a schema, and it draws
+a diagram there while it answers: real
 [Mermaid](https://mermaid.js.org), rendered exactly as Mermaid draws it, every
 diagram type, on a pane that keeps the whole conversation's diagrams.
 
 ![Claude maps a slow request, finds an N+1 in the trace, and proposes a fix, on a whiteboard beside the conversation](media/whiteboard.gif)
 
-<sub>Animated illustration, not a screen recording; the diagrams are real Mermaid renders. Sources in `media/explainer/`.</sub>
+<sub>Screen recording of the Claude desktop app's Code tab, sped up while Claude works. The project is simulated (`demo/checkout-service/`); Claude, the plugin and every diagram are real.</sub>
 
 > **Open source project, not affiliated with or endorsed by Anthropic.** Claude and
 > Claude Code are trademarks of Anthropic, PBC.
+>
+> **For the Claude desktop app's Code tab.** It does not work in the app's
+> **Claude** (chat) or **Cowork** modes, on claude.ai, or in the VS Code
+> extension; terminal support is in development.
 >
 > **Experimental.** Built on Claude Code's mods, which are new and may change
 > between releases. Tested with Claude Code 2.1.286 on macOS.
@@ -110,10 +115,12 @@ Requirements: Claude Code 2.1.287 or later (mods are on by default from that
 version), Node.js 22.12 or later, and macOS (Linux should work but is
 untested; Windows is not supported yet).
 
-**Works in the Claude Code desktop app's Code tab**, where the diagram is live
-SVG and zooming and panning are instant. Elsewhere (Claude Code in a terminal,
-the desktop app's chat, the VS Code extension, `claude -p`) the plugin loads
-but no whiteboard appears, and Claude is told to explain in prose instead.
+**Made for the Code tab of the Claude desktop app**, where the diagram is live
+SVG and zooming and panning are instant. The app's other modes, **Claude**
+(chat) and **Cowork**, do not show plugin panes, and neither do claude.ai, the
+VS Code extension, Claude Code in a terminal or `claude -p`: there the plugin
+loads but no whiteboard appears, and Claude is told to explain in prose
+instead.
 Terminal support is in development on the
 [`terminal`](https://github.com/mazzucci/whiteboard-for-claude-code/tree/terminal)
 branch.
