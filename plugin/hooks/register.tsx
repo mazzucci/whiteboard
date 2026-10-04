@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderInput } from 'claude-code'
+import type { EngineInterface, Register, RenderInput, UiOpenResult } from 'claude-code'
 
 import type { DiagramDoc, DiagramView } from '../types'
 import { MERMAID_VERSION, outcomeOf, PUPPETEER_VERSION, SVG_LABELS } from './renderer'
@@ -260,7 +260,28 @@ async function uninstall($: EngineInterface): Promise<string> {
 async function show($: EngineInterface, next: DiagramDoc) {
   const list = await update($, history, h => [...h.filter(d => d.source !== next.source), next].slice(-HISTORY_MAX))
   await goTo($, list.length - 1)
-  await $.ui.open({ id: PANE, title: 'Whiteboard', rows: INLINE_ROWS })
+  return $.ui.open({ id: PANE, title: 'Whiteboard', rows: INLINE_ROWS })
+}
+
+/**
+ * What Claude is told where nothing can show the pane. Mods draw only in a
+ * terminal and the desktop app's Code tab; elsewhere (the desktop app's chat,
+ * the VS Code extension, a -p run) the tool still loads, so Claude must not be
+ * sent after a /whiteboard command or setup that does not exist there.
+ */
+const NO_PANE =
+  'Nothing can show the Whiteboard here: its pane appears only in Claude Code in a terminal or in the ' +
+  "Claude desktop app's Code tab, and this session has neither. Do not suggest /whiteboard commands or setup. " +
+  'Explain in prose instead, or draw the diagram another way if this app can.'
+
+/** Whether a surface this session draws on can show a pane: a terminal or the desktop's Code tab. */
+async function canShowPane($: EngineInterface): Promise<boolean> {
+  return (await $.session.surfaces()).some(s => s === 'terminal' || s === 'desktop')
+}
+
+/** A pane that waits because no attached surface places panes, not because the terminal is narrow. */
+function isNowhere(opened: UiOpenResult): boolean {
+  return !opened.isPlaced && !/column|wid/i.test(opened.reason)
 }
 
 /** Shows one diagram of the history, fitted. */
@@ -642,6 +663,8 @@ export const register: Register = on => {
         'traps that fail or render badly (HTML in labels, ";" in sequence notes), and a C4 style ' +
         'that lays out cleanly. ' +
         'If Mermaid rejects the source, the call fails with its error: fix the source and call again. ' +
+        "The pane shows only in Claude Code in a terminal or the desktop app's Code tab; elsewhere the call " +
+        'says so, and you explain in prose instead. ' +
         'A diagram over ~128 KB of SVG is refused the same way: redraw it as an overview.',
       inputSchema: {
         type: 'object',
@@ -712,9 +735,11 @@ export const register: Register = on => {
     const title = typeof e.title === 'string' && e.title.trim() ? e.title.trim() : kind || 'Diagram'
     const next: DiagramDoc = { title, source, ...(theme && { theme }) }
 
+    if (!(await canShowPane($))) return { deny: NO_PANE }
+
     const out = await renderCached($, source, await themeFor($, next))
     if (!out.ok && out.isSetup) {
-      await show($, next)
+      if (isNowhere(await show($, next))) return { deny: NO_PANE }
       return {
         deny: `${out.error} Ask the user to run it (you cannot run it yourself); the diagram is queued in the pane. Tell them what it does: ${SETUP_NOTE}`,
       }
@@ -730,9 +755,11 @@ export const register: Register = on => {
         deny: `This diagram renders to ${Math.round(out.value.svg.length / 1024)} KB of SVG; the pane shows up to ${Math.round(SVG_CAP / 1024)} KB, so it was not shown. Redraw it as an overview of about 8 to 12 nodes, then offer to draw the parts that matter as separate, closer diagrams.`,
       }
     }
-    await show($, next)
+    const opened = await show($, next)
+    if (isNowhere(opened)) return { deny: NO_PANE }
+    const waiting = opened.isPlaced ? '' : ' The pane opens once the terminal is wider, or when the user runs /whiteboard.'
     return {
-      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).`,
+      result: `Rendered the ${out.value.type || kind} diagram "${title}" on the Whiteboard (${out.value.width}×${out.value.height} px, Mermaid ${MERMAID_VERSION}).${waiting}`,
     }
   })
 

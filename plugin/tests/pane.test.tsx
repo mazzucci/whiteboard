@@ -28,12 +28,15 @@ function host(
     reply?: (source: string) => { status: number; body: object }
     node?: string
     plan?: { puppeteer?: boolean; mermaid?: boolean; browser?: string | null }
+    surfaces?: string[]
+    opened?: { isPlaced: true } | { isPlaced: false; reason: string }
   } = {},
 ) {
   const store = new Map<string, unknown>()
   const renders: { source: string; theme: string }[] = []
   const spawned: string[][] = []
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.open', () => ({ value: options.opened ?? { isPlaced: true } }))
+  on('session.surfaces', () => ({ value: options.surfaces ?? ['desktop'] }))
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
   on('store.set', (_$, e) => {
     store.set(e.key, e.value)
@@ -225,6 +228,26 @@ test('uninstall asks, then deletes only after a yes', async ($, on) => {
   answer(on, ['Cancel'])
   expect(JSON.stringify(await $.command.run({ command: 'whiteboard', args: 'uninstall' }))).toContain('Nothing was deleted')
   expect(spawned.some(a => a.includes('--remove'))).toBe(false)
+})
+
+test('where nothing can show the pane, Claude is told to explain another way, never to run setup', async ($, on) => {
+  // The desktop app's chat, the VS Code extension: the tool loads, but no pane draws.
+  host(on, { isInstalled: false, surfaces: [] })
+  const shown = JSON.stringify(await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE }))
+  expect(shown).toContain('Nothing can show the Whiteboard here')
+  expect(shown).not.toContain('run /whiteboard setup')
+})
+
+test('a surface that places no panes counts as nowhere; a narrow terminal only waits', async ($, on) => {
+  host(on, { surfaces: ['desktop'], opened: { isPlaced: false, reason: 'the attached surfaces place no panes' } })
+  expect(JSON.stringify(await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE }))).toContain('Nothing can show the Whiteboard here')
+})
+
+test('a narrow terminal: drawn, and the pane opens once it is wider', async ($, on) => {
+  host(on, { surfaces: ['terminal'], opened: { isPlaced: false, reason: 'unasked panes need 144 columns; the terminal has 100' } })
+  const shown = JSON.stringify(await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE }))
+  expect(shown).toContain('Rendered the')
+  expect(shown).toContain('once the terminal is wider')
 })
 
 test('without the renderer the pane says how to set it up', async ($, on) => {
