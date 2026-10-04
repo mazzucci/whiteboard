@@ -96,11 +96,11 @@ async function postRender($: EngineInterface, body: string): Promise<RenderOutco
 }
 
 /** Renders Mermaid source exactly as Mermaid does; never throws. */
-async function render($: EngineInterface, source: string, theme: string): Promise<RenderOutcome> {
+async function render($: EngineInterface, source: string, theme: string, png = false): Promise<RenderOutcome> {
   if (!(await isInstalled($))) {
     return { ok: false, isSetup: true, error: 'The diagram renderer is not set up yet: run /whiteboard setup.' }
   }
-  const body = JSON.stringify({ source, theme, config: SVG_LABELS })
+  const body = JSON.stringify({ source, theme, config: SVG_LABELS, ...(png && { png: true, scale: 2 }) })
   try {
     return await postRender($, body)
   } catch {
@@ -164,11 +164,11 @@ async function goTo($: EngineInterface, at: number) {
 
 // One render per source and theme; a reload starts the cache over.
 const renders = new Map<string, Promise<RenderOutcome>>()
-function renderCached($: EngineInterface, source: string, theme: string): Promise<RenderOutcome> {
-  const key = `${theme}\n${source}`
+function renderCached($: EngineInterface, source: string, theme: string, png = false): Promise<RenderOutcome> {
+  const key = `${png ? 'png' : 'svg'}\n${theme}\n${source}`
   let hit = renders.get(key)
   if (!hit) {
-    hit = render($, source, theme)
+    hit = render($, source, theme, png)
     renders.set(key, hit)
     // A failure to reach the renderer is retried next time; a Mermaid error is kept.
     void hit.then(out => {
@@ -255,6 +255,9 @@ function codeText(text: string): string {
 async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const { Box, Text, Button, Code } = $.ui.resolve(e)
   const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
+  // The terminal has no SVG, but draws a PNG as an Image where it can (the
+  // kitty graphics protocol), and the Image's alt text elsewhere.
+  const Image = e.surface === 'terminal' ? $.ui.resolve(e).Image : undefined
 
   const current = await read($, doc)
   if (!current) {
@@ -270,10 +273,13 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const v = await read($, viewState)
   const theme = await themeFor($, current)
   const kind = typeOf(current.source)
-  // The terminal draws no SVG: it shows the source, and renders nothing.
-  const out = Svg ? await renderCached($, current.source, theme) : undefined
-  const isRender = v.mode === 'render' && Boolean(Svg)
-  const canZoom = isRender && Boolean(out?.ok)
+  const out = Svg
+    ? await renderCached($, current.source, theme)
+    : Image
+      ? await renderCached($, current.source, theme, true)
+      : undefined
+  const isRender = v.mode === 'render' && Boolean(Svg || Image)
+  const canZoom = isRender && Boolean(Svg) && Boolean(out?.ok)
   // Mermaid's own reading of the type when it rendered, else the header line's.
   const label = kindLabel(out?.ok && out.value.type ? out.value.type : kind)
   // An untitled diagram is titled by its type keyword: the readable name stands in, once.
@@ -316,7 +322,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   // hotkey, live once the pane holds the keyboard (after a click in it).
   // Groups are Boxes, since a fragment's children stack on the desktop.
   const divider = () => <Text dimColor>│</Text>
-  const toolbar = Svg && (
+  const toolbar = (Svg || Image) && (
     <Box gap={2} alignItems="center" flexWrap="wrap">
       <Box gap={1} alignItems="center">
         <Button
@@ -377,17 +383,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
 
   const code = <Code source={codeText(current.source)} path="diagram.mmd" startLine={1} />
   let body
-  if (!Svg) {
-    body = (
-      <Box flexDirection="column" gap={1}>
-        <Text dimColor>
-          The terminal cannot draw diagrams: open this session in Claude desktop or VS Code to see it rendered. This
-          is its Mermaid source.
-        </Text>
-        {code}
-      </Box>
-    )
-  } else if (!isRender) {
+  if (!isRender) {
     body = code
   } else if (!out?.ok) {
     body = out?.isSetup ? (
@@ -404,6 +400,36 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
           <Text dimColor>Mermaid's message, then the source it was given:</Text>
         </Box>
         <Code source={codeText(mermaidError(out?.error ?? '')) || 'No message.'} />
+        {code}
+      </Box>
+    )
+  } else if (Image && out.value.png) {
+    // Cells are about twice as tall as wide: size the box to the drawing's
+    // aspect, as wide as the pane allows and no taller than it.
+    const maxCols = Math.min(255, cols)
+    const maxRows = Math.min(255, Math.max(4, rows - 6))
+    const aspect = out.value.height / out.value.width
+    let columns = maxCols
+    let height = Math.max(1, Math.round((columns * aspect) / 2))
+    if (height > maxRows) {
+      height = maxRows
+      columns = Math.max(1, Math.min(maxCols, Math.round((height * 2) / aspect)))
+    }
+    body = (
+      <Image
+        source={{ png: out.value.png }}
+        columns={columns}
+        rows={height}
+        alt={`${title} (${label}): this terminal cannot show images. Press c for the Mermaid source, or open this session in Claude desktop.`}
+      />
+    )
+  } else if (!Svg) {
+    body = (
+      <Box flexDirection="column" gap={1}>
+        <Text dimColor>
+          The terminal cannot draw this diagram: open this session in Claude desktop or VS Code to see it rendered.
+          This is its Mermaid source.
+        </Text>
         {code}
       </Box>
     )

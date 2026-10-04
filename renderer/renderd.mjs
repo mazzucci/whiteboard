@@ -138,6 +138,9 @@ async function render({ source, theme = 'default', config = {}, png = false, sca
   )
   if (out.error || !png) return out
   await page.setViewport({ width: Math.max(1, out.width), height: Math.max(1, out.height), deviceScaleFactor: scale })
+  // Mermaid's SVG is transparent: paint the theme's own background behind it,
+  // so a dark theme is not drawn over the page's white.
+  await page.evaluate(bg => (document.body.style.background = bg), out.background || 'white')
   const el = await page.$('#out svg')
   const shot = await el.screenshot({ encoding: 'base64', omitBackground: false })
   return { ...out, png: shot }

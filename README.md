@@ -106,10 +106,11 @@ sequenceDiagram
 
 ## Install
 
-Requirements: the Claude Code **desktop app** (the whiteboard is a mod, an early
-access Claude Code feature that runs in the desktop app only; tested with
+Requirements: Claude Code with mods, an early access feature (tested with
 2.1.286), Node.js 22.12 or later, and macOS (Linux should work but is untested;
-Windows is not supported yet).
+Windows is not supported yet). Diagrams render in the **desktop app**, VS Code,
+and terminals with the kitty graphics protocol (Ghostty, kitty); other
+terminals, iTerm2 among them for now, show the Mermaid source.
 
 In Claude Code, type:
 
@@ -249,8 +250,10 @@ renderer: any Mermaid works.
 
 ## Limits
 
-- The rendered view needs the desktop app (or VS Code): the terminal has no SVG,
-  so there the whiteboard shows the Mermaid source.
+- In a terminal, the whiteboard shows the diagram as an image where Claude Code
+  draws images (the kitty graphics protocol: Ghostty, kitty), without zoom or
+  pan; elsewhere, iTerm2 included, it shows the Mermaid source. iTerm2 can
+  draw these images itself; Claude Code does not use them there yet.
 - Diagrams over about 128 KB of SVG are too large for the pane; split them.
 - Mermaid's own C4 syntax is experimental and lays out poorly; the skill steers
   Claude to C4-styled flowcharts instead.

@@ -12,6 +12,8 @@ export type Rendered = {
   /** Mermaid's name for the diagram type (`flowchart-v2`, `sequence`, ...). */
   type: string
   ms: number
+  /** The drawing as a PNG, base64, when one was asked for (the terminal's Image). */
+  png?: string
 }
 export type RenderOutcome = { ok: true; value: Rendered } | { ok: false; error: string; isSetup?: boolean }
 
@@ -42,6 +44,7 @@ export function outcomeOf(status: number, text: string): RenderOutcome {
       background: typeof data.background === 'string' ? data.background : undefined,
       type: String(data.type ?? ''),
       ms: Number(data.ms) || 0,
+      ...(typeof data.png === 'string' && { png: data.png }),
     },
   }
 }

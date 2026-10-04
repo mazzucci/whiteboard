@@ -157,6 +157,26 @@ test('VS Code shows the SVG with the same buttons', async ($, on) => {
   expect(await svgOf(ui)).toContain('viewBox="40 20 320 160"')
 })
 
+test('the terminal shows the diagram as a PNG image, with the code toggle', async ($, on) => {
+  host(on, {
+    reply: () => ({
+      status: 200,
+      body: { svg: SVG, png: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=', width: 400, height: 200, type: 'flowchart-v2', ms: 5 },
+    }),
+  })
+  await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE })
+  const ui = await $.ui.mount({ ...pane(100), surface: 'terminal' })
+  const image = await ui.find({ type: 'Image' })
+  expect(image?.props.source).toEqual({ png: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=' })
+  // 400 × 200 px: as wide as the pane, half as many rows (cells are about twice as tall as wide).
+  expect(image?.props.columns).toBe(100)
+  expect(image?.props.rows).toBe(25)
+  expect(await ui.find({ key: 'zoom-in' })).toBeUndefined()
+  await ui.press({ key: 'mode' })
+  expect((await ui.find({ type: 'Code' }))?.props.source).toBe(SOURCE)
+  expect(await ui.find({ type: 'Image' })).toBeUndefined()
+})
+
 test('the terminal shows the source and says where to see the diagram', async ($, on) => {
   host(on)
   await $.tool.call({ tool: 'mcp__whiteboard__show_diagram', mermaid: SOURCE })
