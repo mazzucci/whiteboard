@@ -92,14 +92,15 @@ export function imageBox(natural: { width: number; height: number }, zoom: numbe
 export type Sized = { width: number; height: number; span: { w: number; h: number } }
 
 /**
- * The desktop's box: the whole pane, always. At fit the drawing sits centred
- * in it at its own size or smaller; zoom scales it from there, and the window
- * (span) is whatever of the drawing the pane holds at that scale.
+ * The desktop's box, with no guess at the pane's height: the drawing at fit
+ * (its own size, or the pane's width if wider) times the zoom. Once that is
+ * wider than the pane the window crops across, for pan; its height is the
+ * whole drawing's, and the pane scrolls.
  */
-export function paneBox(natural: { width: number; height: number }, zoom: number, room: { width: number; height: number }): Sized {
-  const fit = Math.min(1, room.width / natural.width, room.height / natural.height)
-  const scale = fit * zoom
-  return { ...room, span: { w: room.width / (scale * natural.width), h: room.height / (scale * natural.height) } }
+export function docBox(natural: { width: number; height: number }, zoom: number, paneWidth: number): Sized {
+  const scale = Math.min(1, paneWidth / natural.width) * zoom
+  const w = Math.min(1, paneWidth / (scale * natural.width))
+  return { width: natural.width * w * scale, height: natural.height * scale, span: { w, h: 1 } }
 }
 
 /**
