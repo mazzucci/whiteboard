@@ -12,7 +12,7 @@ diagram type, on a pane that keeps the whole conversation's diagrams.
 > **Open source project, not affiliated with or endorsed by Anthropic.** Claude and
 > Claude Code are trademarks of Anthropic, PBC.
 >
-> **Experimental.** Built on Claude Code's early-access mod API, which may change
+> **Experimental.** Built on Claude Code's mods, which are new and may change
 > between releases. Tested with Claude Code 2.1.286 on macOS.
 
 ## What it does
@@ -106,12 +106,15 @@ sequenceDiagram
 
 ## Install
 
-Requirements: Claude Code with mods, an early access feature (tested with
-2.1.286), Node.js 22.12 or later, and macOS (Linux should work but is untested;
-Windows is not supported yet).
+Requirements: Claude Code 2.1.287 or later (mods are on by default from that
+version), Node.js 22.12 or later, and macOS (Linux should work but is
+untested; Windows is not supported yet).
 
-**Works best in the Claude Code desktop app**, where the diagram is live SVG
-and zooming and panning are instant; VS Code works the same way. Terminal
+**Works best in the Claude Code desktop app's Code tab**, where the diagram is
+live SVG and zooming and panning are instant. Mods draw only there and in a
+terminal: in the desktop app's chat, the VS Code extension or `claude -p`, the
+plugin loads but no whiteboard appears, and Claude is told to explain in prose
+instead. Terminal
 support is limited: diagrams show as images only in terminals Claude Code
 draws images in (the kitty graphics protocol: Ghostty, kitty), and each zoom,
 pan or resize renders a new image, so it lags; a terminal resized in height
@@ -120,20 +123,24 @@ the Mermaid source. In a terminal, run `/tui fullscreen` once to have the
 whiteboard dock on the right of the conversation; in the classic layout it
 opens above the prompt.
 
-Install it with one command in Claude Code:
-
-```
-/plugin install whiteboard --marketplace mazzucci/whiteboard-for-claude-code
-```
-
 This repository is its own plugin source: Claude Code reads the plugin list
 in `.claude-plugin/marketplace.json` here and installs `whiteboard` from the
-`plugin/` folder, nothing else. Or, from a terminal:
+`plugin/` folder, nothing else. Installing takes two steps: add the
+repository as a marketplace, then install `whiteboard` from it.
 
-```bash
-claude plugin marketplace add mazzucci/whiteboard-for-claude-code
-claude plugin install whiteboard@whiteboard-for-claude-code
-```
+- **In the Claude desktop app:** open Settings, find the plugins section, add
+  the marketplace `mazzucci/whiteboard-for-claude-code`, then install
+  **whiteboard** from it.
+- **In a terminal:**
+
+  ```bash
+  claude plugin marketplace add mazzucci/whiteboard-for-claude-code
+  claude plugin install whiteboard@whiteboard-for-claude-code
+  ```
+
+Claude Code warns that this marketplace is not Anthropic's and that a plugin
+runs code on your machine. That is expected for a third-party plugin: see
+[Security and privacy](#security-and-privacy) for what this one runs.
 
 Then start a new session and run `/whiteboard setup` once. It first checks
 for Node.js 22.12 or later, then **asks before each download**, naming what it
@@ -195,9 +202,9 @@ these steps in order, and stop to tell them if one fails.
    If it is already installed, update it instead with
    `claude plugin marketplace update whiteboard-for-claude-code` and
    `claude plugin update whiteboard@whiteboard-for-claude-code`. If `claude`
-   is not on the PATH, ask the person to type
-   `/plugin install whiteboard --marketplace mazzucci/whiteboard-for-claude-code`
-   in the conversation themselves.
+   is not on the PATH (often the case for desktop app users), ask the person
+   to add the marketplace `mazzucci/whiteboard-for-claude-code` in the desktop
+   app's Settings, plugins section, and install **whiteboard** from it.
 4. **Tell the person the next steps:** start a new Claude Code session (plugins
    load when a session starts), run `/whiteboard setup` there once (it asks
    before each download; you cannot run it for them), then ask for a
