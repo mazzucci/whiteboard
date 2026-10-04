@@ -389,7 +389,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
             label="Zoom in"
             onPress={set(x => zoomTo(x, zoomStep(x.zoom, 1)))}
           />
-          <Text dimColor>{atFit ? 'Fit' : `${Math.round(v.zoom * 100)}%`}</Text>
+          <Text dimColor>{`${Math.round(v.zoom * 100)}%`}</Text>
           <Button
             key="zoom-out"
             plain
