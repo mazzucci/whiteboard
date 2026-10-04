@@ -11,7 +11,9 @@
 //   {"ready":true,"socket":"...","browser":"...","mermaid":"12.1.0"}
 //
 //   GET  /health                                   -> { ok, mermaid, browser }
-//   POST /render { source, theme?, config?, png?, scale? }
+//   POST /render { source, theme?, config?, png?, scale?, view? }
+//        view { x, y, w, h }: the PNG shows only that window of the drawing
+//        (SVG coordinates), at the drawing's own size: zoomed in, sharper
 //        -> { svg, png?, width, height, background, type, ms } | 400 { error }
 
 import { createServer } from 'node:http'
@@ -90,7 +92,7 @@ const serial = fn => {
   return run
 }
 
-async function render({ source, theme = 'default', config = {}, png = false, scale = 2 }) {
+async function render({ source, theme = 'default', config = {}, png = false, scale = 2, view }) {
   const id = `d${++count}`
   // Lay out in the same large room every time, so no diagram is measured
   // against the size of the last snapshot.
@@ -140,7 +142,14 @@ async function render({ source, theme = 'default', config = {}, png = false, sca
   await page.setViewport({ width: Math.max(1, out.width), height: Math.max(1, out.height), deviceScaleFactor: scale })
   // Mermaid's SVG is transparent: paint the theme's own background behind it,
   // so a dark theme is not drawn over the page's white.
-  await page.evaluate(bg => (document.body.style.background = bg), out.background || 'white')
+  await page.evaluate(
+    (bg, view) => {
+      document.body.style.background = bg
+      if (view) document.querySelector('#out svg').setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`)
+    },
+    out.background || 'white',
+    view && [view.x, view.y, view.w, view.h].every(Number.isFinite) && view.w > 0 && view.h > 0 ? view : null,
+  )
   const el = await page.$('#out svg')
   const shot = await el.screenshot({ encoding: 'base64', omitBackground: false })
   return { ...out, png: shot }

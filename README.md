@@ -198,7 +198,7 @@ questions about a system: Claude draws when a diagram helps. The bundled
 |---|---|
 | `/whiteboard` | Open the whiteboard |
 | `/whiteboard path/to/file.mmd` | Show a Mermaid file (or the first `mermaid` block of a Markdown file) |
-| `/whiteboard theme <name>` | `auto` (follows light/dark), `default`, `dark`, `forest`, `neutral`, `base` |
+| `/whiteboard theme <name>` | `auto` (light; in a terminal, the terminal's theme), `default`, `dark`, `forest`, `neutral`, `base` |
 | `/whiteboard sample` | Draw a sample |
 
 Click the pane, then:

@@ -29,7 +29,7 @@ export function zoomTo<T extends ViewState>(view: T, zoom: number): T {
   return panBy({ ...view, zoom }, 0, 0)
 }
 
-type Box = { x: number; y: number; w: number; h: number }
+export type Box = { x: number; y: number; w: number; h: number }
 
 function viewBoxOf(rootTag: string, width: number, height: number): Box {
   const m = /viewBox="\s*([-\d.e]+)[\s,]+([-\d.e]+)[\s,]+([-\d.e]+)[\s,]+([-\d.e]+)\s*"/.exec(rootTag)
@@ -38,6 +38,15 @@ function viewBoxOf(rootTag: string, width: number, height: number): Box {
 }
 
 const n = (v: number) => String(Math.round(v * 100) / 100)
+
+/** The part of the drawing a view shows, in the SVG's own coordinates. */
+export function windowOf(svg: string, natural: { width: number; height: number }, view: ViewState): Box {
+  const root = /<svg\b[^>]*>/.exec(svg)
+  const vb = root ? viewBoxOf(root[0], natural.width, natural.height) : { x: 0, y: 0, w: natural.width, h: natural.height }
+  const w = vb.w / view.zoom
+  const h = vb.h / view.zoom
+  return { x: vb.x + view.cx * vb.w - w / 2, y: vb.y + view.cy * vb.h - h / 2, w, h }
+}
 
 /**
  * The SVG to show for a view: its root's size fixed to the box it is drawn
@@ -51,11 +60,7 @@ export function frame(
 ): string {
   const root = /<svg\b[^>]*>/.exec(svg)
   if (!root) return svg
-  const vb = viewBoxOf(root[0], natural.width, natural.height)
-  const w = vb.w / view.zoom
-  const h = vb.h / view.zoom
-  const x = vb.x + view.cx * vb.w - w / 2
-  const y = vb.y + view.cy * vb.h - h / 2
+  const { x, y, w, h } = windowOf(svg, natural, view)
 
   let tag = root[0]
     .replace(/\s(width|height)="[^"]*"/g, '')

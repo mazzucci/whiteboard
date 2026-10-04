@@ -157,8 +157,8 @@ test('VS Code shows the SVG with the same buttons', async ($, on) => {
   expect(await svgOf(ui)).toContain('viewBox="40 20 320 160"')
 })
 
-test('the terminal shows the diagram as a PNG image, with the code toggle', async ($, on) => {
-  host(on, {
+test('the terminal shows the diagram as a PNG image, zooms by rendering a window, and toggles to code', async ($, on) => {
+  const { renders } = host(on, {
     reply: () => ({
       status: 200,
       body: { svg: SVG, png: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=', width: 400, height: 200, type: 'flowchart-v2', ms: 5 },
@@ -171,7 +171,12 @@ test('the terminal shows the diagram as a PNG image, with the code toggle', asyn
   // 400 × 200 px: as wide as the pane, half as many rows (cells are about twice as tall as wide).
   expect(image?.props.columns).toBe(100)
   expect(image?.props.rows).toBe(25)
-  expect(await ui.find({ key: 'zoom-in' })).toBeUndefined()
+  // Zoom renders just the window the desktop would show, as a new PNG.
+  await ui.press({ key: 'zoom-in' })
+  expect((renders.at(-1) as { view?: unknown }).view).toEqual({ x: 40, y: 20, w: 320, h: 160 })
+  await ui.press({ key: 'pan-right' })
+  expect((renders.at(-1) as { view?: { x: number } }).view?.x).toBe(80)
+  expect(await ui.find({ type: 'Image' })).toBeDefined()
   await ui.press({ key: 'mode' })
   expect((await ui.find({ type: 'Code' }))?.props.source).toBe(SOURCE)
   expect(await ui.find({ type: 'Image' })).toBeUndefined()

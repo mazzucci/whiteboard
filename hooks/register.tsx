@@ -4,12 +4,15 @@ import type { EngineInterface, Register, RenderInput } from 'claude-code'
 import type { DiagramDoc, DiagramView } from '../types'
 import { MERMAID_VERSION, outcomeOf, PUPPETEER_VERSION, SVG_LABELS } from './renderer'
 import type { RenderOutcome } from './renderer'
-import { FIT, fitSize, frame, panBy, SVG_CAP, ZOOMS, zoomStep, zoomTo } from './view'
+import { FIT, fitSize, frame, panBy, SVG_CAP, windowOf, ZOOMS, zoomStep, zoomTo } from './view'
+import type { Box } from './view'
 
 const PANE = 'whiteboard'
 const TOOL = 'show_diagram'
 const THEME_KEY = 'theme'
 const HISTORY_MAX = 30
+/** The terminal Image's cap on a PNG, decoded. */
+const PNG_CAP = 2 * 1024 * 1024
 const THEMES = ['auto', 'default', 'dark', 'forest', 'neutral', 'base']
 
 const doc = atom({ plugin: 'whiteboard', key: 'doc' } as const, null)
@@ -96,22 +99,29 @@ async function postRender($: EngineInterface, body: string): Promise<RenderOutco
 }
 
 /** Renders Mermaid source exactly as Mermaid does; never throws. */
-async function render($: EngineInterface, source: string, theme: string, png = false): Promise<RenderOutcome> {
+async function render($: EngineInterface, source: string, theme: string, png = false, view?: Box): Promise<RenderOutcome> {
   if (!(await isInstalled($))) {
     return { ok: false, isSetup: true, error: 'The diagram renderer is not set up yet: run /whiteboard setup.' }
   }
-  const body = JSON.stringify({ source, theme, config: SVG_LABELS, ...(png && { png: true, scale: 2 }) })
-  try {
-    return await postRender($, body)
-  } catch {
-    // A renderer that went idle or died: start a fresh one, once.
-    socket = null
+  const bodyAt = (scale: number) => JSON.stringify({ source, theme, config: SVG_LABELS, ...(png && { png: true, scale, view }) })
+  const attempt = async (body: string) => {
     try {
       return await postRender($, body)
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    } catch {
+      // A renderer that went idle or died: start a fresh one, once.
+      socket = null
+      try {
+        return await postRender($, body)
+      } catch (error) {
+        return { ok: false as const, error: error instanceof Error ? error.message : String(error) }
+      }
     }
   }
+  const out = await attempt(bodyAt(2))
+  // The terminal's Image takes at most 2 MiB of PNG: a large drawing at
+  // double density can pass that, at single density rarely.
+  if (out.ok && out.value.png && out.value.png.length * 0.75 > PNG_CAP) return attempt(bodyAt(1))
+  return out
 }
 
 /** Runs renderer/setup.mjs, showing each step in the status line. */
@@ -164,11 +174,12 @@ async function goTo($: EngineInterface, at: number) {
 
 // One render per source and theme; a reload starts the cache over.
 const renders = new Map<string, Promise<RenderOutcome>>()
-function renderCached($: EngineInterface, source: string, theme: string, png = false): Promise<RenderOutcome> {
-  const key = `${png ? 'png' : 'svg'}\n${theme}\n${source}`
+function renderCached($: EngineInterface, source: string, theme: string, png = false, view?: Box): Promise<RenderOutcome> {
+  const at = view ? [view.x, view.y, view.w, view.h].map(n => n.toFixed(2)).join(' ') : ''
+  const key = `${png ? `png ${at}` : 'svg'}\n${theme}\n${source}`
   let hit = renders.get(key)
   if (!hit) {
-    hit = render($, source, theme, png)
+    hit = render($, source, theme, png, view)
     renders.set(key, hit)
     // A failure to reach the renderer is retried next time; a Mermaid error is kept.
     void hit.then(out => {
@@ -178,11 +189,17 @@ function renderCached($: EngineInterface, source: string, theme: string, png = f
   return hit
 }
 
-/** The theme to render with: the diagram's, else the person's choice, else the app's light or dark. */
-async function themeFor($: EngineInterface, d: DiagramDoc): Promise<string> {
+/**
+ * The theme to render with: the diagram's, else the person's choice, else
+ * automatic. Automatic is light, except in the terminal, where it follows the
+ * Claude Code theme: that setting is the terminal's (it reads "dark" even
+ * where it was never set), not the desktop app's appearance.
+ */
+async function themeFor($: EngineInterface, d: DiagramDoc, surface?: string): Promise<string> {
   if (d.theme && d.theme !== 'auto') return d.theme
   const chosen = await $.store.get(THEME_KEY)
   if (typeof chosen === 'string' && chosen !== 'auto') return chosen
+  if (surface !== 'terminal') return 'default'
   try {
     const row = (await $.config.list()).find(r => r.key === 'theme')
     return /dark/i.test(String(row?.value ?? '')) ? 'dark' : 'default'
@@ -271,15 +288,18 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const list = await read($, history)
   const at = await read($, index)
   const v = await read($, viewState)
-  const theme = await themeFor($, current)
+  const theme = await themeFor($, current, e.surface)
   const kind = typeOf(current.source)
-  const out = Svg
-    ? await renderCached($, current.source, theme)
-    : Image
-      ? await renderCached($, current.source, theme, true)
-      : undefined
+  // The terminal shows a PNG of the view's window: the SVG render gives the
+  // drawing's coordinates, then the renderer draws just that window.
+  const drawn = Svg || Image ? await renderCached($, current.source, theme) : undefined
+  const out =
+    Image && drawn?.ok && v.mode === 'render'
+      ? await renderCached($, current.source, theme, true, windowOf(drawn.value.svg, drawn.value, v))
+      : drawn
   const isRender = v.mode === 'render' && Boolean(Svg || Image)
-  const canZoom = isRender && Boolean(Svg) && Boolean(out?.ok)
+  // Zoom and pan need a picture: the SVG, or the terminal's PNG.
+  const canZoom = isRender && Boolean(out?.ok) && Boolean(Svg || (out?.ok && out.value.png))
   // Mermaid's own reading of the type when it rendered, else the header line's.
   const label = kindLabel(out?.ok && out.value.type ? out.value.type : kind)
   // An untitled diagram is titled by its type keyword: the readable name stands in, once.
@@ -491,7 +511,7 @@ export const register: Register = on => {
           theme: {
             type: 'string',
             enum: THEMES,
-            description: "Mermaid theme; omit for the user's choice (auto follows light/dark)",
+            description: "Mermaid theme; omit for the user's choice (auto: light, or the terminal's theme in a terminal)",
           },
         },
         required: ['mermaid'],
