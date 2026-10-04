@@ -38,6 +38,8 @@ than that is scaled down until text is hard to read.
   a pipeline across a few lanes reads best `LR`. A diagram that renders as a thin
   strip (say 2000 × 250) or a tall column has the wrong direction.
 - Short labels: a name, then a second line of detail at most. Put explanations in your prose.
+  A line wraps on its own only past about 400 px, so break with `<br/>` where you
+  want it: `pay["payments.charge<br/>180 ms"]`, a file path on its own line.
 - Label only edges whose meaning is not obvious ("events", "authorize"), and keep
   edge labels to a word or two.
 - A `title` in front matter (`---\ntitle: ...\n---`) heads the drawing; the tool's own

@@ -54,7 +54,7 @@ for (const file of readdirSync(src).filter(f => f.endsWith('.mmd')).sort()) {
     theme: 'default',
     png: true,
     scale: 2,
-    config: { htmlLabels: false, flowchart: { htmlLabels: false } },
+    config: { htmlLabels: false, flowchart: { htmlLabels: false, wrappingWidth: 400 } },
   })
   if (result.error) {
     out[name] = { source, error: result.error }

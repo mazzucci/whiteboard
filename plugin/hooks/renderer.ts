@@ -28,8 +28,11 @@ export const MERMAID_VERSION = '12.1.0'
 export const PUPPETEER_VERSION = '25.12.0'
 
 // Labels as SVG text, not HTML in <foreignObject>: the pane shows the SVG as
-// an image, where embedded HTML is the part least likely to survive.
-export const SVG_LABELS = { htmlLabels: false, flowchart: { htmlLabels: false } }
+// an image, where embedded HTML is the part least likely to survive. Mermaid
+// wraps a label at 200 px and breaks a long word mid-way to fit
+// ("payments.charg|e"); 400 keeps identifiers and file paths whole, and an
+// explicit <br/> still breaks a line. A diagram's own config wins.
+export const SVG_LABELS = { htmlLabels: false, flowchart: { htmlLabels: false, wrappingWidth: 400 } }
 
 /** The renderer's answer to POST /render, as an outcome. */
 export function outcomeOf(status: number, text: string): RenderOutcome {

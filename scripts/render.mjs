@@ -62,7 +62,7 @@ for (const file of files) {
     theme,
     png: true,
     scale,
-    config: { htmlLabels: false, flowchart: { htmlLabels: false } },
+    config: { htmlLabels: false, flowchart: { htmlLabels: false, wrappingWidth: 400 } },
   })
   if (result.error) {
     failed++
