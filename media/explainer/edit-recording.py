@@ -4,17 +4,27 @@
 # the take recorded on 2026-10-04 (demo/RECORDING.md); a new take needs new
 # times. Needs Python 3 with Pillow, and ffmpeg.
 #
-#   python3 media/explainer/edit-recording.py take.mov out/recording.mp4 build/
+#   python3 media/explainer/edit-recording.py take.mov out/recording.mp4 build/ [square]
+#
+# `square` makes the 1080 × 1080 cut for social feeds: the window cropped to
+# the whiteboard pane, captions sized to fit.
 #
 # Then join it between the cards of the 30 s cut (see README.md here).
 import json, subprocess, sys
 from PIL import Image, ImageDraw, ImageFont
 
 SRC, OUT, TMP = sys.argv[1], sys.argv[2], sys.argv[3]
+SQUARE = len(sys.argv) > 4 and sys.argv[4] == 'square'
 FF = '/usr/local/bin/ffmpeg'
-W, H, BAR = 1920, 1080, 112
 BG, BAR_BG = '#e7eaf0', '#161b26'
-CROP = '2652:1744:120:84'  # inside the window's rounded corners
+# The window, inside its rounded corners: 2652 × 1744 at (120, 84).
+if SQUARE:
+    # From the whiteboard pane's left edge: the pane fills the square.
+    W, H, BAR, FONT = 1080, 1080, 112, 40
+    CROP = '1848:1744:922:84'
+else:
+    W, H, BAR, FONT = 1920, 1080, 112, 44
+    CROP = '2652:1744:120:84'
 
 # (start, end, speed): the waits fast, the drawing and the controls near 1x.
 SEGMENTS = [
@@ -32,6 +42,12 @@ SEGMENTS = [
     (76.5, 79.5, 1.0),   # step 3 appears
     (79.5, 85.0, 3.0),   # the fix stays on screen to the end
 ]
+if SQUARE:
+    # The pane opens narrow at 18 s and is widened by 23.5 s; cropped to the
+    # pane's edge, those seconds would show the chat cut in half: skip them.
+    SEGMENTS = [seg for seg in SEGMENTS if seg[0] != 18.0]
+    SEGMENTS.insert(2, (23.5, 25.0, 1.5))
+
 # Captions by source time, mapped onto the edited timeline below.
 CAPTIONS = [
     (2.0, 49.5, 'Claude reads the notes and maps the request'),
@@ -49,7 +65,7 @@ def out_time(t):
     return acc
 
 total = out_time(SEGMENTS[-1][1])
-font = ImageFont.truetype('/System/Library/Fonts/SFNS.ttf', 44)
+font = ImageFont.truetype('/System/Library/Fonts/SFNS.ttf', FONT)
 try: font.set_variation_by_name('Semibold')
 except Exception: pass
 caps = []
@@ -66,8 +82,9 @@ for i, (a, b, s) in enumerate(SEGMENTS):
     parts.append(f'[0:v]trim={a}:{b},setpts=(PTS-STARTPTS)/{s}[s{i}]')
     labels.append(f'[s{i}]')
 chain = ';'.join(parts) + ';' + ''.join(labels) + f'concat=n={len(SEGMENTS)}:v=1:a=0[cat]'
-chain += (f';[cat]crop={CROP},scale=-2:{H - BAR}:flags=lanczos,fps=30,'
-          f'pad={W}:{H - BAR}:(ow-iw)/2:0:{BG},pad={W}:{H}:0:0:{BAR_BG}[base]')
+# Fit the crop into the frame above the caption bar, centred on the background.
+chain += (f';[cat]crop={CROP},scale={W}:{H - BAR}:force_original_aspect_ratio=decrease:flags=lanczos,fps=30,'
+          f'pad={W}:{H - BAR}:(ow-iw)/2:(oh-ih)/2:{BG},pad={W}:{H}:0:0:{BAR_BG},setsar=1[base]')
 prev = 'base'
 inputs = ['-i', SRC]
 for i, (path, t0, t1) in enumerate(caps):

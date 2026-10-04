@@ -46,3 +46,7 @@ ffmpeg -i out/whiteboard-30s-1080p.mp4 -i build/recording.mp4 -filter_complex \
   "[0:v]trim=3.2:6.4,setpts=PTS-STARTPTS,fps=30,format=yuv420p,setsar=1,tpad=start_duration=1:start_mode=clone,fade=t=in:st=0:d=0.5:color=0xe7eaf0[a];[1:v]fps=30,format=yuv420p,setsar=1[b];[0:v]trim=23.6:30,setpts=PTS-STARTPTS,fps=30,format=yuv420p,setsar=1[c];[a][b][c]concat=n=3:v=1:a=0[v]" \
   -map "[v]" -c:v libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart out/whiteboard-demo-1080p.mp4
 ```
+
+For social feeds, a square 1080 × 1080 cut: `edit-recording.py … square`
+crops the take to the whiteboard pane, and the cards are scaled into the
+square above the same caption bar (`out/whiteboard-demo-square-1080.mp4`).
