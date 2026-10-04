@@ -108,9 +108,15 @@ sequenceDiagram
 
 Requirements: Claude Code with mods, an early access feature (tested with
 2.1.286), Node.js 22.12 or later, and macOS (Linux should work but is untested;
-Windows is not supported yet). Diagrams render in the **desktop app**, VS Code,
-and terminals with the kitty graphics protocol (Ghostty, kitty); other
-terminals, iTerm2 among them for now, show the Mermaid source.
+Windows is not supported yet).
+
+**Works best in the Claude Code desktop app**, where the diagram is live SVG
+and zooming and panning are instant; VS Code works the same way. Terminal
+support is limited: diagrams show as images only in terminals Claude Code
+draws images in (the kitty graphics protocol: Ghostty, kitty), and each zoom,
+pan or resize renders a new image, so it lags; a terminal resized in height
+alone needs Refresh (`r`). Other terminals, iTerm2 among them for now, show
+the Mermaid source.
 
 In Claude Code, type:
 
@@ -250,10 +256,12 @@ renderer: any Mermaid works.
 
 ## Limits
 
-- In a terminal, the whiteboard shows the diagram as an image where Claude Code
-  draws images (the kitty graphics protocol: Ghostty, kitty), without zoom or
-  pan; elsewhere, iTerm2 included, it shows the Mermaid source. iTerm2 can
-  draw these images itself; Claude Code does not use them there yet.
+- Terminal support is limited. The diagram shows as an image only where
+  Claude Code draws images (the kitty graphics protocol: Ghostty, kitty); each
+  zoom or pan step renders a new image, which takes a moment, and a change of
+  height alone is not redrawn until Refresh (`r`). Elsewhere, iTerm2 included,
+  the whiteboard shows the Mermaid source: iTerm2 can draw these images, but
+  Claude Code does not use them there yet.
 - Diagrams over about 128 KB of SVG are too large for the pane; split them.
 - Mermaid's own C4 syntax is experimental and lays out poorly; the skill steers
   Claude to C4-styled flowcharts instead.

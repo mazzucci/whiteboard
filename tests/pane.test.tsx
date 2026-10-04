@@ -190,12 +190,16 @@ test('the terminal shows the diagram as a PNG image, zooms by rendering a window
   // 400 × 200 px: as wide as the pane, half as many rows (cells are about twice as tall as wide).
   expect(image?.props.columns).toBe(100)
   expect(image?.props.rows).toBe(25)
-  // Zoom renders just the window the desktop would show, as a new PNG.
+  // Zoom renders a window of the drawing as a new PNG: as wide as the
+  // desktop's (320 of 400), and taller, since the picture grows to the pane.
   await ui.press({ key: 'zoom-in' })
-  expect((renders.at(-1) as { view?: unknown }).view).toEqual({ x: 40, y: 20, w: 320, h: 160 })
+  const zoomed = (renders.at(-1) as { view?: { x: number; w: number; h: number } }).view
+  expect(Math.round(zoomed?.x ?? NaN)).toBe(40)
+  expect(Math.round(zoomed?.w ?? NaN)).toBe(320)
+  expect(zoomed?.h ?? 0).toBeGreaterThan(160)
+  expect((await ui.find({ type: 'Image' }))?.props.rows).toBe(30)
   await ui.press({ key: 'pan-right' })
-  expect((renders.at(-1) as { view?: { x: number } }).view?.x).toBe(80)
-  expect(await ui.find({ type: 'Image' })).toBeDefined()
+  expect(Math.round((renders.at(-1) as { view?: { x: number } }).view?.x ?? NaN)).toBe(80)
   // Refresh draws it again from the renderer, not from the cache.
   const before = renders.length
   await ui.press({ key: 'refresh' })

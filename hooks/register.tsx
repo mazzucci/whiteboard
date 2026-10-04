@@ -4,8 +4,11 @@ import type { EngineInterface, Register, RenderInput } from 'claude-code'
 import type { DiagramDoc, DiagramView } from '../types'
 import { MERMAID_VERSION, outcomeOf, PUPPETEER_VERSION, SVG_LABELS } from './renderer'
 import type { RenderOutcome } from './renderer'
-import { FIT, fitSize, frame, panBy, SVG_CAP, windowOf, ZOOMS, zoomStep, zoomTo } from './view'
+import { FIT, fitSize, frame, imageBox, panBy, SVG_CAP, windowOf, ZOOMS, zoomStep, zoomTo } from './view'
 import type { Box } from './view'
+
+/** A window of the drawing and the CSS size to draw it at: the terminal's picture. */
+type Picture = Box & { width: number; height: number }
 
 const PANE = 'whiteboard'
 const TOOL = 'show_diagram'
@@ -99,7 +102,7 @@ async function postRender($: EngineInterface, body: string): Promise<RenderOutco
 }
 
 /** Renders Mermaid source exactly as Mermaid does; never throws. */
-async function render($: EngineInterface, source: string, theme: string, png = false, view?: Box): Promise<RenderOutcome> {
+async function render($: EngineInterface, source: string, theme: string, png = false, view?: Picture): Promise<RenderOutcome> {
   if (!(await isInstalled($))) {
     return { ok: false, isSetup: true, error: 'The diagram renderer is not set up yet: run /whiteboard setup.' }
   }
@@ -174,8 +177,8 @@ async function goTo($: EngineInterface, at: number) {
 
 // One render per source and theme; a reload starts the cache over.
 const renders = new Map<string, Promise<RenderOutcome>>()
-function renderCached($: EngineInterface, source: string, theme: string, png = false, view?: Box): Promise<RenderOutcome> {
-  const at = view ? [view.x, view.y, view.w, view.h].map(n => n.toFixed(2)).join(' ') : ''
+function renderCached($: EngineInterface, source: string, theme: string, png = false, view?: Picture): Promise<RenderOutcome> {
+  const at = view ? [view.x, view.y, view.w, view.h, view.width, view.height].map(n => n.toFixed(2)).join(' ') : ''
   const key = `${png ? `png ${at}` : 'svg'}\n${theme}\n${source}`
   let hit = renders.get(key)
   if (!hit) {
@@ -187,6 +190,19 @@ function renderCached($: EngineInterface, source: string, theme: string, png = f
     })
   }
   return hit
+}
+
+/**
+ * What the terminal's picture of a view shows: the window, and the size in CSS
+ * pixels to draw it at, the drawing's own density times the zoom, so zooming in
+ * sharpens; at most 2400 px a side.
+ */
+function pictureOf(drawn: { svg: string; width: number; height: number }, v: DiagramView, box: ReturnType<typeof imageBox>): Picture {
+  const win = windowOf(drawn.svg, drawn, v, box.span)
+  const width = drawn.width * box.span.w * Math.max(1, v.zoom)
+  const height = (width * win.h) / win.w
+  const shrink = Math.min(1, 2400 / Math.max(width, height))
+  return { ...win, width: Math.max(1, Math.round(width * shrink)), height: Math.max(1, Math.round(height * shrink)) }
 }
 
 /** Forgets every render of a diagram and draws the pane again: Refresh. */
@@ -301,9 +317,14 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   // The terminal shows a PNG of the view's window: the SVG render gives the
   // drawing's coordinates, then the renderer draws just that window.
   const drawn = Svg || Image ? await renderCached($, current.source, theme) : undefined
+  const cols = Math.max(20, e.props.bodyColumns || e.viewport?.columns || 80)
+  const rows = e.viewport?.rows ?? 40
+  // The terminal's picture: the pane's body below its header is about the
+  // screen less the prompt and the header.
+  const box = drawn?.ok ? imageBox(drawn.value, v.zoom, { columns: cols, rows: Math.max(4, rows - 10) }) : undefined
   const out =
-    Image && drawn?.ok && v.mode === 'render'
-      ? await renderCached($, current.source, theme, true, windowOf(drawn.value.svg, drawn.value, v))
+    Image && drawn?.ok && box && v.mode === 'render'
+      ? await renderCached($, current.source, theme, true, pictureOf(drawn.value, v, box))
       : drawn
   const isRender = v.mode === 'render' && Boolean(Svg || Image)
   // Zoom and pan need a picture: the SVG, or the terminal's PNG.
@@ -314,8 +335,6 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const untitled = current.title.toLowerCase() === kind.toLowerCase()
   const title = untitled ? label : current.title
 
-  const cols = Math.max(20, e.props.bodyColumns || e.viewport?.columns || 80)
-  const rows = e.viewport?.rows ?? 40
   // Cells to CSS pixels on the desktop's code font: an estimate, used only to fit.
   const room = { width: cols * 7.5, height: Math.max(8, rows - 6) * 17 }
   const set = (f: (x: DiagramView) => DiagramView) => () => update($, viewState, f)
@@ -439,23 +458,12 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
         {code}
       </Box>
     )
-  } else if (Image && out.value.png) {
-    // Cells are about twice as tall as wide: size the box to the drawing's
-    // aspect, as wide as the pane allows and no taller than it.
-    const maxCols = Math.min(255, cols)
-    const maxRows = Math.min(255, Math.max(4, rows - 6))
-    const aspect = out.value.height / out.value.width
-    let columns = maxCols
-    let height = Math.max(1, Math.round((columns * aspect) / 2))
-    if (height > maxRows) {
-      height = maxRows
-      columns = Math.max(1, Math.min(maxCols, Math.round((height * 2) / aspect)))
-    }
+  } else if (Image && out.value.png && box) {
     body = (
       <Image
         source={{ png: out.value.png }}
-        columns={columns}
-        rows={height}
+        columns={box.columns}
+        rows={box.rows}
         alt={`${title} (${label}): this terminal cannot show images. Press c for the Mermaid source, or open this session in Claude desktop.`}
       />
     )

@@ -39,13 +39,53 @@ function viewBoxOf(rootTag: string, width: number, height: number): Box {
 
 const n = (v: number) => String(Math.round(v * 100) / 100)
 
-/** The part of the drawing a view shows, in the SVG's own coordinates. */
-export function windowOf(svg: string, natural: { width: number; height: number }, view: ViewState): Box {
+/**
+ * The part of the drawing a view shows, in the SVG's own coordinates.
+ *
+ * `span` is the window's size as a fraction of the drawing, across and down;
+ * absent, 1 / zoom both ways. A window narrower than 1 / zoom (the terminal's
+ * picture, grown to fill the pane) still pans from edge to edge.
+ */
+export function windowOf(
+  svg: string,
+  natural: { width: number; height: number },
+  view: ViewState,
+  span?: { w: number; h: number },
+): Box {
   const root = /<svg\b[^>]*>/.exec(svg)
   const vb = root ? viewBoxOf(root[0], natural.width, natural.height) : { x: 0, y: 0, w: natural.width, h: natural.height }
-  const w = vb.w / view.zoom
-  const h = vb.h / view.zoom
-  return { x: vb.x + view.cx * vb.w - w / 2, y: vb.y + view.cy * vb.h - h / 2, w, h }
+  const sw = span?.w ?? 1 / view.zoom
+  const sh = span?.h ?? 1 / view.zoom
+  // Where the window sits along one side: centred when it covers the side,
+  // else at the view's centre, stretched so pan's limits reach the edges.
+  const place = (start: number, size: number, c: number, s: number) => {
+    if (s >= 1) return start + size / 2 - (size * s) / 2
+    const reach = view.zoom > 1 ? (1 - s) / (1 - 1 / view.zoom) : 1
+    const at = 0.5 + (c - 0.5) * reach
+    return Math.max(start, Math.min(start + size * (1 - s), start + at * size - (size * s) / 2))
+  }
+  return { x: place(vb.x, vb.w, view.cx, sw), y: place(vb.y, vb.h, view.cy, sh), w: vb.w * sw, h: vb.h * sh }
+}
+
+/**
+ * Cells for the terminal's picture: at fit, the drawing's own shape, as wide as
+ * the room allows; zoomed in, that box grown by the zoom until it fills the
+ * room. `span` is the window it shows, for windowOf. Cells are about twice as
+ * tall as wide.
+ */
+export function imageBox(natural: { width: number; height: number }, zoom: number, room: { columns: number; rows: number }) {
+  const maxCols = Math.max(1, Math.min(255, Math.floor(room.columns)))
+  const maxRows = Math.max(1, Math.min(255, Math.floor(room.rows)))
+  const aspect = natural.height / natural.width
+  let columns = maxCols
+  let rows = Math.max(1, Math.round((columns * aspect) / 2))
+  if (rows > maxRows) {
+    rows = maxRows
+    columns = Math.max(1, Math.min(maxCols, Math.round((rows * 2) / aspect)))
+  }
+  if (zoom <= 1) return { columns, rows, span: { w: 1 / zoom, h: 1 / zoom } }
+  const grown = { columns: Math.min(maxCols, Math.round(columns * zoom)), rows: Math.min(maxRows, Math.round(rows * zoom)) }
+  return { ...grown, span: { w: grown.columns / (columns * zoom), h: grown.rows / (rows * zoom) } }
 }
 
 /**
