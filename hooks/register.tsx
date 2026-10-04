@@ -386,18 +386,18 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
             plain
             hotkey="i"
             dimColor={!canZoom || atMax}
-            label="+"
+            label="Zoom in"
             onPress={set(x => zoomTo(x, zoomStep(x.zoom, 1)))}
           />
+          <Text dimColor>{atFit ? 'Fit' : `${Math.round(v.zoom * 100)}%`}</Text>
           <Button
             key="zoom-out"
             plain
             hotkey="o"
             dimColor={!canZoom || atFit}
-            label="−"
+            label="Zoom out"
             onPress={set(x => zoomTo(x, zoomStep(x.zoom, -1)))}
           />
-          <Text dimColor>{atFit ? 'Fit' : `${Math.round(v.zoom * 100)}%`}</Text>
         </Box>
         <Text dimColor>│</Text>
         <Box gap={1} alignItems="center">
