@@ -68,10 +68,9 @@ function startBoard($: EngineInterface): Promise<Board> {
             }
             if (message.ready) resolve(message as Board)
             // The person's own words, marked so Claude answers on the board.
-            // A turn of its own once the session is idle, so typing while
-            // Claude works simply queues.
             else if (typeof message.say === 'string') {
-              void $.prompt.submit({ text: `(on the whiteboard) ${message.say}`, asUser: true })
+              said.push(message.say)
+              void deliver($)
             }
           }
         }
@@ -99,6 +98,24 @@ async function endBoard($: EngineInterface, text: string | undefined): Promise<b
     body: JSON.stringify({ end: true, text }),
   })
   return true
+}
+
+/**
+ * What the person typed on the page, not yet in the conversation. Each is
+ * submitted as their own words, a turn of its own once the session is idle.
+ * One that arrives while a hook holds the turn (Claude waiting on a diagram,
+ * say) cannot be submitted then: it waits here for the turn to complete.
+ */
+const said: string[] = []
+async function deliver($: EngineInterface) {
+  while (said.length) {
+    try {
+      await $.prompt.submit({ text: `(on the whiteboard) ${said[0]}`, asUser: true })
+    } catch {
+      return
+    }
+    said.shift()
+  }
 }
 
 /** Opens a URL in the person's browser: `open` on macOS, `xdg-open` elsewhere. */
@@ -246,6 +263,12 @@ export const register: Register = on => {
       },
     })
     return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (said.length) void deliver($)
+    return done
   })
 
   on('tool.call', { tool: 'mcp__whiteboard__post_to_board' }, async ($, e) => {
