@@ -126,8 +126,8 @@ const SETUP_NOTE =
 
 /** The plugin's two commands that finish an uninstall. */
 const UNINSTALL_NEXT =
-  'To remove the plugin too: claude plugin uninstall whiteboard@whiteboard-for-claude-code, ' +
-  'then, if you like, claude plugin marketplace remove whiteboard-for-claude-code.'
+  'To remove the plugin too: claude plugin uninstall whiteboard@whiteboard, ' +
+  'then, if you like, claude plugin marketplace remove whiteboard.'
 
 /** Runs renderer/setup.mjs with `args`, each line in the status line; resolves to its last JSON line. */
 async function setupScript($: EngineInterface, args: string[]): Promise<Record<string, unknown>> {

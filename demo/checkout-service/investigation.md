@@ -1,6 +1,6 @@
 # Slow checkout: investigation notes
 
-Simulated investigation for the Whiteboard for Claude Code demo. The service,
+Simulated investigation for the Whiteboard demo. The service,
 code and numbers are fictional.
 
 **Symptom.** Since Tuesday's release, `POST /checkout` p95 latency went from

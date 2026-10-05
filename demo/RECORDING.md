@@ -8,7 +8,7 @@ intro and outro cards from `media/explainer/` and speeds up the waiting.
 ## Before recording
 
 1. Install the plugin (desktop app: Settings, plugins section, add the
-   marketplace `mazzucci/whiteboard-for-claude-code`, install **whiteboard**;
+   marketplace `mazzucci/whiteboard`, install **whiteboard**;
    after an update to it, update the plugin there too), then run
    `/whiteboard setup` once in any session.
 2. In the Claude Code desktop app, start a **new session** in

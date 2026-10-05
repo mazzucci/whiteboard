@@ -1,4 +1,4 @@
-# Whiteboard for Claude Code
+# Whiteboard
 
 A whiteboard beside your Claude Code conversation, in the **Code** tab of the
 Claude desktop app. Ask Claude about a system, a flow or a schema, and it draws
@@ -122,7 +122,7 @@ VS Code extension, Claude Code in a terminal or `claude -p`: there the plugin
 loads but no whiteboard appears, and Claude is told to explain in prose
 instead.
 Terminal support is in development on the
-[`terminal`](https://github.com/mazzucci/whiteboard-for-claude-code/tree/terminal)
+[`terminal`](https://github.com/mazzucci/whiteboard/tree/terminal)
 branch.
 
 This repository is its own plugin source: Claude Code reads the plugin list
@@ -131,13 +131,13 @@ in `.claude-plugin/marketplace.json` here and installs `whiteboard` from the
 repository as a marketplace, then install `whiteboard` from it.
 
 - **In the Claude desktop app:** open Settings, find the plugins section, add
-  the marketplace `mazzucci/whiteboard-for-claude-code`, then install
+  the marketplace `mazzucci/whiteboard`, then install
   **whiteboard** from it.
 - **In a terminal:**
 
   ```bash
-  claude plugin marketplace add mazzucci/whiteboard-for-claude-code
-  claude plugin install whiteboard@whiteboard-for-claude-code
+  claude plugin marketplace add mazzucci/whiteboard
+  claude plugin install whiteboard@whiteboard
   ```
 
 Claude Code warns that this marketplace is not Anthropic's and that a plugin
@@ -160,16 +160,16 @@ headless Chrome even when a browser is installed.
 To update later, refresh the marketplace first, so Claude Code sees the new
 version, then update the plugin and start a new session: in the desktop app's
 Settings, plugins section, or with
-`claude plugin marketplace update whiteboard-for-claude-code` and
-`claude plugin update whiteboard@whiteboard-for-claude-code`.
+`claude plugin marketplace update whiteboard` and
+`claude plugin update whiteboard@whiteboard`.
 
 To uninstall:
 
 1. `/whiteboard uninstall` stops the renderer and, after asking, deletes
    `~/.cache/whiteboard`.
-2. `claude plugin uninstall whiteboard@whiteboard-for-claude-code` removes the
+2. `claude plugin uninstall whiteboard@whiteboard` removes the
    plugin.
-3. Optionally, `claude plugin marketplace remove whiteboard-for-claude-code`
+3. Optionally, `claude plugin marketplace remove whiteboard`
    forgets this repository as a marketplace.
 
 ### Ask Claude to install it
@@ -177,7 +177,7 @@ To uninstall:
 In Claude Code, paste:
 
 ```
-Install the whiteboard plugin from https://github.com/mazzucci/whiteboard-for-claude-code,
+Install the whiteboard plugin from https://github.com/mazzucci/whiteboard,
 following the "Instructions for Claude" in its README.
 ```
 
@@ -201,14 +201,14 @@ these steps in order, and stop to tell them if one fails.
    download. Nothing is sent anywhere: diagrams render locally.
 3. **Install with Claude Code's plugin manager.** If `claude` is on the PATH,
    run:
-   - `claude plugin marketplace add mazzucci/whiteboard-for-claude-code`
-   - `claude plugin install whiteboard@whiteboard-for-claude-code`
+   - `claude plugin marketplace add mazzucci/whiteboard`
+   - `claude plugin install whiteboard@whiteboard`
 
    If it is already installed, update it instead with
-   `claude plugin marketplace update whiteboard-for-claude-code` and
-   `claude plugin update whiteboard@whiteboard-for-claude-code`. If `claude`
+   `claude plugin marketplace update whiteboard` and
+   `claude plugin update whiteboard@whiteboard`. If `claude`
    is not on the PATH (often the case for desktop app users), ask the person
-   to add the marketplace `mazzucci/whiteboard-for-claude-code` in the desktop
+   to add the marketplace `mazzucci/whiteboard` in the desktop
    app's Settings, plugins section, and install **whiteboard** from it.
 4. **Tell the person the next steps:** start a new Claude Code session (plugins
    load when a session starts), run `/whiteboard setup` there once (it asks
@@ -222,7 +222,7 @@ settings, permissions or other plugins as part of this install.
 ### Try it from a clone
 
 To try a local copy without installing it, load it for one session:
-`claude --plugin-dir /path/to/whiteboard-for-claude-code/plugin`, then run
+`claude --plugin-dir /path/to/whiteboard/plugin`, then run
 `/whiteboard setup`.
 
 ## Use
