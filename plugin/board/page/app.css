@@ -147,3 +147,17 @@ button { font: inherit; color: inherit; }
 .ended.lost { border-color: var(--warn); }
 .ended code { font: 12px var(--mono); background: var(--soft); padding: 1px 4px; border-radius: 4px; }
 .top h1 .label { font-weight: 400; color: var(--muted); }
+
+/* sticky notes: Claude's in yellow, yours in pink, pinned beside a box */
+.sticky {
+  position: absolute; width: 210px; padding: 8px 10px 10px; z-index: 2; cursor: auto;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #3b3000;
+  background: #fff1a6; border-radius: 3px; box-shadow: 0 6px 14px rgba(0, 0, 0, .16), 0 1px 2px rgba(0, 0, 0, .12);
+  transform: rotate(-1.2deg); user-select: text;
+}
+.sticky.you { background: #ffd8e8; color: #4a1630; transform: rotate(1deg); }
+.sticky .by { font-size: 11px; font-weight: 600; opacity: .7; margin-bottom: 3px; }
+.sticky code { font: 12px var(--mono); background: rgba(255, 255, 255, .5); padding: 0 3px; border-radius: 3px; }
+.sticky textarea { width: 100%; resize: none; border: 0; background: rgba(255, 255, 255, .55); border-radius: 3px; font: inherit; color: inherit; padding: 4px 6px; }
+.sticky textarea:focus { outline: 2px solid rgba(0, 0, 0, .15); }
+.stage.noting, .stage.noting .canvas { cursor: crosshair; }

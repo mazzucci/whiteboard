@@ -152,6 +152,7 @@ function select(i) {
     apply()
   } else if (!d.view) fit(d)
   else apply()
+  renderStickies()
   renderTabs()
 }
 
@@ -201,8 +202,10 @@ function fit(d = diagrams[current]) {
   const W = stage.clientWidth
   const H = stage.clientHeight
   const pad = 32
-  const zoom = Math.max(0.05, Math.min((W - pad * 2) / d.w, (H - pad * 2) / d.h, 1.5))
-  d.view = { zoom, x: (W - d.w * zoom) / 2, y: Math.max(pad, (H - d.h * zoom) / 2), isFit: true }
+  // Notes sit to the right of their boxes: leave room for them.
+  const w = d.w + (stickies.get(d.id)?.length ? 240 : 0)
+  const zoom = Math.max(0.05, Math.min((W - pad * 2) / w, (H - pad * 2) / d.h, 1.5))
+  d.view = { zoom, x: (W - w * zoom) / 2, y: Math.max(pad, (H - d.h * zoom) / 2), isFit: true }
   apply()
 }
 
@@ -307,6 +310,19 @@ async function add(card, isReplay) {
     addMessage(card, markdown(card.text))
     return
   }
+  if (card.kind === 'sticky') {
+    pinned(card.diagram).push(card)
+    if (diagrams[current]?.id === card.diagram) {
+      // A fitted diagram makes room for its first note.
+      if (diagrams[current].view?.isFit) fit()
+      renderStickies()
+    }
+    const d = diagrams.find(x => x.id === card.diagram)
+    const where = card.on ? `<b>${esc(boxLabel(card.on) || card.on)}</b> in ` : ''
+    if (card.by === 'you') addMessage({ ...card, kind: 'you' }, `<p>📝 Note on ${where}<i>${esc(d?.title ?? 'the diagram')}</i>: ${inline(card.text)}</p>`)
+    else if (!isReplay && d && diagrams[current]?.id !== card.diagram) select(diagrams.indexOf(d))
+    return
+  }
   let drawn = null
   if (card.mermaid) {
     mermaid.initialize({
@@ -330,6 +346,7 @@ async function add(card, isReplay) {
   const title = card.title || (card.mermaid ? typeOf(card.mermaid) || 'Diagram' : '')
   if (drawn) {
     diagrams.push({ id: card.id, title, source: card.mermaid, kind: typeOf(card.mermaid), legend: card.legend, ...drawn, view: null, isNew: !isReplay })
+    for (const note of card.notes ?? []) pinned(card.id).push({ by: 'claude', ...note })
   }
   if (card.text || drawn || title) {
     const head = card.title && card.text ? `<p><b>${esc(card.title)}</b></p>` : ''
@@ -362,6 +379,7 @@ events.onopen = () => {
   $('stage-empty').hidden = false
   document.querySelectorAll('.msg').forEach(m => m.remove())
   waiting = 0
+  stickies.clear()
   setConnected(true)
   isReplaying = true
   // Replayed cards arrive at once; anything after a short pause is new.
@@ -443,7 +461,8 @@ $('copy').onclick = async () => {
 // Drag to pan.
 let drag = null
 stage.addEventListener('pointerdown', e => {
-  if (isCode || e.button !== 0 || !diagrams.length) return
+  if (isCode || e.button !== 0 || !diagrams.length || e.target.closest('.sticky')) return
+  if (isAddingNote) return
   drag = { x: e.clientX, y: e.clientY }
   stage.setPointerCapture(e.pointerId)
   stage.classList.add('dragging')
@@ -558,3 +577,146 @@ function wrappedUp(card) {
     $('keep').hidden = true
   }
 }
+
+
+// ---------------------------------------------------------------- sticky notes
+//
+// Notes pinned beside a box (or anywhere on a diagram), over the drawing, so
+// the diagram itself does not change: Claude's proposals in yellow, the
+// person's notes in pink. The person's are said to Claude as they pin them,
+// so the session remembers them.
+
+/** Notes by diagram card id. */
+const stickies = new Map()
+const pinned = id => (stickies.has(id) ? stickies.get(id) : stickies.set(id, []).get(id))
+
+/** The box on the canvas with this node id, if the diagram has one. */
+const boxOf = on =>
+  on ? [...canvas.querySelectorAll('g.node[id]')].find(g => g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '') === on) : undefined
+
+/** A box's name for Claude: the first line of its label. */
+function boxLabel(on, g = boxOf(on)) {
+  const row = g?.querySelector('tspan.text-outer-tspan, tspan.row') ?? g?.querySelector('text')
+  return (row?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60)
+}
+
+const NOTE_W = 214
+const NOTE_H = 82
+
+/** The boxes and the notes already placed, as rectangles on the canvas. */
+function obstacles(except) {
+  const rects = []
+  for (const g of canvas.querySelectorAll('g.node, .sticky')) {
+    if (g === except) continue
+    const r = g.getBoundingClientRect()
+    const a = toCanvas(r.left, r.top)
+    const b = toCanvas(r.right, r.bottom)
+    rects.push({ x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y })
+  }
+  return rects
+}
+const overlaps = (p, rects) => rects.some(r => p.x < r.x + r.w && p.x + NOTE_W > r.x && p.y < r.y + r.h && p.y + NOTE_H > r.y)
+
+/** A point on the canvas, in the drawing's own pixels, from a point on screen. */
+function toCanvas(clientX, clientY) {
+  const r = canvas.getBoundingClientRect()
+  const zoom = diagrams[current]?.view?.zoom ?? 1
+  return { x: (clientX - r.left) / zoom, y: (clientY - r.top) / zoom }
+}
+
+/**
+ * Where a note on a box goes: beside it, in the first free place to its right,
+ * below, left or above, clear of other boxes and notes; to the right if none is.
+ */
+function placeOf(note, stack) {
+  const g = boxOf(note.on)
+  if (g) {
+    const r = g.getBoundingClientRect()
+    const a = toCanvas(r.left, r.top)
+    const b = toCanvas(r.right, r.bottom)
+    const rects = obstacles(g)
+    const gap = 12
+    const tries = [
+      { x: b.x + gap, y: a.y - 6 },
+      { x: a.x, y: b.y + gap },
+      { x: a.x - NOTE_W - gap, y: a.y - 6 },
+      { x: a.x, y: a.y - NOTE_H - gap },
+    ]
+    for (let shift = 0; shift < 4; shift++) {
+      for (const t of tries) {
+        const p = { x: t.x, y: t.y + shift * (NOTE_H + 8) }
+        if (!overlaps(p, rects)) return p
+      }
+    }
+    return { x: b.x + gap, y: a.y - 6 + stack * (NOTE_H + 8) }
+  }
+  if (Number.isFinite(note.x)) return { x: note.x, y: note.y }
+  const d = diagrams[current]
+  return { x: d.w + 14, y: 8 + stack * 74 }
+}
+
+function renderStickies() {
+  canvas.querySelectorAll('.sticky').forEach(el => el.remove())
+  const d = diagrams[current]
+  if (!d) return
+  const perBox = new Map()
+  for (const note of stickies.get(d.id) ?? []) {
+    const key = note.on ?? (Number.isFinite(note.x) ? `${note.x},${note.y}` : '')
+    const stack = perBox.get(key) ?? 0
+    perBox.set(key, stack + 1)
+    const { x, y } = placeOf(note, stack)
+    const el = document.createElement('div')
+    el.className = `sticky ${note.by === 'you' ? 'you' : 'claude'}`
+    el.style.left = `${x}px`
+    el.style.top = `${y}px`
+    el.innerHTML = `<div class="by">${note.by === 'you' ? 'You' : 'Claude'}</div><div class="md">${inline(note.text)}</div>`
+    canvas.append(el)
+  }
+}
+
+// Adding a note: "Add note", then a click on a box or anywhere on the
+// diagram; or a double-click at any time.
+let isAddingNote = false
+function setAddingNote(on) {
+  isAddingNote = on && !$('text').disabled
+  $('add-note').setAttribute('aria-pressed', String(isAddingNote))
+  stage.classList.toggle('noting', isAddingNote)
+}
+$('add-note').onclick = () => setAddingNote(!isAddingNote)
+
+function openNoteEditor(e) {
+  const d = diagrams[current]
+  if (!d || isCode || $('text').disabled) return
+  canvas.querySelector('.sticky.editing')?.remove()
+  const g = e.target.closest?.('g.node')
+  const on = g ? g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '') : undefined
+  const at = toCanvas(e.clientX, e.clientY)
+  const place = on ? placeOf({ on }, (stickies.get(d.id) ?? []).filter(n => n.on === on).length) : at
+  const el = document.createElement('div')
+  el.className = 'sticky you editing'
+  el.style.left = `${place.x}px`
+  el.style.top = `${place.y}px`
+  el.innerHTML = `<div class="by">Note for Claude${on ? ` on ${esc(boxLabel(on, g))}` : ''}</div><textarea rows="3" placeholder="Enter pins it, Esc cancels"></textarea>`
+  canvas.append(el)
+  const input = el.querySelector('textarea')
+  input.focus()
+  input.addEventListener('keydown', ev => {
+    ev.stopPropagation()
+    if (ev.key === 'Escape') el.remove()
+    if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+      ev.preventDefault()
+      const text = input.value.trim()
+      el.remove()
+      if (!text) return
+      const label = `${on ? `"${boxLabel(on, g)}" in ` : ''}the diagram "${d.title}"`
+      post('/sticky', { diagram: d.id, on, x: on ? undefined : at.x, y: on ? undefined : at.y, text, label })
+    }
+  })
+  setAddingNote(false)
+}
+stage.addEventListener('click', e => {
+  if (isAddingNote && !e.target.closest('.sticky')) openNoteEditor(e)
+})
+stage.addEventListener('dblclick', e => {
+  if (!e.target.closest('.sticky')) openNoteEditor(e)
+})

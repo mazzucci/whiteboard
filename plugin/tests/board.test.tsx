@@ -184,3 +184,23 @@ test('an empty post is refused', async ($, on) => {
   host(on)
   expect(said(await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', title: 'only a title' }))).toContain('Nothing posted')
 })
+
+test('sticky notes go with a diagram, or on the latest one; with no diagram yet, Claude is told', async ($, on) => {
+  let hasDiagram = false
+  const { posts, stop } = host(on, {
+    page: body =>
+      body.mermaid
+        ? ((hasDiagram = true), { ok: true, viewers: 1, drawn: true })
+        : body.notes && !hasDiagram
+          ? { ok: false, viewers: 1, drawn: false, noDiagram: true }
+          : { ok: true, viewers: 1, drawn: false },
+  })
+  const early = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', notes: [{ on: 'api', text: 'Proposal: cache it' }] })
+  expect(said(early)).toContain('No diagram on the board')
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE, notes: [{ on: 'api', text: 'slow here' }] })
+  expect(posts[1]).toMatchObject({ mermaid: SOURCE, notes: [{ on: 'api', text: 'slow here' }] })
+  const later = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', notes: [{ on: 'db', text: 'Proposal: an index' }, { text: '' }] })
+  expect(said(later)).toContain('Posted')
+  expect(posts[2]?.notes).toEqual([{ on: 'db', text: 'Proposal: an index' }])
+  stop()
+})

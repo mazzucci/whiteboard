@@ -109,14 +109,13 @@ edges in your answer, and draw a part you have not looked at as "not yet checked
 rather than guessing its insides.
 
 **Confidence and evidence.** Four classes, each with its own border so they read
-without colour too. "Not yet checked" is lavender with a dashed border, not
-grey: it must stand out, since it marks what still needs evidence, such as a
-proposed fix nobody has measured.
+without colour too. A proposal is not a box state: pin it as a sticky note
+(below) until the user agrees.
 
 ```
   classDef confirmed fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px,color:#0d3b1a
   classDef suspect fill:#fff4ce,stroke:#b58100,stroke-width:3px,color:#4d3800
-  classDef unverified fill:#f1ebfc,stroke:#6f42c1,stroke-width:2px,stroke-dasharray:6 3,color:#3b1f6e
+  classDef unverified fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4,color:#444444
   classDef ruledout fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
 ```
 
@@ -166,7 +165,7 @@ and for progress, a "running" level in blue:
 ```
   classDef done fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px,color:#0d3b1a
   classDef running fill:#e7f0fd,stroke:#1a5fb4,stroke-width:3px,color:#0b2e5c
-  classDef waiting fill:#f1ebfc,stroke:#6f42c1,stroke-width:2px,stroke-dasharray:6 3,color:#3b1f6e
+  classDef waiting fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4,color:#444444
   classDef failed fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
 ```
 
@@ -182,6 +181,20 @@ When someone is exploring a system, give one diagram per answer, each one level
 closer: context, then containers, then the components of the part they ask
 about, then a sequence for a key flow, then its states or data. Keep names and
 colours consistent between levels, so the cards read as one zoom.
+
+## Sticky notes
+
+A proposal, a question or an aside about one box goes on a sticky note
+(`notes: [{ on: "<node id>", text }]`), pinned beside that box, not into the
+diagram: a box drawn into the system looks like part of it. Propose a fix as
+a note on the box it changes ("Proposal: one `inventory.check_batch` call
+instead of 1,240"); once the user agrees, redraw the diagram with the change
+in it. Notes without `mermaid` go on the latest diagram. Keep a note to a line
+or two.
+
+The user pins notes too. They arrive as "(on the whiteboard) Sticky note on
+"<box>" in the diagram "<title>": …": answer on the board, and treat them as
+part of the discussion to remember and act on.
 
 ## When Mermaid rejects it
 

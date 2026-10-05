@@ -15,11 +15,15 @@
 //   GET  /mermaid.js  Mermaid, vendored (gzipped on disk, served as is)
 //   GET  /events      server-sent events: every card so far, then each new one
 //   POST /post        a card from the plugin; answers once the page has drawn it
+//                     { notes: [{ on?, text }] } with mermaid: sticky notes on
+//                     that diagram; without: pinned to the latest diagram
 //                     { status: 'working' | 'idle' }: whether Claude is in a turn
 //                     { end: true, text? }: the discussion is over; the page
 //                     says so and closes, and this server stops
 //   POST /rendered    { id, error? } from the page: how a card's diagram drew
 //   POST /say         { text } from the page
+//   POST /sticky      { diagram, on?, x?, y?, text, label } from the page: the
+//                     person's sticky note on a diagram, also said to Claude
 
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
@@ -101,6 +105,16 @@ function legendOf(value) {
   return entries.length ? entries : undefined
 }
 
+/** Sticky notes from Claude: at most eight, each pinned to a node id or the diagram. */
+function notesOf(value) {
+  if (!Array.isArray(value)) return undefined
+  const notes = value
+    .filter(n => typeof n?.text === 'string' && n.text.trim())
+    .map(n => ({ text: n.text.slice(0, 600), on: typeof n.on === 'string' && /^[\w-]{1,64}$/.test(n.on) ? n.on : undefined }))
+    .slice(0, 8)
+  return notes.length ? notes : undefined
+}
+
 /** Waits for the page to draw a card: { drawn: true }, { error }, or { drawn: false } with nobody looking. */
 function drawn(id) {
   return new Promise(resolve => {
@@ -152,7 +166,7 @@ const server = createServer(async (req, res) => {
     req.on('close', () => listeners.delete(res))
     return
   }
-  if (req.method !== 'POST' || !['/post', '/say', '/rendered'].includes(url.pathname)) return json(404, { error: 'not found' })
+  if (req.method !== 'POST' || !['/post', '/say', '/rendered', '/sticky'].includes(url.pathname)) return json(404, { error: 'not found' })
 
   let input
   try {
@@ -165,6 +179,16 @@ const server = createServer(async (req, res) => {
     if (!text) return json(400, { error: 'empty' })
     publish({ kind: 'you', text })
     say(text)
+    return json(200, { ok: true })
+  }
+  if (url.pathname === '/sticky') {
+    const text = clip(input.text, 1000)?.trim()
+    const diagram = cards.find(c => c.kind === 'diagram' && c.id === Number(input.diagram))
+    if (!text || !diagram) return json(400, { error: 'a note needs text and a diagram' })
+    const on = typeof input.on === 'string' && /^[\w-]{1,64}$/.test(input.on) ? input.on : undefined
+    const at = n => (Number.isFinite(n) ? Math.round(n) : undefined)
+    publish({ kind: 'sticky', by: 'you', diagram: diagram.id, on, x: at(input.x), y: at(input.y), text })
+    say(`Sticky note on ${clip(input.label, 200) || `"${diagram.title ?? 'the diagram'}"`}: ${text}`)
     return json(200, { ok: true })
   }
   if (url.pathname === '/rendered') {
@@ -186,6 +210,14 @@ const server = createServer(async (req, res) => {
     return
   }
   const mermaid = clip(input.mermaid, 100_000)
+  const notes = notesOf(input.notes)
+  // Notes without a diagram go on the latest one, which stays as it is.
+  if (notes && !mermaid) {
+    const latest = cards.findLast(c => c.kind === 'diagram')
+    if (!latest) return json(200, { ok: false, viewers: listeners.size, drawn: false, noDiagram: true })
+    for (const note of notes) publish({ kind: 'sticky', by: 'claude', diagram: latest.id, ...note })
+    if (!clip(input.text, 20_000)) return json(200, { ok: true, viewers: listeners.size, drawn: false, pinned: latest.title ?? '' })
+  }
   const card = publish({
     kind: mermaid ? 'diagram' : 'note',
     title: clip(input.title, 200),
@@ -193,6 +225,7 @@ const server = createServer(async (req, res) => {
     mermaid,
     theme: clip(input.theme, 20),
     legend: legendOf(input.legend),
+    notes: mermaid ? notes : undefined,
   })
   // A diagram is answered once a page has drawn it, so Mermaid's errors reach
   // Claude. With no page open, wait only when one is opening (a new board).
