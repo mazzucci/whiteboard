@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whiteboard</title>
+<link rel="stylesheet" href="/app.css?t=__TOKEN__">
+</head>
+<body>
+<header class="top">
+  <h1>Whiteboard</h1>
+  <span class="conn" id="conn"><span class="dot"></span><span id="conn-text">connecting…</span></span>
+</header>
+<main class="layout">
+  <section class="board" aria-label="Diagrams">
+    <nav class="tabs" id="tabs" aria-label="Diagrams so far"></nav>
+    <div class="toolbar" id="toolbar" hidden>
+      <div class="title"><b id="d-title"></b><span class="kind" id="d-kind"></span></div>
+      <div class="controls">
+        <button type="button" id="prev" title="Previous diagram (p)" aria-label="Previous diagram">◀</button>
+        <span class="count" id="d-count"></span>
+        <button type="button" id="next" title="Next diagram (n)" aria-label="Next diagram">▶</button>
+        <span class="sep"></span>
+        <button type="button" id="zoom-in" title="Zoom in (i)">Zoom in</button>
+        <span class="pct" id="pct">100%</span>
+        <button type="button" id="zoom-out" title="Zoom out (o)">Zoom out</button>
+        <button type="button" id="fit" title="Fit to the board (f)">Fit</button>
+        <span class="sep"></span>
+        <button type="button" id="code" title="Mermaid source (c)" aria-pressed="false">Code</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="stage" id="stage" tabindex="0" aria-label="Diagram: drag to pan, pinch or Ctrl+scroll to zoom">
+      <div class="canvas" id="canvas"></div>
+      <div class="empty" id="stage-empty">Diagrams Claude draws appear here.</div>
+      <div class="source" id="source" hidden><button type="button" id="copy">Copy</button><pre><code id="source-code"></code></pre></div>
+      <div class="hint" id="stage-hint">Drag to pan · pinch or Ctrl+scroll to zoom · i o f · w a s d · p n · c</div>
+    </div>
+  </section>
+  <aside class="chat" aria-label="Conversation">
+    <div class="messages" id="messages">
+      <div class="empty" id="chat-empty">Claude's notes appear here. Answer below: your messages go to the same Claude Code session.</div>
+    </div>
+    <form class="composer" id="form">
+      <textarea id="text" rows="2" placeholder="Reply to Claude…"></textarea>
+      <div class="actions">
+        <span class="hint">Enter sends · Shift+Enter for a new line</span>
+        <button type="button" class="ghost" id="wrap">Wrap up</button>
+        <button type="submit" class="primary">Send</button>
+      </div>
+    </form>
+  </aside>
+</main>
+<script src="/mermaid.js?t=__TOKEN__"></script>
+<script src="/app.js?t=__TOKEN__"></script>
+</body>
+</html>
