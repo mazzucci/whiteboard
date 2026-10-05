@@ -244,6 +244,84 @@ async function uninstall($: EngineInterface): Promise<string> {
   return out.step === 'done' ? `Deleted ${home}. ${UNINSTALL_NEXT}` : `Nothing was deleted: ${String(out.message)}`
 }
 
+// ---------------------------------------------------------------- the focus board
+//
+// A page on this machine (renderer/board.mjs, loopback only, a random token)
+// where Claude posts notes and diagrams and the person answers, for a
+// discussion that stays there until it concludes. What the person types is
+// submitted into this session as their own words, so the whole discussion is
+// in the conversation when they come back.
+
+type Board = { url: string; port: number; token: string }
+let board: Promise<Board> | null = null
+
+/** Starts the board for this session; its stdout carries the person's messages. */
+function startBoard($: EngineInterface): Promise<Board> {
+  return new Promise<Board>((resolve, reject) => {
+    void (async () => {
+      try {
+        const argv = [await nodePath($), `${$.plugin.root}/renderer/board.mjs`, '--mermaid', `${await rendererHome($)}/mermaid.min.js`]
+        let buffer = ''
+        let err = ''
+        for await (const piece of $.process.spawn({ argv })) {
+          if (piece.stream !== 'stdout') {
+            err = (err + piece.text).slice(-2000)
+            continue
+          }
+          buffer += piece.text
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const line of lines.filter(Boolean)) {
+            const message = JSON.parse(line) as { ready?: boolean; url?: string; port?: number; token?: string; say?: string }
+            if (message.ready) resolve(message as Board)
+            // The person's own words, marked so Claude answers on the board.
+            // A turn of its own once the session is idle, so typing while
+            // Claude works simply queues.
+            else if (typeof message.say === 'string') {
+              void $.prompt.submit({ text: `(on the whiteboard) ${message.say}`, asUser: true })
+            }
+          }
+        }
+        board = null
+        reject(new Error(`The focus board stopped. ${err.trim().split('\n').slice(-2).join(' ')}`))
+      } catch (error) {
+        board = null
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    })()
+  })
+}
+
+type Card = { kind: 'note' | 'diagram'; title?: string; text?: string; mermaid?: string }
+
+async function postToBoard($: EngineInterface, card: Card): Promise<Board> {
+  board ??= startBoard($)
+  const open = await board
+  await $.http.fetch(`http://127.0.0.1:${open.port}/post`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-board-token': open.token },
+    body: JSON.stringify(card),
+  })
+  return open
+}
+
+/** Opens a URL in the person's browser: `open` on macOS, `xdg-open` elsewhere. */
+async function openInBrowser($: EngineInterface, url: string): Promise<boolean> {
+  const opener = (await $.fs.exists('/usr/bin/open')) ? '/usr/bin/open' : 'xdg-open'
+  try {
+    return (await $.process.run([opener, url])).exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+/** What Claude is told when focus mode starts, and with each board message. */
+const FOCUS_NOTE =
+  'Focus mode is on: the person is discussing on the whiteboard page, not in this conversation. Messages from them ' +
+  'start with "(on the whiteboard)". Answer them ON THE BOARD with post_to_board: a short note, a diagram (mermaid), ' +
+  'or both; keep your reply in the conversation to a line. Ask questions there too. When they wrap up, post a ' +
+  'summary of what was concluded in the conversation itself.'
+
 // ---------------------------------------------------------------- diagrams
 
 async function show($: EngineInterface, next: DiagramDoc) {
@@ -616,7 +694,8 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'whiteboard',
-      description: 'Mermaid diagrams beside the conversation: /whiteboard [file.mmd|file.md|sample|setup|theme <name>|uninstall]',
+      description:
+        'Mermaid diagrams beside the conversation: /whiteboard [file.mmd|file.md|sample|focus|setup|theme <name>|uninstall]',
     })
     await $.tool.register({
       name: TOOL,
@@ -665,7 +744,38 @@ export const register: Register = on => {
         required: ['mermaid'],
       },
     })
+    await $.tool.register({
+      name: 'post_to_board',
+      description:
+        "Post a card to the whiteboard's focus page, a browser page where the person discusses a topic with you " +
+        'until it concludes (/whiteboard focus starts it). A card is a short Markdown note (paragraphs, bullets, ' +
+        '**bold**, `code`), a Mermaid diagram, or both; the page renders Mermaid itself, with browser zoom and ' +
+        'scrolling. Use it to answer messages that begin "(on the whiteboard)": post your answer there, and keep ' +
+        'what you write in the conversation to a line. Follow the whiteboard:drawing skill for diagrams.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'A short heading for the card' },
+          text: { type: 'string', description: 'The note, in simple Markdown' },
+          mermaid: { type: 'string', description: 'A Mermaid diagram to draw on the card' },
+        },
+      },
+    })
     return next(e)
+  })
+
+  on('tool.call', { tool: 'mcp__whiteboard__post_to_board' }, async ($, e) => {
+    const text = typeof e.text === 'string' ? e.text.trim() : ''
+    const mermaid = typeof e.mermaid === 'string' ? e.mermaid.trim() : ''
+    if (!text && !mermaid) return { deny: 'Nothing posted: give `text`, `mermaid` or both.' }
+    if (!(await isInstalled($))) return { deny: 'The focus board needs the renderer set up: ask the user to run /whiteboard setup.' }
+    const title = typeof e.title === 'string' ? e.title.trim() : undefined
+    try {
+      const open = await postToBoard($, { kind: mermaid ? 'diagram' : 'note', title, text, mermaid })
+      return { result: `Posted to the focus board (${open.url}).` }
+    } catch (error) {
+      return { deny: `The focus board could not start: ${error instanceof Error ? error.message : String(error)}` }
+    }
   })
 
   on('command.run', { command: 'whiteboard' }, async ($, e) => {
@@ -684,6 +794,18 @@ export const register: Register = on => {
       return { text }
     }
     if (arg === 'uninstall') return { text: await uninstall($) }
+    if (arg === 'focus') {
+      if (!(await isInstalled($))) return { text: 'The focus board needs the renderer: run /whiteboard setup first.' }
+      try {
+        board ??= startBoard($)
+        const open = await board
+        const isOpened = await openInBrowser($, open.url)
+        const where = isOpened ? 'opened in your browser' : `open it in your browser: ${open.url}`
+        return { text: `Focus board ${where}. Discuss there; Claude answers on the board.`, context: [FOCUS_NOTE] }
+      } catch (error) {
+        return { text: `The focus board could not start: ${error instanceof Error ? error.message : String(error)}` }
+      }
+    }
     if (arg === 'theme' || arg.startsWith('theme ')) {
       const name = arg.slice('theme'.length).trim()
       if (!THEMES.includes(name)) {
@@ -741,6 +863,14 @@ export const register: Register = on => {
     if (out.value.svg.length > SVG_CAP) {
       return {
         deny: `This diagram renders to ${Math.round(out.value.svg.length / 1024)} KB of SVG; the pane shows up to ${Math.round(SVG_CAP / 1024)} KB, so it was not shown. Redraw it as an overview of about 8 to 12 nodes, then offer to draw the parts that matter as separate, closer diagrams.`,
+      }
+    }
+    // In focus mode the diagram goes to the board too, rendered there by the page.
+    if (board) {
+      try {
+        await postToBoard($, { kind: 'diagram', title, mermaid: source })
+      } catch {
+        // The board stopped: the pane still has it.
       }
     }
     const opened = await show($, next)
