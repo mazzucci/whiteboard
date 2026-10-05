@@ -1,14 +1,13 @@
 ---
 name: drawing
-description: "Read before calling the whiteboard's show_diagram tool (mcp__whiteboard__show_diagram), which draws Mermaid diagrams on the Whiteboard pane beside the conversation. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
+description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
 ---
 
 # Drawing on the whiteboard
 
-`show_diagram` renders Mermaid exactly as Mermaid does and shows it on the
-Whiteboard pane beside the conversation. Each call adds a diagram to the pane's
-history (the person steps through it with `p` and `n`), so a sequence of calls
-tells a story. Draw when a picture explains structure, flow or state better than
+`post_to_board` draws Mermaid on the whiteboard, a page in the person's
+browser beside the conversation. Each call adds a card below the last, so a
+sequence of calls tells a story. Draw when a picture explains structure, flow or state better than
 prose: several services or modules, a flow with branches or retries, state
 transitions, a risky change. Not for a routine edit, where a diagram is
 decoration. Answer in prose as well, briefly, and let the diagram carry the
@@ -31,22 +30,22 @@ show the difference (see "Show what you know" below).
 
 ## Keep it legible
 
-The pane is a side panel, often 500 to 900 px wide; a diagram wider or taller
-than that is scaled down until text is hard to read.
+The page fits each diagram to its width (about 1100 px at most), with
+"Actual size" and browser zoom for detail; a diagram much wider than that is
+scaled down until text is hard to read.
 - About 5 to 15 nodes. More than that: split it into two diagrams, or zoom one level out.
 - Choose the direction by shape: a long chain reads best `TB`; a wide fan-out or
   a pipeline across a few lanes reads best `LR`. A diagram that renders as a thin
   strip (say 2000 × 250) or a tall column has the wrong direction.
-- The pane is taller than it is wide. When one node calls four or more others,
-  draw it `LR` so they stack down the pane; side by side in `TB` they shrink the
-  whole diagram to fit the width.
+- When one node calls four or more others, draw it `LR` so they stack down
+  the page; side by side in `TB` they shrink the whole diagram to fit the width.
 - Short labels: a name, then a second line of detail at most. Put explanations in your prose.
   A line wraps on its own only past about 400 px, so break with `<br/>` where you
   want it: `pay["payments.charge<br/>180 ms"]`, a file path on its own line.
 - Label only edges whose meaning is not obvious ("events", "authorize"), and keep
   edge labels to a word or two.
 - A `title` in front matter (`---\ntitle: ...\n---`) heads the drawing; the tool's own
-  `title` is what the pane lists.
+  `title` heads the card.
 
 ## Syntax traps
 
@@ -166,11 +165,10 @@ and for progress, a "running" level in blue:
   classDef failed fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
 ```
 
-**Always a legend, in the header.** Pass `legend` to `show_diagram`: one entry
+**Always a legend, above the diagram.** Pass `legend` to `post_to_board`: one entry
 per class the diagram uses, `{ "label": "Suspect", "class": "suspect" }`, in
-reading order. The pane draws it as one line above the diagram, a swatch in
-each class's colour, so the diagram keeps its whole canvas and zooming never
-crops the key. Don't draw a legend inside the diagram. The tool says if an
+reading order. The page draws it as one line above the diagram, a swatch in
+each class's colour, so the diagram keeps its whole canvas. Don't draw a legend inside the diagram. The tool says if an
 entry names a class with no `classDef`.
 
 ## Walk from the big picture to detail
@@ -178,12 +176,11 @@ entry names a class with no `classDef`.
 When someone is exploring a system, give one diagram per answer, each one level
 closer: context, then containers, then the components of the part they ask
 about, then a sequence for a key flow, then its states or data. Keep names and
-colours consistent between levels, so the history reads as one zoom.
+colours consistent between levels, so the cards read as one zoom.
 
 ## When Mermaid rejects it
 
 The tool fails with Mermaid's message, which names the line and what it
 expected. Fix that line (usually a trap above) and call again with the whole
-corrected source; do not change the diagram's content to work around it. A
-diagram over about 128 KB of SVG is refused the same way: redraw it as an
-overview of 8 to 12 nodes and offer closer diagrams of its parts.
+corrected source; do not change the diagram's content to work around it. The
+failed card is taken off the page, so the corrected one replaces it.
