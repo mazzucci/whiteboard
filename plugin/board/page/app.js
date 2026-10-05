@@ -231,6 +231,10 @@ function addMessage(card, html) {
 // ---------------------------------------------------------------- cards
 
 async function add(card, isReplay) {
+  if (card.kind === 'end') {
+    wrappedUp(card)
+    return
+  }
   if (card.kind === 'remove') {
     document.querySelectorAll(`[data-card="${card.id}"]`).forEach(el => el.remove())
     return
@@ -300,6 +304,7 @@ events.onopen = () => {
   setTimeout(() => (isReplaying = false), 400)
 }
 events.onerror = () => {
+  if (isEnded) return
   $('conn').classList.remove('on')
   $('conn-text').textContent = 'session ended or reconnecting'
 }
@@ -398,4 +403,44 @@ box.addEventListener('keydown', e => {
     $('form').requestSubmit()
   }
 })
-$('wrap').onclick = () => send('Let us wrap up: summarise what we concluded, and post the summary back in the Claude Code conversation.')
+$('wrap').onclick = () =>
+  send('Let us wrap up: summarise what we concluded in the Claude Code conversation, then close the whiteboard.')
+
+// ---------------------------------------------------------------- wrapped up
+
+let isEnded = false
+
+/** The discussion is over: say so, then close the tab, unless the person keeps it. */
+function wrappedUp(card) {
+  isEnded = true
+  events.close()
+  $('conn').classList.remove('on')
+  $('conn-text').textContent = 'wrapped up'
+  box.disabled = true
+  document.querySelectorAll('.composer button').forEach(b => (b.disabled = true))
+  const banner = document.createElement('div')
+  banner.className = 'ended'
+  banner.innerHTML =
+    `<div><b>Wrapped up.</b> ${card.text ? markdown(card.text).replace(/^<p>|<\/p>$/g, '') : "Claude's summary is in the Claude Code conversation."}</div>` +
+    '<div class="row"><span id="countdown"></span><button type="button" id="keep">Keep open</button></div>'
+  document.body.append(banner)
+  let left = 5
+  const tick = () => {
+    $('countdown').textContent = `Closing this tab in ${left} s`
+    if (left-- > 0) return
+    clearInterval(timer)
+    window.close()
+    // Browsers only let a page close a tab a script opened: say so if it stayed.
+    setTimeout(() => {
+      $('countdown').textContent = 'You can close this tab.'
+      $('keep').hidden = true
+    }, 300)
+  }
+  const timer = setInterval(tick, 1000)
+  tick()
+  $('keep').onclick = () => {
+    clearInterval(timer)
+    $('countdown').textContent = 'Kept open. The board is read-only now.'
+    $('keep').hidden = true
+  }
+}

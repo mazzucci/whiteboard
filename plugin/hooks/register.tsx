@@ -25,8 +25,8 @@ const SAMPLE: Doc = {
 const FOCUS_NOTE =
   'Focus mode is on: the person is discussing on the whiteboard page, not in this conversation. Messages from them ' +
   `start with "(on the whiteboard)". Answer them ON THE BOARD with ${TOOL}: a short note, a diagram (mermaid), ` +
-  'or both; keep your reply in the conversation to a line. Ask questions there too. When they wrap up, post a ' +
-  'summary of what was concluded in the conversation itself.'
+  'or both; keep your reply in the conversation to a line. Ask questions there too. When they wrap up, write a ' +
+  `summary of what was concluded in the conversation itself, then call ${TOOL} with end: true to close the page.`
 
 // ---------------------------------------------------------------- the board
 
@@ -44,7 +44,7 @@ async function nodePath($: EngineInterface): Promise<string> {
 
 /** Starts the board for this session; its stdout carries the person's messages. */
 function startBoard($: EngineInterface): Promise<Board> {
-  return new Promise<Board>((resolve, reject) => {
+  const self: Promise<Board> = new Promise<Board>((resolve, reject) => {
     void (async () => {
       try {
         const argv = [await nodePath($), `${$.plugin.root}/board/server.mjs`]
@@ -75,14 +75,30 @@ function startBoard($: EngineInterface): Promise<Board> {
             }
           }
         }
-        board = null
+        // Only this board: after a wrap-up, a new one may already be starting.
+        if (board === self) board = null
         reject(new Error(`The whiteboard page stopped. ${err.trim().split('\n').slice(-2).join(' ')}`))
       } catch (error) {
-        board = null
+        if (board === self) board = null
         reject(error instanceof Error ? error : new Error(String(error)))
       }
     })()
   })
+  return self
+}
+
+/** Ends the discussion: the page says so and closes its tab, and the board stops. */
+async function endBoard($: EngineInterface, text: string | undefined): Promise<boolean> {
+  const current = board
+  if (!current) return false
+  board = null
+  const open = await current
+  await $.http.fetch(`http://127.0.0.1:${open.port}/post`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-board-token': open.token },
+    body: JSON.stringify({ end: true, text }),
+  })
+  return true
 }
 
 /** Opens a URL in the person's browser: `open` on macOS, `xdg-open` elsewhere. */
@@ -197,13 +213,20 @@ export const register: Register = on => {
         'skill. The first post opens the page in the browser. If Mermaid rejects the source, the call fails with ' +
         'its error and the card is taken off the page: fix the source and post again. ' +
         'Messages that begin "(on the whiteboard)" were typed by the user on the page: answer them there with ' +
-        'this tool, and keep what you write in the conversation to a line.',
+        'this tool, and keep what you write in the conversation to a line. When they wrap up, write the summary in ' +
+        'the conversation itself, then call this tool with end: true: the page says the discussion is over and closes.',
       inputSchema: {
         type: 'object',
         properties: {
           title: { type: 'string', description: 'A short heading for the card' },
           text: { type: 'string', description: 'A note, in simple Markdown, above the diagram if there is one' },
           mermaid: { type: 'string', description: 'A Mermaid diagram, starting with the diagram type' },
+          end: {
+            type: 'boolean',
+            description:
+              'Only after the user wraps up and your summary is in the conversation: closes the page. `text` may ' +
+              'carry one line for the page, such as where the summary is.',
+          },
           legend: {
             type: 'array',
             maxItems: 6,
@@ -228,6 +251,14 @@ export const register: Register = on => {
   on('tool.call', { tool: 'mcp__whiteboard__post_to_board' }, async ($, e) => {
     const text = typeof e.text === 'string' ? e.text.trim() : ''
     const mermaid = typeof e.mermaid === 'string' ? mermaidOf(e.mermaid) : ''
+    if (e.end === true) {
+      try {
+        const isEnded = await endBoard($, text || undefined)
+        return { result: isEnded ? 'The whiteboard page is closing; the discussion is over.' : 'No whiteboard page was open.' }
+      } catch (error) {
+        return { result: `The whiteboard page had already stopped (${error instanceof Error ? error.message : String(error)}).` }
+      }
+    }
     if (!text && !mermaid) return { deny: 'Nothing posted: give `text`, `mermaid` or both.' }
     if (!(await $.session.surfaces()).length) {
       return { deny: 'Nobody can see the whiteboard from this session (it has no screen attached). Explain in prose instead.' }

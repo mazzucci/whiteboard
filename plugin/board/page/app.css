@@ -125,3 +125,13 @@ button { font: inherit; color: inherit; }
 .md a { color: var(--accent); }
 .error { color: var(--error); white-space: pre-wrap; font: 12px var(--mono); }
 [hidden] { display: none !important; }
+
+/* wrapped up */
+.ended {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 5; width: min(520px, calc(100% - 32px));
+  display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel); box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+}
+.ended .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
+.ended button { padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; }
+.composer textarea:disabled, .composer button:disabled { opacity: .5; cursor: default; }

@@ -15,6 +15,8 @@
 //   GET  /mermaid.js  Mermaid, vendored (gzipped on disk, served as is)
 //   GET  /events      server-sent events: every card so far, then each new one
 //   POST /post        a card from the plugin; answers once the page has drawn it
+//                     { end: true, text? }: the discussion is over; the page
+//                     says so and closes, and this server stops
 //   POST /rendered    { id, error? } from the page: how a card's diagram drew
 //   POST /say         { text } from the page
 
@@ -162,6 +164,14 @@ const server = createServer(async (req, res) => {
     const settle = drawing.get(Number(input.id))
     if (settle) settle(typeof input.error === 'string' ? { error: input.error.slice(0, 2000) } : { drawn: true })
     return json(200, { ok: true })
+  }
+  if (input.end === true) {
+    publish({ kind: 'end', text: clip(input.text, 2000) })
+    json(200, { ok: true, viewers: listeners.size })
+    // Long enough for the page to get the event, then gone: the next
+    // discussion starts on a new page.
+    setTimeout(() => process.exit(0), 1500).unref()
+    return
   }
   const mermaid = clip(input.mermaid, 100_000)
   const card = publish({
