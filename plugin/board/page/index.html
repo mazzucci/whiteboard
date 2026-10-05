@@ -34,12 +34,13 @@
       <div class="canvas" id="canvas"></div>
       <div class="empty" id="stage-empty">Diagrams Claude draws appear here.</div>
       <div class="source" id="source" hidden><button type="button" id="copy">Copy</button><pre><code id="source-code"></code></pre></div>
-      <div class="hint" id="stage-hint">Drag to pan · pinch or Ctrl+scroll to zoom · i o f · w a s d · p n · c</div>
+      <div class="hint" id="stage-hint">Drag or arrow keys to pan · pinch or Ctrl+scroll to zoom · i o f · p n · c</div>
     </div>
   </section>
   <aside class="chat" aria-label="Conversation">
     <div class="messages" id="messages">
       <div class="empty" id="chat-empty">Claude's notes appear here. Answer below: your messages go to the same Claude Code session.</div>
+      <div class="typing" id="typing" hidden><span class="dots"><i></i><i></i><i></i></span><span id="typing-text"></span></div>
     </div>
     <form class="composer" id="form">
       <textarea id="text" rows="2" placeholder="Reply to Claude…"></textarea>

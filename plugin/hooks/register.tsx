@@ -118,6 +118,21 @@ async function deliver($: EngineInterface) {
   }
 }
 
+/** Tells an open board whether Claude is in a turn; nothing when no board is open. */
+async function boardStatus($: EngineInterface, status: 'working' | 'idle') {
+  if (!board) return
+  try {
+    const open = await board
+    await $.http.fetch(`http://127.0.0.1:${open.port}/post`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-board-token': open.token },
+      body: JSON.stringify({ status }),
+    })
+  } catch {
+    // The board stopped: nothing to tell.
+  }
+}
+
 /** Opens a URL in the person's browser: `open` on macOS, `xdg-open` elsewhere. */
 async function openInBrowser($: EngineInterface, url: string): Promise<boolean> {
   const opener = (await $.fs.exists('/usr/bin/open')) ? '/usr/bin/open' : 'xdg-open'
@@ -265,8 +280,16 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The page shows whether Claude is working, so a message sent there is
+  // never met with silence.
+  on('turn.start', async ($, e, next) => {
+    void boardStatus($, 'working')
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
+    void boardStatus($, 'idle')
     if (said.length) void deliver($)
     return done
   })

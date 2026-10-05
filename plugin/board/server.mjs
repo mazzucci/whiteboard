@@ -15,6 +15,7 @@
 //   GET  /mermaid.js  Mermaid, vendored (gzipped on disk, served as is)
 //   GET  /events      server-sent events: every card so far, then each new one
 //   POST /post        a card from the plugin; answers once the page has drawn it
+//                     { status: 'working' | 'idle' }: whether Claude is in a turn
 //                     { end: true, text? }: the discussion is over; the page
 //                     says so and closes, and this server stops
 //   POST /rendered    { id, error? } from the page: how a card's diagram drew
@@ -37,6 +38,8 @@ const token = randomBytes(16).toString('hex')
 const DRAW_WAIT_MS = 10_000
 
 const cards = []
+/** Whether Claude is in a turn: sent to each page as it connects, never stored as a card. */
+let status = 'idle'
 const listeners = new Set()
 /** Posts waiting for the page to say how their diagram drew: id → resolve. */
 const drawing = new Map()
@@ -141,6 +144,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
     for (const card of cards) res.write(`data: ${JSON.stringify(card)}\n\n`)
+    res.write(`data: ${JSON.stringify({ kind: 'status', state: status })}\n\n`)
     listeners.add(res)
     req.on('close', () => listeners.delete(res))
     return
@@ -163,6 +167,11 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/rendered') {
     const settle = drawing.get(Number(input.id))
     if (settle) settle(typeof input.error === 'string' ? { error: input.error.slice(0, 2000) } : { drawn: true })
+    return json(200, { ok: true })
+  }
+  if (input.status === 'working' || input.status === 'idle') {
+    status = input.status
+    broadcast({ kind: 'status', state: status })
     return json(200, { ok: true })
   }
   if (input.end === true) {

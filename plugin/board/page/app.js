@@ -217,15 +217,41 @@ const typeOf = source =>
 
 function addMessage(card, html) {
   $('chat-empty')?.remove()
+  const isYou = card.kind === 'you'
   const el = document.createElement('div')
-  el.className = `msg ${card.kind === 'you' ? 'you' : 'claude'}`
+  el.className = `msg ${isYou ? 'you' : 'claude'}`
   el.dataset.card = card.id
-  el.innerHTML = `<div class="who">${card.kind === 'you' ? 'You' : 'Claude'}</div><div class="body md">${html}</div>`
+  el.innerHTML =
+    `<div class="who">${isYou ? 'You' : 'Claude'}</div><div class="body md">${html}</div>` +
+    (isYou ? '<div class="state">Sent to Claude Code</div>' : '')
   const messages = $('messages')
   const isAtBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80
-  messages.append(el)
-  if (isAtBottom || card.kind === 'you') messages.scrollTop = messages.scrollHeight
+  messages.insertBefore(el, $('typing'))
+  // Waiting for an answer from the moment the person speaks; Claude's next card answers it.
+  waiting = isYou ? waiting + 1 : 0
+  showTyping()
+  if (isAtBottom || isYou) messages.scrollTop = messages.scrollHeight
   return el
+}
+
+// ---------------------------------------------------------------- is Claude working?
+//
+// The plugin reports each Claude turn's start and end; the person's messages
+// that have no answer yet are "waiting". Between the two, the page always
+// says what is happening after they press Send.
+
+let claudeState = 'idle'
+let waiting = 0
+
+function showTyping() {
+  const typing = $('typing')
+  const isWorking = claudeState === 'working'
+  typing.hidden = !isWorking && !waiting
+  $('typing-text').textContent = isWorking
+    ? waiting > 1 ? `Claude is working… your ${waiting} messages are queued` : 'Claude is working…'
+    : 'Sent. Claude Code picks it up in a moment…'
+  const messages = $('messages')
+  if (!typing.hidden && messages.scrollHeight - messages.scrollTop - messages.clientHeight < 120) messages.scrollTop = messages.scrollHeight
 }
 
 // ---------------------------------------------------------------- cards
@@ -297,6 +323,7 @@ events.onopen = () => {
   $('toolbar').hidden = true
   $('stage-empty').hidden = false
   document.querySelectorAll('.msg').forEach(m => m.remove())
+  waiting = 0
   $('conn').classList.add('on')
   $('conn-text').textContent = 'connected to the session'
   isReplaying = true
@@ -310,6 +337,12 @@ events.onerror = () => {
 }
 events.onmessage = e => {
   const card = JSON.parse(e.data)
+  // Status is now, not history: shown at once, not queued behind drawings.
+  if (card.kind === 'status') {
+    claudeState = card.state
+    showTyping()
+    return
+  }
   const replay = isReplaying
   queue = queue.then(() => add(card, replay)).catch(err => console.error(err))
 }
@@ -362,13 +395,13 @@ stage.addEventListener(
   { passive: false },
 )
 
-// Keys, when not typing: the same letters as the pane had.
+// Keys, when not typing: arrows pan; i o f zoom; p n step; c the source.
 document.addEventListener('keydown', e => {
   if ((e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]')) || e.metaKey || e.ctrlKey || e.altKey) return
   const step = 80
   const keys = {
     i: () => zoomBy(1.25), o: () => zoomBy(0.8), f: () => fit(),
-    w: () => panBy(0, step), s: () => panBy(0, -step), a: () => panBy(step, 0), d: () => panBy(-step, 0),
+    ArrowUp: () => panBy(0, step), ArrowDown: () => panBy(0, -step), ArrowLeft: () => panBy(step, 0), ArrowRight: () => panBy(-step, 0),
     p: () => select(current - 1), n: () => select(current + 1), c: () => setCode(!isCode),
   }
   const act = keys[e.key]
@@ -413,6 +446,9 @@ let isEnded = false
 /** The discussion is over: say so, then close the tab, unless the person keeps it. */
 function wrappedUp(card) {
   isEnded = true
+  claudeState = 'idle'
+  waiting = 0
+  showTyping()
   events.close()
   $('conn').classList.remove('on')
   $('conn-text').textContent = 'wrapped up'
