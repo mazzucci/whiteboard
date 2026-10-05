@@ -109,12 +109,14 @@ edges in your answer, and draw a part you have not looked at as "not yet checked
 rather than guessing its insides.
 
 **Confidence and evidence.** Four classes, each with its own border so they read
-without colour too:
+without colour too. "Not yet checked" is lavender with a dashed border, not
+grey: it must stand out, since it marks what still needs evidence, such as a
+proposed fix nobody has measured.
 
 ```
   classDef confirmed fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px,color:#0d3b1a
   classDef suspect fill:#fff4ce,stroke:#b58100,stroke-width:3px,color:#4d3800
-  classDef unverified fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4,color:#444444
+  classDef unverified fill:#f1ebfc,stroke:#6f42c1,stroke-width:2px,stroke-dasharray:6 3,color:#3b1f6e
   classDef ruledout fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
 ```
 
@@ -123,8 +125,11 @@ lines, so reordering them can flip the whole layout even when nothing else
 changed. When you redraw a diagram from earlier in the conversation, start from
 its source: keep every node id, label and line in the same order, add new nodes
 and edges after the existing ones, and change what a step means through its
-`class` assignments at the bottom. Then stepping through the history with `p`
-and `n` shows only what changed.
+`class` assignments at the bottom. Keep each label about the same length from
+one version to the next: a placeholder as wide as the value it stands for
+(`? ms` rather than `…` for `3,400 ms`), since a wider box nudges its
+neighbours. The board keeps a redraw at the same zoom and place, so stepping
+through the diagrams (the tabs, or `p` and `n`) shows only what changed.
 
 Troubleshooting with it: draw the hypothesis first, every step `unverified`.
 As evidence arrives, redraw the same diagram (same title plus "step n", so the
@@ -161,7 +166,7 @@ and for progress, a "running" level in blue:
 ```
   classDef done fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px,color:#0d3b1a
   classDef running fill:#e7f0fd,stroke:#1a5fb4,stroke-width:3px,color:#0b2e5c
-  classDef waiting fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4,color:#444444
+  classDef waiting fill:#f1ebfc,stroke:#6f42c1,stroke-width:2px,stroke-dasharray:6 3,color:#3b1f6e
   classDef failed fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
 ```
 

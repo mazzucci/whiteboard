@@ -131,6 +131,7 @@ function legendHtml(entries) {
 
 function select(i) {
   if (!diagrams.length) return
+  const shown = diagrams[current] && canvas.innerHTML ? { d: diagrams[current], nodes: nodesOnCanvas() } : null
   current = Math.max(0, Math.min(diagrams.length - 1, i))
   const d = diagrams[current]
   $('toolbar').hidden = false
@@ -143,7 +144,13 @@ function select(i) {
   $('legend').innerHTML = legendHtml(d.legend)
   $('source-code').textContent = d.source
   canvas.innerHTML = d.svg
-  if (!d.view) fit(d)
+  // A redraw of the diagram on screen keeps its zoom, and a box both share
+  // stays where it was: only what changed moves. Anything else is fitted.
+  const held = shown && shown.d !== d ? holdView(shown, nodesOnCanvas()) : null
+  if (held) {
+    d.view = held
+    apply()
+  } else if (!d.view) fit(d)
   else apply()
   renderTabs()
 }
@@ -155,6 +162,37 @@ function apply() {
   const { zoom, x, y } = d.view
   canvas.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`
   $('pct').textContent = `${Math.round(zoom * 100)}%`
+}
+
+/**
+ * The boxes of the diagram on the canvas, by node id, at their centres in the
+ * drawing's own units. Mermaid prefixes ids with the render and suffixes a
+ * counter; the id Claude wrote is in between.
+ */
+function nodesOnCanvas() {
+  const nodes = new Map()
+  for (const g of canvas.querySelectorAll('g.node[id]')) {
+    const id = g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '')
+    const at = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)/.exec(g.getAttribute('transform') ?? '')
+    if (at) nodes.set(id, { x: Number(at[1]), y: Number(at[2]) })
+  }
+  return nodes
+}
+
+/**
+ * The view that keeps a redraw in place: the same zoom, offset so the first
+ * box both diagrams share lands where it was. Null when they are not the same
+ * diagram (under 60% of their boxes in common) or the earlier one had no view.
+ */
+function holdView(shown, nodes) {
+  const before = shown.nodes
+  const view = shown.d.view
+  if (!view || !before.size || !nodes.size) return null
+  const common = [...nodes.keys()].filter(id => before.has(id))
+  if (common.length < 0.6 * Math.max(before.size, nodes.size)) return null
+  const a = before.get(common[0])
+  const b = nodes.get(common[0])
+  return { zoom: view.zoom, x: view.x + (a.x - b.x) * view.zoom, y: view.y + (a.y - b.y) * view.zoom, isFit: false }
 }
 
 /** Fits the whole diagram in the stage, never above 150%, centred. */
