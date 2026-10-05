@@ -1,9 +1,9 @@
-# Whiteboard for Claude Code: the plugin
+# Whiteboard: the plugin
 
 This folder is the plugin, and all that installing it copies. Open source
 (MIT), not affiliated with or endorsed by Anthropic. The project, with its
 install and usage guide, is at
-https://github.com/mazzucci/whiteboard-for-claude-code.
+https://github.com/mazzucci/whiteboard.
 
 - `hooks/`: the mod. It registers the `show_diagram` tool and the `/whiteboard`
   command, and draws the Whiteboard pane.
