@@ -47,7 +47,9 @@ function startBoard($: EngineInterface): Promise<Board> {
   const self: Promise<Board> = new Promise<Board>((resolve, reject) => {
     void (async () => {
       try {
-        const argv = [await nodePath($), `${$.plugin.root}/board/server.mjs`]
+        // Each session has its own board; its folder's name tells their tabs apart.
+        const folder = ((await $.env.get('PWD')) ?? '').split('/').filter(Boolean).at(-1)
+        const argv = [await nodePath($), `${$.plugin.root}/board/server.mjs`, ...(folder ? ['--label', folder] : [])]
         let buffer = ''
         let err = ''
         // The loop is the board's life: it ends with the child or the module.

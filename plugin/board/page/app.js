@@ -324,16 +324,56 @@ events.onopen = () => {
   $('stage-empty').hidden = false
   document.querySelectorAll('.msg').forEach(m => m.remove())
   waiting = 0
-  $('conn').classList.add('on')
-  $('conn-text').textContent = 'connected to the session'
+  setConnected(true)
   isReplaying = true
   // Replayed cards arrive at once; anything after a short pause is new.
   setTimeout(() => (isReplaying = false), 400)
 }
 events.onerror = () => {
-  if (isEnded) return
-  $('conn').classList.remove('on')
-  $('conn-text').textContent = 'session ended or reconnecting'
+  if (!isEnded) setConnected(false)
+}
+
+// ---------------------------------------------------------------- the connection
+//
+// Nothing can be sent while the session is out of reach. A short drop (sleep,
+// network) reconnects by itself; a session that ended or restarted cannot,
+// since its board is gone: after a few seconds the page says so, stays
+// readable, and keeps trying quietly in case it was only a long drop.
+
+const LOST_AFTER_MS = 8000
+let lostTimer = null
+
+function setConnected(isOn) {
+  $('conn').classList.toggle('on', isOn)
+  $('conn-text').textContent = isOn ? 'connected to the session' : $('lost') ? 'disconnected' : 'reconnecting…'
+  $('text').disabled = !isOn
+  document.querySelectorAll('.composer button').forEach(b => (b.disabled = !isOn))
+  if (isOn) {
+    clearTimeout(lostTimer)
+    lostTimer = null
+    $('lost')?.remove()
+    return
+  }
+  // No answer is coming while disconnected.
+  claudeState = 'idle'
+  waiting = 0
+  showTyping()
+  lostTimer ??= setTimeout(showLost, LOST_AFTER_MS)
+}
+
+function showLost() {
+  if (isEnded || $('lost')) return
+  $('conn-text').textContent = 'disconnected'
+  const banner = document.createElement('div')
+  banner.className = 'ended lost'
+  banner.id = 'lost'
+  banner.setAttribute('role', 'alert')
+  banner.innerHTML =
+    '<div><b>Lost the connection to Claude Code.</b> The session ended or restarted, so this page is read-only now; ' +
+    'everything on it stays here. To carry on, run <code>/whiteboard</code> in Claude Code: it opens a new page.</div>' +
+    '<div class="row"><span>Still trying to reconnect…</span><button type="button" id="dismiss">Dismiss</button></div>'
+  document.body.append(banner)
+  $('dismiss').onclick = () => banner.remove()
 }
 events.onmessage = e => {
   const card = JSON.parse(e.data)

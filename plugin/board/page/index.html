@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Whiteboard</title>
+<title>Whiteboard__LABEL__</title>
 <link rel="stylesheet" href="/app.css?t=__TOKEN__">
 </head>
 <body>
 <header class="top">
-  <h1>Whiteboard</h1>
+  <h1>Whiteboard<span class="label">__LABEL__</span></h1>
   <span class="conn" id="conn"><span class="dot"></span><span id="conn-text">connecting…</span></span>
 </header>
 <main class="layout">
@@ -43,11 +43,11 @@
       <div class="typing" id="typing" hidden><span class="dots"><i></i><i></i><i></i></span><span id="typing-text"></span></div>
     </div>
     <form class="composer" id="form">
-      <textarea id="text" rows="2" placeholder="Reply to Claude…"></textarea>
+      <textarea id="text" rows="2" placeholder="Reply to Claude…" disabled></textarea>
       <div class="actions">
         <span class="hint">Enter sends · Shift+Enter for a new line</span>
-        <button type="button" class="ghost" id="wrap">Wrap up</button>
-        <button type="submit" class="primary">Send</button>
+        <button type="button" class="ghost" id="wrap" disabled>Wrap up</button>
+        <button type="submit" class="primary" disabled>Send</button>
       </div>
     </form>
   </aside>

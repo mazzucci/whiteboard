@@ -3,7 +3,7 @@
 // diagrams and the person answers. One per session, started by the plugin.
 // Node's standard library only; Mermaid is vendored beside this file.
 //
-//   node server.mjs
+//   node server.mjs [--label <name>]   the label tells sessions' pages apart
 //
 // It listens on 127.0.0.1 only, on a free port, and every request needs the
 // random token. On stdout, one JSON line each:
@@ -33,6 +33,9 @@ const STATIC = {
   '/app.css': ['text/css', pageFile('app.css')],
 }
 const token = randomBytes(16).toString('hex')
+const labelAt = process.argv.indexOf('--label')
+const label = labelAt > 0 ? String(process.argv[labelAt + 1] ?? '').slice(0, 80) : ''
+const escapeHtml = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
 /** How long a post waits for a page to draw its diagram. */
 const DRAW_WAIT_MS = 10_000
@@ -215,4 +218,6 @@ const stop = () => process.exit(0)
 process.on('SIGTERM', stop)
 process.on('SIGINT', stop)
 
-const PAGE = pageFile('index.html').replaceAll('__TOKEN__', token)
+const PAGE = pageFile('index.html')
+  .replaceAll('__TOKEN__', token)
+  .replaceAll('__LABEL__', label ? ` · ${escapeHtml(label)}` : '')
