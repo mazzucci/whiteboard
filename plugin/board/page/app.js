@@ -153,6 +153,8 @@ function select(i) {
   } else if (!d.view) fit(d)
   else apply()
   renderStickies()
+  // Notes placed: a fitted view takes them in too.
+  if (d.view?.isFit && canvas.querySelector('.sticky')) fit(d)
   renderTabs()
 }
 
@@ -202,11 +204,28 @@ function fit(d = diagrams[current]) {
   const W = stage.clientWidth
   const H = stage.clientHeight
   const pad = 32
-  // Notes sit to the right of their boxes: leave room for them.
-  const w = d.w + (stickies.get(d.id)?.length ? 240 : 0)
-  const zoom = Math.max(0.05, Math.min((W - pad * 2) / w, (H - pad * 2) / d.h, 1.5))
-  d.view = { zoom, x: (W - w * zoom) / 2, y: Math.max(pad, (H - d.h * zoom) / 2), isFit: true }
+  // The diagram and the sticky notes beside it, all in view.
+  const e = extentOf(d)
+  const w = e.x1 - e.x0
+  const h = e.y1 - e.y0
+  const zoom = Math.max(0.05, Math.min((W - pad * 2) / w, (H - pad * 2) / h, 1.5))
+  d.view = { zoom, x: (W - w * zoom) / 2 - e.x0 * zoom, y: Math.max(pad, (H - h * zoom) / 2) - e.y0 * zoom, isFit: true }
   apply()
+}
+
+/** What a fit takes in, in the drawing's own pixels: the diagram and the notes drawn on it. */
+function extentOf(d) {
+  const e = { x0: 0, y0: 0, x1: d.w, y1: d.h }
+  if (diagrams[current] !== d) return e
+  for (const el of canvas.querySelectorAll('.sticky')) {
+    const x = parseFloat(el.style.left)
+    const y = parseFloat(el.style.top)
+    e.x0 = Math.min(e.x0, x)
+    e.y0 = Math.min(e.y0, y)
+    e.x1 = Math.max(e.x1, x + el.offsetWidth)
+    e.y1 = Math.max(e.y1, y + el.offsetHeight)
+  }
+  return e
 }
 
 /** Zooms by a factor around a point of the stage (its centre by default). */
@@ -313,9 +332,9 @@ async function add(card, isReplay) {
   if (card.kind === 'sticky') {
     pinned(card.diagram).push(card)
     if (diagrams[current]?.id === card.diagram) {
-      // A fitted diagram makes room for its first note.
-      if (diagrams[current].view?.isFit) fit()
       renderStickies()
+      // A fitted diagram makes room for its note.
+      if (diagrams[current].view?.isFit) fit()
     }
     // A note on an earlier diagram brings that diagram up.
     const d = diagrams.find(x => x.id === card.diagram)
@@ -490,14 +509,14 @@ stage.addEventListener(
   { passive: false },
 )
 
-// Keys, when not typing: arrows pan; i o f zoom; p n step; c the source.
+// Keys, when not typing: arrows pan; i o f zoom; [ ] step; c the source.
 document.addEventListener('keydown', e => {
   if ((e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]')) || e.metaKey || e.ctrlKey || e.altKey) return
   const step = 80
   const keys = {
     i: () => zoomBy(1.25), o: () => zoomBy(0.8), f: () => fit(),
     ArrowUp: () => panBy(0, step), ArrowDown: () => panBy(0, -step), ArrowLeft: () => panBy(step, 0), ArrowRight: () => panBy(-step, 0),
-    p: () => select(current - 1), n: () => select(current + 1), c: () => setCode(!isCode),
+    '[': () => select(current - 1), ']': () => select(current + 1), c: () => setCode(!isCode),
   }
   const act = keys[e.key]
   if (act && diagrams.length) {
@@ -615,8 +634,8 @@ function toCanvas(clientX, clientY) {
 }
 
 /**
- * Where a note on a box goes: beside it, in the first free place to its right,
- * below, left or above, clear of other boxes and notes; to the right if none is.
+ * Where a note on a box goes: just below it, or else in the first free place
+ * to its right, left or above, clear of other boxes and notes.
  */
 function placeOf(note, stack) {
   const g = boxOf(note.on)
@@ -627,10 +646,10 @@ function placeOf(note, stack) {
     const rects = obstacles(g)
     const gap = 12
     const tries = [
+      { x: (a.x + b.x - NOTE_W) / 2, y: b.y + gap },
       { x: b.x + gap, y: a.y - 6 },
-      { x: a.x, y: b.y + gap },
       { x: a.x - NOTE_W - gap, y: a.y - 6 },
-      { x: a.x, y: a.y - NOTE_H - gap },
+      { x: (a.x + b.x - NOTE_W) / 2, y: a.y - NOTE_H - gap },
     ]
     for (let shift = 0; shift < 4; shift++) {
       for (const t of tries) {
@@ -638,7 +657,7 @@ function placeOf(note, stack) {
         if (!overlaps(p, rects)) return p
       }
     }
-    return { x: b.x + gap, y: a.y - 6 + stack * (NOTE_H + 8) }
+    return { x: (a.x + b.x - NOTE_W) / 2, y: b.y + gap + stack * (NOTE_H + 8) }
   }
   if (Number.isFinite(note.x)) return { x: note.x, y: note.y }
   const d = diagrams[current]

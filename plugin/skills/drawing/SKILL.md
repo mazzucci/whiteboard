@@ -137,7 +137,7 @@ and edges after the existing ones, and change what a step means through its
 one version to the next: a placeholder as wide as the value it stands for
 (`? ms` rather than `…` for `3,400 ms`), since a wider box nudges its
 neighbours. The board keeps a redraw at the same zoom and place, so stepping
-through the diagrams (the tabs, or `p` and `n`) shows only what changed.
+through the diagrams (the tabs, or `[` and `]`) shows only what changed.
 
 Troubleshooting with it: draw the hypothesis first, every step `unverified`.
 As evidence arrives, redraw the same diagram (same title plus "step n", so the
