@@ -344,8 +344,6 @@ goes into your Claude Code session as your own words. So:
 - **Gone with the session.** The board keeps everything in memory and stops
   when the session ends or after Wrap up.
 
-Found a security problem? See [SECURITY.md](SECURITY.md).
-
 ## Limits
 
 - One board per session. Restarting Claude Code (or the plugin) ends it; the
@@ -378,7 +376,6 @@ investigation and the recording guide; `fixtures/` one diagram per type;
 ## Support
 
 Questions, bugs and ideas: [GitHub Issues](https://github.com/mazzucci/whiteboard/issues).
-Security problems: privately, as [SECURITY.md](SECURITY.md) explains.
 
 ## License
 
