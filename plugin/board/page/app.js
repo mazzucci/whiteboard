@@ -4,12 +4,26 @@
 // and the page tells the server how it drew, so errors reach Claude.
 'use strict'
 
-const token = new URLSearchParams(location.search).get('t')
+// The token arrives in the address the plugin opened; it then moves to this
+// tab's session storage and leaves the address bar (and the history), so it is
+// not shown, bookmarked or passed on. A reload finds it in the tab again.
+const token = (() => {
+  let t = new URLSearchParams(location.search).get('t')
+  try {
+    if (t) sessionStorage.setItem('board-token', t)
+    else t = sessionStorage.getItem('board-token')
+  } catch {
+    // No storage: the address keeps the token for this tab.
+    return t
+  }
+  if (location.search) history.replaceState(null, '', location.pathname)
+  return t
+})()
 const isDark = matchMedia('(prefers-color-scheme: dark)').matches
 const $ = id => document.getElementById(id)
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 const post = (path, body) =>
-  fetch(`${path}?t=${token}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-board-token': token }, body: JSON.stringify(body) })
 
 // ---------------------------------------------------------------- Markdown
 //
@@ -278,6 +292,8 @@ function natural(svgText) {
   const box = svg?.viewBox?.baseVal
   const w = box?.width || parseFloat(svg?.getAttribute('width')) || 800
   const h = box?.height || parseFloat(svg?.getAttribute('height')) || 600
+  // Mermaid's strict mode still draws `click … href` as a link: keep the text, drop the link.
+  for (const a of holder.querySelectorAll('a')) a.replaceWith(...a.childNodes)
   if (svg) {
     svg.setAttribute('width', String(w))
     svg.setAttribute('height', String(h))
@@ -473,8 +489,22 @@ events.onmessage = e => {
   const card = JSON.parse(e.data)
   // Status is now, not history: shown at once, not queued behind drawings.
   if (card.kind === 'status') {
-    claudeState = card.state
-    showTyping()
+    if (card.state === 'working') {
+      claudeState = 'working'
+      showTyping()
+      return
+    }
+    // A turn's end waits behind its cards, which may still be drawing.
+    queue = queue.then(() => {
+      // The turn ended with no answer on the board: Claude answered in the session.
+      if (claudeState === 'working' && waiting) {
+        const last = [...document.querySelectorAll('.msg.you .state')].pop()
+        if (last) last.textContent = 'Claude answered in the Claude Code conversation'
+        waiting = 0
+      }
+      claudeState = 'idle'
+      showTyping()
+    })
     return
   }
   const replay = isReplaying

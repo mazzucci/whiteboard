@@ -14,6 +14,8 @@
 //   GET  /            the page (page/index.html, app.js, app.css)
 //   GET  /mermaid.js  Mermaid, vendored (gzipped on disk, served as is)
 //   GET  /events      server-sent events: every card so far, then each new one
+//   (the page and its files load without the token; the rest needs it, in the
+//   x-board-token header, or ?t= for /events, and never from another site)
 //   POST /post        a card from the plugin; answers once the page has drawn it
 //                     { notes: [{ on?, text }] } with mermaid: Claude's sticky notes on
 //                     that diagram; without: pinned to the latest diagram
@@ -79,11 +81,15 @@ function readBody(req) {
     })
     req.on('end', () => {
       try {
-        resolve(JSON.parse(body || '{}'))
+        const value = JSON.parse(body || '{}')
+        // Only a JSON object is a request; null, arrays and numbers are not.
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('not an object')
+        resolve(value)
       } catch (err) {
         reject(err)
       }
     })
+    req.on('error', reject)
   })
 }
 
@@ -128,34 +134,54 @@ function drawn(id) {
   })
 }
 
-const server = createServer(async (req, res) => {
+// A request that goes wrong is answered with an error, never takes the board down.
+const server = createServer((req, res) =>
+  handle(req, res).catch(() => {
+    try {
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' })
+      res.end('{"error":"failed"}')
+    } catch {
+      // The connection is gone.
+    }
+  }),
+)
+
+const SECURITY_HEADERS = {
+  'content-security-policy':
+    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; connect-src 'self'; " +
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  'referrer-policy': 'no-referrer',
+  'x-content-type-options': 'nosniff',
+}
+
+async function handle(req, res) {
   const url = new URL(req.url, 'http://127.0.0.1')
-  // Loopback only, and only this server's own host name: a page elsewhere
-  // that guesses the port (or rebinds a DNS name to 127.0.0.1) gets nothing.
-  const host = req.headers.host ?? ''
-  const isLocalHost = host === `127.0.0.1:${port}` || host === `localhost:${port}`
-  const given = url.searchParams.get('t') ?? req.headers['x-board-token']
-  if (!isLocalHost || given !== token) {
-    res.writeHead(403).end()
-    return
-  }
   const reply = (status, type, body, headers = {}) => {
-    res.writeHead(status, {
-      'content-type': type,
-      'cache-control': 'no-store',
-      'content-security-policy':
-        "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; connect-src 'self'",
-      ...headers,
-    })
+    res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', ...SECURITY_HEADERS, ...headers })
     res.end(body)
   }
   const json = (status, value) => reply(status, 'application/json', JSON.stringify(value))
+  // Loopback only, and only this server's own host name: a page elsewhere
+  // that guesses the port (or rebinds a DNS name to 127.0.0.1) gets nothing.
+  const host = req.headers.host ?? ''
+  const origins = [`http://127.0.0.1:${port}`, `http://localhost:${port}`]
+  if (!origins.includes(`http://${host}`)) return json(403, { error: 'forbidden' })
 
+  // The page itself holds no secret: it loads without the token, so the token
+  // can leave the address bar once the page has it.
   if (req.method === 'GET' && url.pathname === '/') return reply(200, 'text/html; charset=utf-8', PAGE)
   if (req.method === 'GET' && STATIC[url.pathname]) return reply(200, ...STATIC[url.pathname])
   if (req.method === 'GET' && url.pathname === '/mermaid.js') {
     return reply(200, 'text/javascript', mermaidGz, { 'content-encoding': 'gzip', 'cache-control': 'private, max-age=86400' })
   }
+
+  // Everything else needs the token, and comes from this page or the plugin,
+  // never from another site, even one that has the token.
+  const given = req.headers['x-board-token'] ?? (req.method === 'GET' ? url.searchParams.get('t') : null)
+  const origin = req.headers.origin
+  const site = req.headers['sec-fetch-site']
+  const isOtherSite = (origin !== undefined && !origins.includes(origin)) || (site !== undefined && site !== 'same-origin' && site !== 'none')
+  if (given !== token || isOtherSite) return json(403, { error: 'forbidden' })
   if (req.method === 'GET' && url.pathname === '/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
     for (const card of cards) res.write(`data: ${JSON.stringify(card)}\n\n`)
@@ -165,6 +191,7 @@ const server = createServer(async (req, res) => {
     return
   }
   if (req.method !== 'POST' || !['/post', '/say', '/rendered'].includes(url.pathname)) return json(404, { error: 'not found' })
+  if (!/^application\/json\b/.test(req.headers['content-type'] ?? '')) return json(415, { error: 'JSON only' })
 
   let input
   try {
@@ -223,7 +250,7 @@ const server = createServer(async (req, res) => {
   const outcome = await drawn(card.id)
   if (outcome.error) withdraw(card.id)
   return json(200, { ok: !outcome.error, id: card.id, viewers: listeners.size, ...outcome })
-})
+}
 
 let port = 0
 server.listen(0, '127.0.0.1', () => {
@@ -240,5 +267,4 @@ process.on('SIGTERM', stop)
 process.on('SIGINT', stop)
 
 const PAGE = pageFile('index.html')
-  .replaceAll('__TOKEN__', token)
   .replaceAll('__LABEL__', label ? ` · ${escapeHtml(label)}` : '')

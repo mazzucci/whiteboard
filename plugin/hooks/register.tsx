@@ -48,11 +48,71 @@ let board: Promise<Board> | null = null
 
 /** The node binary: on PATH, or where installers put it when the app's PATH is thin. */
 async function nodePath($: EngineInterface): Promise<string> {
-  const dirs = ((await $.env.get('PATH')) ?? '').split(':').filter(Boolean)
-  for (const dir of [...dirs, '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']) {
-    if (await $.fs.exists(`${dir}/node`)) return `${dir}/node`
+  nodeFound ??= findNode($).catch(error => {
+    nodeFound = null
+    throw error
+  })
+  return nodeFound
+}
+let nodeFound: Promise<string> | null = null
+
+const NODE_MAJOR = 18
+
+/** The first node 18 or later: on PATH, where installers put it, then where version managers do. */
+async function findNode($: EngineInterface): Promise<string> {
+  const home = (await $.env.get('HOME')) ?? ''
+  const dirs = [
+    ...((await $.env.get('PATH')) ?? '').split(':').filter(Boolean),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    ...(await managedNodeDirs($, home)),
+  ]
+  let tooOld = ''
+  for (const dir of [...new Set(dirs)]) {
+    const node = `${dir}/node`
+    if (!(await $.fs.exists(node))) continue
+    const version = await nodeVersion($, node)
+    if (version.major >= NODE_MAJOR) return node
+    tooOld ||= `${node} is ${version.text || 'an unknown version'}`
   }
-  throw new Error('Node.js was not found. The whiteboard runs a small local server with it: install Node.js 18 or later (nodejs.org).')
+  throw new Error(
+    tooOld
+      ? `The whiteboard needs Node.js ${NODE_MAJOR} or later; ${tooOld}. Install a newer one (nodejs.org, or your version manager).`
+      : `Node.js was not found. The whiteboard runs a small local server with it: install Node.js ${NODE_MAJOR} or later (nodejs.org).`,
+  )
+}
+
+/** Where nvm, volta, fnm, asdf and mise keep node, newest nvm version first. */
+async function managedNodeDirs($: EngineInterface, home: string): Promise<string[]> {
+  if (!home) return []
+  const dirs = [
+    `${home}/.volta/bin`,
+    `${home}/.asdf/shims`,
+    `${home}/.local/share/mise/shims`,
+    `${home}/.fnm/aliases/default/bin`,
+    `${home}/.local/share/fnm/aliases/default/bin`,
+    `${home}/Library/Application Support/fnm/aliases/default/bin`,
+  ]
+  try {
+    const versions = (await $.fs.list(`${home}/.nvm/versions/node`))
+      .filter(e => e.kind === 'dir' && /^v\d+/.test(e.name))
+      .map(e => e.name)
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+    dirs.unshift(...versions.map(v => `${home}/.nvm/versions/node/${v}/bin`))
+  } catch {
+    // No nvm.
+  }
+  return dirs
+}
+
+async function nodeVersion($: EngineInterface, node: string): Promise<{ major: number; text: string }> {
+  try {
+    const text = (await $.process.run([node, '--version'])).stdout.trim()
+    return { major: Number(/^v(\d+)/.exec(text)?.[1] ?? 0), text }
+  } catch {
+    return { major: 0, text: '' }
+  }
 }
 
 /** Starts the board for this session; its stdout carries the person's messages. */
@@ -122,15 +182,24 @@ async function endBoard($: EngineInterface, text: string | undefined): Promise<b
  * say) cannot be submitted then: it waits here for the turn to complete.
  */
 const said: string[] = []
-async function deliver($: EngineInterface) {
-  while (said.length) {
+let delivering: Promise<void> | null = null
+/** One delivery at a time: a second caller waits on the first, so nothing is submitted twice. */
+function deliver($: EngineInterface): Promise<void> {
+  delivering ??= (async () => {
     try {
-      await $.prompt.submit({ text: `(on the whiteboard) ${said[0]}`, asUser: true })
-    } catch {
-      return
+      while (said.length) {
+        try {
+          await $.prompt.submit({ text: `(on the whiteboard) ${said[0]}`, asUser: true })
+        } catch {
+          return
+        }
+        said.shift()
+      }
+    } finally {
+      delivering = null
     }
-    said.shift()
-  }
+  })()
+  return delivering
 }
 
 /** Tells an open board whether Claude is in a turn; nothing when no board is open. */
@@ -154,7 +223,28 @@ async function boardStatus($: EngineInterface, status: 'working' | 'idle') {
  */
 async function openInBrowser($: EngineInterface, url: string): Promise<boolean> {
   const chosen = ((await $.env.get('BROWSER')) ?? '').split(':')[0]?.trim()
-  const opener = chosen || ((await $.fs.exists('/usr/bin/open')) ? '/usr/bin/open' : 'xdg-open')
+  if (chosen) {
+    // A browser command may run until the browser quits: start it, never wait
+    // on it. `%s` stands for the URL, as in xdg-open's convention.
+    const parts = chosen.split(/\s+/).filter(Boolean)
+    const argv = parts.includes('%s') ? parts.map(p => (p === '%s' ? url : p)) : [...parts, url]
+    try {
+      const run = $.process.spawn({ argv })
+      void (async () => {
+        try {
+          for await (const _ of run) {
+            // The browser's output is of no interest.
+          }
+        } catch {
+          // It failed to start or ended badly: the page is still at its URL.
+        }
+      })()
+      return true
+    } catch {
+      return false
+    }
+  }
+  const opener = (await $.fs.exists('/usr/bin/open')) ? '/usr/bin/open' : 'xdg-open'
   try {
     return (await $.process.run([opener, url])).exitCode === 0
   } catch {
@@ -275,8 +365,9 @@ export const register: Register = on => {
         'diagram becomes a tab, so a sequence of posts tells a story. Before drawing, read the whiteboard:drawing ' +
         'skill. The first post opens the page in the browser. If Mermaid rejects the source, the call fails with ' +
         'its error and the card is taken off the page: fix the source and post again. ' +
-        'Sticky notes (`sticky_notes`) pin a short note beside a box (`on`: its node id in the Mermaid source) ' +
-        'without changing the diagram: use one for a proposal, a question or an aside. Whenever you have a fix or a ' +
+        'Sticky notes (`sticky_notes`) add a short note without changing the diagram: a proposal, a question or ' +
+        'an aside. With `on` (a node id in the Mermaid source) a note sits beside that flowchart box; in other ' +
+        'diagram types, or without `on`, notes line up beside the diagram. Whenever you have a fix or a ' +
         'change to propose, pin it as a sticky note on the box it changes and ask on the board (in `text`) whether ' +
         'the user wants to see it; redraw the diagram with the change only once they say so. With a `mermaid` notes ' +
         'go on that diagram; without one, on the latest diagram. ' +
@@ -296,7 +387,7 @@ export const register: Register = on => {
             items: {
               type: 'object',
               properties: {
-                on: { type: 'string', description: 'The node id of the box it is about, as written in the Mermaid source' },
+                on: { type: 'string', description: 'The node id of the flowchart box it is about, as written in the Mermaid source' },
                 text: { type: 'string', description: 'The note: a line or two of inline Markdown' },
               },
               required: ['text'],

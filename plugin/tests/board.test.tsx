@@ -25,6 +25,15 @@ function host(
     /** Holds the board's messages back until this resolves. */
     sayAfter?: Promise<void>
     page?: (body: Record<string, unknown>) => Posted
+    /** `node --version`'s answer. */
+    nodeVersion?: string
+    env?: Record<string, string>
+    /** Directories that exist, as `$.fs.list` answers them. */
+    dirs?: Record<string, string[]>
+    /** Extra paths that exist. */
+    paths?: string[]
+    /** How long a prompt takes to be submitted. */
+    submitMs?: number
   } = {},
 ) {
   const spawned: string[][] = []
@@ -33,13 +42,30 @@ function host(
   const prompts: { text: string; asUser?: boolean }[] = []
   const boards: (() => void)[] = []
   on('session.surfaces', () => ({ value: options.surfaces ?? ['terminal'] }))
-  on('env.get', (_$, e) => ({ value: e.name === 'PATH' ? '/usr/local/bin' : undefined }))
-  on('fs.exists', (_$, e) => ({ value: e.path === '/usr/bin/open' || (e.path === '/usr/local/bin/node' && options.hasNode !== false) }))
+  const env: Record<string, string> = { PATH: '/usr/local/bin', HOME: '/Users/someone', ...options.env }
+  on('env.get', (_$, e) => ({ value: env[e.name] }))
+  on('fs.exists', (_$, e) => ({
+    value:
+      e.path === '/usr/bin/open' ||
+      (e.path === '/usr/local/bin/node' && options.hasNode !== false) ||
+      (options.paths ?? []).includes(e.path),
+  }))
+  on('fs.list', (_$, e) => {
+    const names = options.dirs?.[String(e.path)]
+    if (!names) throw new Error('ENOENT')
+    return { value: names.map(name => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })) }
+  })
   on('process.run', (_$, e) => {
+    if (e.argv[1] === '--version') return { value: { exitCode: 0, stdout: `${options.nodeVersion ?? 'v22.12.0'}\n`, stderr: '' } }
     opened.push(String(e.argv[1]))
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
   on('process.spawn', async function* (_$, e) {
+    // A browser started through $BROWSER: recorded, and done at once.
+    if (!String(e.argv[1] ?? '').endsWith('server.mjs')) {
+      opened.push(`spawn:${e.argv.join(' ')}`)
+      return { value: { code: 0, signal: null } }
+    }
     spawned.push([...e.argv])
     const alive = new Promise<void>(resolve => boards.push(resolve))
     yield { stream: 'stdout' as const, text: `${JSON.stringify({ ...READY, port: READY.port + spawned.length - 1 })}\n` }
@@ -56,8 +82,9 @@ function host(
     const posted = options.page?.(body) ?? { ok: true, viewers: 1, drawn: true }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(posted) } }
   })
-  on('prompt.submit', (_$, e) => {
+  on('prompt.submit', async (_$, e) => {
     prompts.push({ text: e.text })
+    if (options.submitMs) await new Promise(resolve => setTimeout(resolve, options.submitMs))
     return { text: e.text }
   })
   return { spawned, opened, posts, prompts, stop: () => boards.splice(0).forEach(end => end()) }
@@ -202,5 +229,44 @@ test('sticky notes go with a diagram, or on the latest one; with no diagram yet,
   const later = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', sticky_notes: [{ on: 'db', text: 'Proposal: an index' }, { text: '' }] })
   expect(said(later)).toContain('Posted')
   expect(posts[2]?.notes).toEqual([{ on: 'db', text: 'Proposal: an index' }])
+  stop()
+})
+
+test('a message is submitted once, even when two deliveries start together', async ($, on) => {
+  const { prompts, stop } = host(on, { says: ['first', 'second'], submitMs: 30 })
+  on('turn.complete', () => ({ text: '' }))
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  // The turn ends while the first submission is still on its way.
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' } as never)
+  await new Promise<void>(resolve => setTimeout(resolve, 150))
+  expect(prompts.map(p => p.text)).toEqual(['(on the whiteboard) first', '(on the whiteboard) second'])
+  stop()
+})
+
+test('node from nvm is found when the PATH has none, newest version first', async ($, on) => {
+  const nvm = '/Users/someone/.nvm/versions/node'
+  const { spawned, stop } = host(on, {
+    hasNode: false,
+    dirs: { [nvm]: ['v20.11.1', 'v22.3.0', 'v18.20.4'] },
+    paths: [`${nvm}/v22.3.0/bin/node`, `${nvm}/v20.11.1/bin/node`],
+  })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  expect(spawned[0]?.[0]).toBe(`${nvm}/v22.3.0/bin/node`)
+  stop()
+})
+
+test('a node older than 18 is named, with what to install', async ($, on) => {
+  host(on, { nodeVersion: 'v16.20.2' })
+  const shown = said(await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'x' }))
+  expect(shown).toContain('needs Node.js 18 or later')
+  expect(shown).toContain('v16.20.2')
+})
+
+test('$BROWSER opens the board without being waited on, %s standing for the URL', async ($, on) => {
+  const { opened, stop } = host(on, { env: { BROWSER: 'firefox --new-tab %s' } })
+  const shown = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  expect(said(shown)).toContain('which just opened in the browser')
+  expect(opened).toEqual([`spawn:firefox --new-tab ${READY.url}`])
   stop()
 })
