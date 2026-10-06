@@ -21,6 +21,19 @@ const SAMPLE: Doc = {
   api -. order placed .-> mail[Email service]`,
 }
 
+/**
+ * Said to Claude once, with the session's first prompt: plugin tools may be
+ * loaded only when Claude looks for one, so without this a plain "how does
+ * OAuth work?" gets prose and no picture.
+ */
+const INTRO =
+  `The whiteboard plugin is available: ${TOOL} draws Mermaid diagrams and notes on a page in the user's browser ` +
+  'beside this conversation. Use it whenever a picture explains better than prose, in this project or not: how a ' +
+  'protocol, standard or system works (OAuth, TLS, DNS), architecture, request flows, sequences, state machines, ' +
+  'schemas, an investigation. Draw first, then keep your written answer short and point at the board. Read the ' +
+  'whiteboard:drawing skill before the first diagram.'
+let isIntroduced = false
+
 /** What Claude is told when the person asks to discuss on the board. */
 const FOCUS_NOTE =
   'Focus mode is on: the person is discussing on the whiteboard page, not in this conversation. Messages from them ' +
@@ -254,10 +267,12 @@ export const register: Register = on => {
       description:
         "Post to the whiteboard: a page in the user's browser beside this conversation, where you draw and they " +
         'can answer. A card is a Mermaid diagram, a short Markdown note (paragraphs, bullets, **bold**, `code`), ' +
-        'or both. Draw whenever a picture explains code or a system better than prose: architecture, data flow, ' +
-        'call sequences, state machines, schemas. Any Mermaid 12 diagram type works, with classDef, themes and ' +
-        'front-matter config; the page has browser zoom and scrolling, so size is not a problem. Each post adds a ' +
-        'card below the last, so a sequence of posts tells a story. Before drawing, read the whiteboard:drawing ' +
+        'or both. Draw whenever a picture explains something better than prose, in this project or not: how a ' +
+        'protocol, standard or system works (OAuth, TLS, DNS, a consensus algorithm), architecture, data flow, call ' +
+        'sequences, state machines, schemas. A "how does X work?" question is one: draw the flow, and keep your ' +
+        'answer in the conversation short, pointing at the board. Any Mermaid 12 diagram type works, with ' +
+        'classDef, themes and front-matter config; the page has zoom and panning, so size is not a problem. Each ' +
+        'diagram becomes a tab, so a sequence of posts tells a story. Before drawing, read the whiteboard:drawing ' +
         'skill. The first post opens the page in the browser. If Mermaid rejects the source, the call fails with ' +
         'its error and the card is taken off the page: fix the source and post again. ' +
         'Sticky notes (`sticky_notes`) pin a short note beside a box (`on`: its node id in the Mermaid source) ' +
@@ -312,6 +327,20 @@ export const register: Register = on => {
       },
     })
     return next(e)
+  })
+
+  // Never in the way of the prompt: anything going wrong here sends it on as typed.
+  on('prompt.submit', async ($, e, next) => {
+    if (isIntroduced) return next(e)
+    let hasScreen = false
+    try {
+      hasScreen = (await $.session.surfaces()).length > 0
+    } catch {
+      // Unknown: say nothing this time.
+    }
+    if (!hasScreen) return next(e)
+    isIntroduced = true
+    return next({ ...e, context: [...(e.context ?? []), INTRO] })
   })
 
   // The page shows whether Claude is working, so a message sent there is

@@ -632,7 +632,8 @@ const NOTE_H = 82
 function obstacles(except) {
   const rects = []
   for (const g of canvas.querySelectorAll('g.node, .sticky')) {
-    if (g === except) continue
+    // Itself (a note still being measured) is no obstacle.
+    if (g === except || g.style.visibility === 'hidden') continue
     const r = g.getBoundingClientRect()
     const a = toCanvas(r.left, r.top)
     const b = toCanvas(r.right, r.bottom)
@@ -640,7 +641,7 @@ function obstacles(except) {
   }
   return rects
 }
-const overlaps = (p, rects) => rects.some(r => p.x < r.x + r.w && p.x + NOTE_W > r.x && p.y < r.y + r.h && p.y + NOTE_H > r.y)
+const overlaps = (p, rects, h = NOTE_H) => rects.some(r => p.x < r.x + r.w && p.x + NOTE_W > r.x && p.y < r.y + r.h && p.y + h > r.y)
 
 /** A point on the canvas, in the drawing's own pixels, from a point on screen. */
 function toCanvas(clientX, clientY) {
@@ -654,7 +655,7 @@ function toCanvas(clientX, clientY) {
  * to its right, left or above, clear of other boxes and notes; failing that,
  * below the diagram.
  */
-function placeOf(note, stack) {
+function placeOf(note, stack, h = NOTE_H) {
   const g = boxOf(note.on)
   if (g) {
     const r = g.getBoundingClientRect()
@@ -666,12 +667,12 @@ function placeOf(note, stack) {
       { x: (a.x + b.x - NOTE_W) / 2, y: b.y + gap },
       { x: b.x + gap, y: a.y - 6 },
       { x: a.x - NOTE_W - gap, y: a.y - 6 },
-      { x: (a.x + b.x - NOTE_W) / 2, y: a.y - NOTE_H - gap },
+      { x: (a.x + b.x - NOTE_W) / 2, y: a.y - h - gap },
     ]
     for (let shift = 0; shift < 4; shift++) {
       for (const t of tries) {
-        const p = { x: t.x, y: t.y + shift * (NOTE_H + 8) }
-        if (!overlaps(p, rects)) return p
+        const p = { x: t.x, y: t.y + shift * (h + 8) }
+        if (!overlaps(p, rects, h)) return p
       }
     }
     // Nowhere free beside it: below the whole diagram, under its box, where it
@@ -689,16 +690,29 @@ function renderStickies() {
   const d = diagrams[current]
   if (!d) return
   const perBox = new Map()
+  // Notes on no box line up in a column beside the diagram, each below the last.
+  let column = 8
   for (const note of stickies.get(d.id) ?? []) {
-    const key = note.on ?? (Number.isFinite(note.x) ? `${note.x},${note.y}` : '')
-    const stack = perBox.get(key) ?? 0
-    perBox.set(key, stack + 1)
-    const { x, y } = placeOf(note, stack)
     const el = document.createElement('div')
     el.className = 'sticky'
-    el.style.left = `${x}px`
-    el.style.top = `${y}px`
+    el.style.visibility = 'hidden'
     el.innerHTML = `<div class="by">Sticky note · Claude</div><div class="md">${inline(note.text)}</div>`
     canvas.append(el)
+    // Placed by its real height, so long notes never overlap.
+    const h = el.offsetHeight
+    let at
+    if (boxOf(note.on)) {
+      const stack = perBox.get(note.on) ?? 0
+      perBox.set(note.on, stack + 1)
+      at = placeOf(note, stack, h)
+    } else if (Number.isFinite(note.x)) {
+      at = { x: note.x, y: note.y }
+    } else {
+      at = { x: d.w + 14, y: column }
+      column += h + 12
+    }
+    el.style.left = `${at.x}px`
+    el.style.top = `${at.y}px`
+    el.style.visibility = ''
   }
 }

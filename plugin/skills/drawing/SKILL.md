@@ -1,16 +1,20 @@
 ---
 name: drawing
-description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
+description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser, also to answer 'how does X work?' questions about protocols and systems outside the project. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
 ---
 
 # Drawing on the whiteboard
 
 `post_to_board` draws Mermaid on the whiteboard, a page in the person's
-browser beside the conversation. Each call adds a card below the last, so a
-sequence of calls tells a story. Draw when a picture explains structure, flow or state better than
-prose: several services or modules, a flow with branches or retries, state
-transitions, a risky change. Not for a routine edit, where a diagram is
-decoration. Answer in prose as well, briefly, and let the diagram carry the
+browser beside the conversation. Each diagram becomes a tab, so a sequence of
+calls tells a story. Draw when a picture explains structure, flow or state
+better than prose: several services or modules, a flow with branches or
+retries, state transitions, a risky change, or how a protocol or standard
+works (OAuth, TLS, DNS), even with no code in sight. For such a question, a
+sequence diagram of the flow does most of the talking; put the gotchas (PKCE,
+the `state` parameter) on sticky notes without `on`, which line up beside a
+sequence diagram, or as `Note over` lines inside it. Not for a routine edit,
+where a diagram is decoration. Answer in prose as well, briefly, and let the diagram carry the
 detail.
 
 A polished diagram makes a guess look like a fact. Draw only what you know, and
