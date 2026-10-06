@@ -21,6 +21,15 @@ beside them.
 > **Experimental.** Built on Claude Code's mods, which are new and may change
 > between releases. Tested in macOS Terminal with Claude Code 2.1.289.
 
+## Why a whiteboard?
+
+The same question to Claude Code, without and with the whiteboard: "How does
+OAuth work?", then a follow-up asked on the board.
+
+![Without the whiteboard, Claude Code answers "How does OAuth work?" with a long text answer in the terminal. With it, Claude calls the whiteboard from the same terminal session, draws the OAuth flow as a sequence diagram with sticky notes in the browser, and answers a follow-up typed on the board, which arrives in the terminal session, with a second diagram](media/whiteboard-before-after.gif)
+
+<sub>Both halves are real Claude Code sessions. "Without" is snapshots of the Terminal window as the answer streamed in; "with" is a recording of the board, with snapshots of the same session's Terminal, and the follow-up typed by a script standing in for the user.</sub>
+
 ## What it does
 
 The whiteboard is a visual companion to the conversation. Claude puts a picture
@@ -290,8 +299,8 @@ claude plugin test plugin
 `board/vendor/`), the drawing skill (`skills/`) and the tests. The rest of the
 repository is the project around it: `demo/` holds the simulated checkout
 investigation and a walkthrough with reference diagrams; `fixtures/` one
-diagram per type; `media/` the README's GIF, the scripts that record and edit
-it (`media/board-demo/`, see `demo/RECORDING.md`) and the 0.1 explainer
+diagram per type; `media/` the README's GIFs, the scripts that record and edit
+them (`media/board-demo/`, see `demo/RECORDING.md`) and the 0.1 explainer
 video's sources.
 
 ## License

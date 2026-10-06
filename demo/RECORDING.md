@@ -39,6 +39,15 @@ Check the take before editing: the sticky note should sit by
 terminal), and the proposal should be lavender. Claude draws a little
 differently each time; three to five takes are normal.
 
+## The before/after GIF
+
+The same idea with `media/board-demo/recorder-qa.mjs`, which asks a
+follow-up on the board instead of answering a proposal, and
+`media/board-demo/compare.py`, which puts plain Claude Code (snapshots of its
+Terminal window, without the plugin) before the board recording, with three
+snapshots of the board session's own Terminal: Claude calling the whiteboard,
+the board opened, and the follow-up arriving in the session.
+
 ## The edit
 
 ```bash

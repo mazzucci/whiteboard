@@ -1,13 +1,16 @@
 # Edits the before/after demo: the same question to Claude Code without the
 # whiteboard (snapshots of the real Terminal window, in order) and with it (a
-# board recording by recorder-qa.mjs). Writes an MP4 and a GIF.
-# Needs Python 3 with Pillow, and ffmpeg.
+# board recording by recorder-qa.mjs), with snapshots of that session's
+# Terminal window too, so it is plain the board is Claude Code's, not an app
+# of its own: 1-calling.jpg (Claude calls the tool), 2-drawn.jpg (the board
+# opened), 3-followup.jpg (the follow-up typed on the board, arriving in the
+# session). Writes an MP4 and a GIF. Needs Python 3 with Pillow, and ffmpeg.
 #
-#   python3 media/board-demo/compare.py <before frames dir> <board recording dir> <out dir>
+#   python3 media/board-demo/compare.py <before frames dir> <board recording dir> <terminal dir> <out dir>
 import json, os, subprocess, sys
 from PIL import Image, ImageDraw, ImageFont
 
-BEFORE, REC, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
+BEFORE, REC, TERM, OUT = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 FF = '/usr/local/bin/ffmpeg'
 TMP = f'{OUT}/tmp-compare'
 os.makedirs(TMP, exist_ok=True)
@@ -40,18 +43,22 @@ card([('How does OAuth work?', 64, INK, 0.40, 'Semibold'),
       ('The same question to Claude Code, without and with the whiteboard.', 30, MUTED, 0.51, 'Regular'),
       ('Whiteboard · open source · not affiliated with Anthropic', 20, MUTED, 0.9, 'Regular')], f'{TMP}/title.png')
 
-# 2. Without: each snapshot of the Terminal window, centred on the stage, with its caption.
+def terminal_frame(src, caption, out):
+    """A snapshot of the Terminal window, centred on the stage, with its caption."""
+    im = Image.open(src).convert('RGB')
+    scale = min((W - 80) / im.width, (H - 60) / im.height)
+    im = im.resize((round(im.width * scale), round(im.height * scale)), Image.LANCZOS)
+    frame = Image.new('RGB', (W, H + BAR), TERM_BG)
+    frame.paste(im, ((W - im.width) // 2, (H - im.height) // 2))
+    frame.paste(caption, (0, H))
+    frame.save(out)
+
+# 2. Without: each snapshot of the Terminal window.
 caption = bar('Without the whiteboard: the answer scrolls by as text', None)
 snaps = sorted(os.listdir(BEFORE))
 with open(f'{TMP}/before.txt', 'w') as f:
     for i, name in enumerate(snaps):
-        im = Image.open(f'{BEFORE}/{name}').convert('RGB')
-        scale = min((W - 80) / im.width, (H - 60) / im.height)
-        im = im.resize((round(im.width * scale), round(im.height * scale)), Image.LANCZOS)
-        frame = Image.new('RGB', (W, H + BAR), TERM_BG)
-        frame.paste(im, ((W - im.width) // 2, (H - im.height) // 2))
-        frame.paste(caption, (0, H))
-        frame.save(f'{TMP}/before-{i:02d}.png')
+        terminal_frame(f'{BEFORE}/{name}', caption, f'{TMP}/before-{i:02d}.png')
         hold = 2.4 if i == 0 else 3.5 if i == len(snaps) - 1 else 0.75
         f.write(f"file '{TMP}/before-{i:02d}.png'\nduration {hold}\n")
     f.write(f"file '{TMP}/before-{len(snaps) - 1:02d}.png'\n")
@@ -78,7 +85,7 @@ SEGMENTS = [
 ]
 CAPTIONS = [
     (0.0, at('asked follow-up'), 'The flow, drawn, with the gotchas pinned beside it'),
-    (at('asked follow-up'), at('second answer') + 1.0, 'A follow-up typed on the board gets its own diagram'),
+    (at('asked follow-up'), at('second answer') + 1.0, 'A follow-up asked on the board gets its own diagram'),
     (at('second answer') + 1.0, end, 'Both stay a click apart'),
 ]
 def out_time(t):
@@ -111,10 +118,26 @@ def still(png, seconds, out):
                     '-c:v', 'libx264', '-crf', '18', out], check=True)
 still(f'{TMP}/title.png', 2.4, f'{TMP}/title.mp4')
 still(f'{TMP}/with.png', 1.8, f'{TMP}/with-card.mp4')
+
+# The session's Terminal: Claude calling the whiteboard, then the board open.
+calling = bar('In Claude Code, Claude draws on the whiteboard: a page it opens in your browser', None)
+terminal_frame(f'{TERM}/1-calling.jpg', calling, f'{TMP}/term-1.png')
+terminal_frame(f'{TERM}/2-drawn.jpg', calling, f'{TMP}/term-2.png')
+with open(f'{TMP}/term-intro.txt', 'w') as f:
+    f.write(f"file '{TMP}/term-1.png'\nduration 1.6\nfile '{TMP}/term-2.png'\nduration 2.8\nfile '{TMP}/term-2.png'\n")
+subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', f'{TMP}/term-intro.txt',
+                '-vf', 'fps=30,format=yuv420p,setsar=1', '-c:v', 'libx264', '-crf', '18', f'{TMP}/term-intro.mp4'], check=True)
+# The follow-up typed on the board, arriving in the same session.
+terminal_frame(f'{TERM}/3-followup.jpg', bar('What you type on the board arrives in the same Claude Code session', None), f'{TMP}/term-3.png')
+still(f'{TMP}/term-3.png', 3.2, f'{TMP}/term-followup.mp4')
+# The board, cut where the follow-up has just been sent.
+cut = out_time(at('asked follow-up') + 1.2)
+subprocess.run([FF, '-y', '-loglevel', 'error', '-i', f'{TMP}/with.mp4', '-t', f'{cut:.3f}', '-c:v', 'libx264', '-crf', '18', f'{TMP}/with-1.mp4'], check=True)
+subprocess.run([FF, '-y', '-loglevel', 'error', '-ss', f'{cut:.3f}', '-i', f'{TMP}/with.mp4', '-c:v', 'libx264', '-crf', '18', f'{TMP}/with-2.mp4'], check=True)
 subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', f'{TMP}/before.txt',
                 '-vf', 'fps=30,format=yuv420p,setsar=1', '-c:v', 'libx264', '-crf', '18', f'{TMP}/before.mp4'], check=True)
 with open(f'{TMP}/all.txt', 'w') as f:
-    for part in ('title', 'before', 'with-card', 'with'):
+    for part in ('title', 'before', 'with-card', 'term-intro', 'with-1', 'term-followup', 'with-2'):
         f.write(f"file '{TMP}/{part}.mp4'\n")
 mp4 = f'{OUT}/whiteboard-before-after.mp4'
 subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', f'{TMP}/all.txt', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', mp4], check=True)
