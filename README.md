@@ -144,8 +144,11 @@ folder, nothing else. Add the repository as a marketplace, then install
   ```
 
   ```bash
-  claude plugin install whiteboard@whiteboard
+  claude plugin install whiteboard@mazzucci
   ```
+
+  `whiteboard@mazzucci` is the plugin `whiteboard` from the marketplace
+  `mazzucci`, the name this repository's plugin list goes by.
 
 Claude Code warns that this marketplace is not Anthropic's and that a plugin
 runs code on your machine. That is expected for a third-party plugin: see
@@ -156,10 +159,16 @@ board.
 
 To update, refresh the marketplace first so Claude Code sees the new version,
 then update the plugin and start a new session (desktop app: Settings, plugins
-section; terminal: `claude plugin marketplace update whiteboard`, then
-`claude plugin update whiteboard@whiteboard`). To uninstall:
-`claude plugin uninstall whiteboard@whiteboard`, and optionally
-`claude plugin marketplace remove whiteboard`.
+section; terminal: `claude plugin marketplace update mazzucci`, then
+`claude plugin update whiteboard@mazzucci`). To uninstall:
+`claude plugin uninstall whiteboard@mazzucci`, and optionally
+`claude plugin marketplace remove mazzucci`.
+
+**Installed as `whiteboard@whiteboard`?** The marketplace was called
+`whiteboard` until version 0.2.2. Your install keeps working and updating
+under that name (use `whiteboard` in place of `mazzucci` above). To move to
+the new name: `claude plugin marketplace remove whiteboard`, then add
+`mazzucci/whiteboard` again and install `whiteboard@mazzucci`.
 
 **Upgrading from 0.1?** Version 0.1 drew in a pane of the desktop app with a
 headless Chrome that `/whiteboard setup` downloaded into `~/.cache/whiteboard`.
@@ -189,9 +198,11 @@ these steps in order, and stop to tell them if one fails.
    their browser.
 3. **Install with Claude Code's plugin manager.** If `claude` is on the PATH,
    run `claude plugin marketplace add mazzucci/whiteboard`, then
-   `claude plugin install whiteboard@whiteboard`. If it is already installed,
-   update it instead with `claude plugin marketplace update whiteboard` and
-   `claude plugin update whiteboard@whiteboard`. If `claude` is not on the
+   `claude plugin install whiteboard@mazzucci`. If it is already installed,
+   update it instead with `claude plugin marketplace update mazzucci` and
+   `claude plugin update whiteboard@mazzucci` (an older install goes by
+   `whiteboard@whiteboard`: use `whiteboard` as the marketplace name in both
+   commands). If `claude` is not on the
    PATH (often the case for desktop app users), ask the person to add the
    marketplace `mazzucci/whiteboard` in the desktop app's Settings, plugins
    section, and install **whiteboard** from it.

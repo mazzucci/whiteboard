@@ -1,6 +1,6 @@
 {
-  "name": "whiteboard",
-  "description": "Open source, unofficial: a whiteboard beside the Claude Code conversation",
+  "name": "mazzucci",
+  "description": "Open source, unofficial Claude Code plugins by Stelian Matei",
   "owner": {
     "name": "Stelian Matei"
   },
