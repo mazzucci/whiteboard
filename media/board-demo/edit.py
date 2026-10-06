@@ -5,11 +5,12 @@
 #
 #   python3 media/board-demo/edit.py <recording dir> <out dir> [terminal dir]
 #
-# With a terminal dir (snapshots of the session's Terminal window during the
-# take, named <epoch ms>.jpg, and slides.json; see demo/RECORDING.md), the
-# demo shows where the board comes from: Claude Code calling the whiteboard,
-# an empty browser window, the page loading; and the summary landing back in
-# Claude Code at the end. WINDOW=1 shows the page in a plain browser window.
+# With a terminal dir (window-recorder.swift's frames of the session's
+# Terminal window, named <epoch ms>.jpg, and clips.json; see
+# demo/RECORDING.md), the demo shows where the board comes from: Claude Code
+# at work until it opens the whiteboard, then the board from its first
+# diagram; and after the wrap-up, the summary arriving in Claude Code.
+# WINDOW=1 shows the page in a plain browser window.
 import json, os, subprocess, sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -75,11 +76,10 @@ subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-
                 f'{TMP}/session.mp4'], check=True)
 
 # (from, to, speed) in session seconds: waits fast, what matters at 1x.
-# The page loading: "connecting", the empty board, the first diagram; slowed, so it is seen.
-LOAD = at('first diagram') + 0.3
+# With the Terminal before it, the board starts at its first diagram; on its own, as it opens.
+START = at('first diagram') + 0.2 if TERM else 0.0
 SEGMENTS = [
-    (0.0, LOAD, 0.3),
-    (LOAD, at('sticky note'), 1.4),             # step 1, then the trace arrives
+    (START, at('sticky note'), 1.4),            # step 1, then the trace arrives
     (at('sticky note'), at('said yes'), 1.0),   # the note, the question, the answer typed
     (at('said yes'), at('proposal drawn'), 3.0),  # Claude works on it
     (at('proposal drawn'), at('settled'), 1.3),
@@ -88,8 +88,7 @@ SEGMENTS = [
     (at('wrapped up'), end, 1.0),
 ]
 CAPTIONS = [
-    (0.0, LOAD, 'Claude draws on the whiteboard, a page it opens in your browser'),
-    (LOAD, at('sticky note'), 'Claude walks you through it, one diagram per step'),
+    (START, at('sticky note'), 'Claude walks you through it, one diagram per step'),
     (at('sticky note'), at('said yes'), 'The trace shows the problem. The fix waits on a sticky note'),
     (at('said yes'), at('settled'), 'You answer on the board, and Claude draws the proposal'),
     (at('settled'), at('wrap up'), 'Zoom, pan, and step through the diagrams'),
@@ -100,6 +99,7 @@ CARD = 2.2 / SPEED
 
 def out_time(t):
     acc = 0.0
+    t = max(t, START)
     for a, b, s in SEGMENTS:
         if t <= a: return acc
         if t < b: return acc + (t - a) / s
@@ -145,41 +145,59 @@ subprocess.run([FF, '-y', '-loglevel', 'error', *inputs, '-filter_complex_script
                 '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '10', '-preset', 'slow', '-an', f'{OUT}/whiteboard-demo.mp4'], check=True)
 
 
-def redact(im):
-    """Blurs a Terminal snapshot's title bar (the user's name) and, while the banner's mascot shows, its account and path lines."""
-    boxes = [(0, 0, im.width, 32)]
-    r, g, b = im.getpixel((40, 70))[:3]
+def redact(im, k):
+    """
+    Blurs a Terminal frame's title bar (the user's name) and, while the
+    banner's mascot shows, its account and path lines. k: pixels per point.
+    """
+    box = lambda *b: tuple(round(v * k) for v in b)
+    boxes = [box(0, 0, im.width / k, 32)]
+    r, g, b = im.getpixel(box(40, 70))[:3]
     if r > 180 and 90 < g < 150 and b < 120:
-        boxes.append((84, 52, min(im.width, 600), 102))
-    for box in boxes:
-        im.paste(im.crop(box).filter(ImageFilter.GaussianBlur(6)), box)
+        boxes.append(box(84, 52, 600, 102))
+    for b in boxes:
+        im.paste(im.crop(b).filter(ImageFilter.GaussianBlur(6 * k)), b)
     return im
 
-def terminal_still(im, slide, name):
-    """
-    A Terminal snapshot as a clip of its own: its title bar and the lines
-    from `crop` (y from, y to), enlarged to fit, the line at `mark` (y from,
-    y to) outlined, with its caption under it.
-    """
-    y0, y1 = slide.get('crop', (32, im.height))
-    win = Image.new('RGB', (im.width, 32 + y1 - y0))
-    win.paste(im.crop((0, 0, im.width, 32)), (0, 0))
-    win.paste(im.crop((0, y0, im.width, y1)), (0, 32))
-    if 'mark' in slide:
-        m0, m1 = slide['mark']
-        ImageDraw.Draw(win).rounded_rectangle((6, 32 + m0 - y0 - 4, im.width - 6, 32 + m1 - y0 + 4), radius=6, outline='#f5b544', width=3)
+def terminal_frame(im, clip, k, is_marked=False):
+    """One Terminal frame on the stage: its title bar and the lines in `crop` (points), enlarged, with the caption."""
+    y0, y1 = (round(v * k) for v in clip['crop'])
+    bar = round(32 * k)
+    win = Image.new('RGB', (im.width, bar + y1 - y0))
+    win.paste(im.crop((0, 0, im.width, bar)), (0, 0))
+    win.paste(im.crop((0, y0, im.width, y1)), (0, bar))
+    if is_marked and 'mark' in clip:
+        m0, m1 = (round(v * k) for v in clip['mark'])
+        ImageDraw.Draw(win).rounded_rectangle((6 * k, bar + m0 - y0 - 4 * k, im.width - 6 * k, bar + m1 - y0 + 4 * k),
+                                              radius=6 * k, outline='#f5b544', width=round(3 * k))
     scale = min((W - 60) / win.width, (H - 60) / win.height)
     win = win.resize((round(win.width * scale), round(win.height * scale)), Image.LANCZOS)
     frame = Image.new('RGB', (W, H + BAR), STAGE)
     frame.paste(win, ((W - win.width) // 2, (H - win.height) // 2))
-    frame.paste(caption(slide['caption']), (0, H))
-    frame.save(f'{TMP}/{name}.png')
-    subprocess.run([FF, '-y', '-loglevel', 'error', '-loop', '1', '-t', f"{slide['seconds'] / SPEED:.2f}", '-i', f'{TMP}/{name}.png',
-                    '-vf', 'fps=30,format=yuv420p,setsar=1', '-c:v', 'libx264', '-crf', '10', f'{TMP}/{name}.mp4'], check=True)
-    return f'{TMP}/{name}.mp4'
+    frame.paste(caption(clip['caption']), (0, H))
+    return frame
 
-def still(png, seconds, name):
-    subprocess.run([FF, '-y', '-loglevel', 'error', '-loop', '1', '-t', f'{seconds:.2f}', '-i', png,
+def terminal_clip(clip, name):
+    """
+    The Terminal from `from` to `to` (`start`, `end`, or a recorder mark, plus
+    `plus` seconds), sped up `speed` times, its last frame held `hold`
+    seconds with the line at `mark` outlined.
+    """
+    shots = sorted((int(n[:-4]) / 1000, n) for n in os.listdir(TERM) if n.endswith('.jpg'))
+    when = lambda key, plus: (shots[0][0] if key == 'start' else shots[-1][0] if key == 'end' else marks[key]) + plus
+    a, b = when(clip['from'], clip.get('from_plus', 0)), when(clip['to'], clip.get('plus', 0))
+    picked = [(t, n) for t, n in shots if a <= t <= b]
+    k = clip.get('scale', 2)
+    os.makedirs(f'{TMP}/{name}', exist_ok=True)
+    with open(f'{TMP}/{name}.txt', 'w') as f:
+        for i, (t, n) in enumerate(picked):
+            is_last = i == len(picked) - 1
+            im = redact(Image.open(f'{TERM}/{n}').convert('RGB'), k)
+            terminal_frame(im, clip, k, is_marked=is_last).save(f'{TMP}/{name}/{i:05d}.png')
+            hold = clip.get('hold', 1.0) if is_last else (picked[i + 1][0] - t) / clip.get('speed', 1)
+            f.write(f"file '{TMP}/{name}/{i:05d}.png'\nduration {hold / SPEED:.4f}\n")
+        f.write(f"file '{TMP}/{name}/{len(picked) - 1:05d}.png'\n")
+    subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', f'{TMP}/{name}.txt',
                     '-vf', 'fps=30,format=yuv420p,setsar=1', '-c:v', 'libx264', '-crf', '10', f'{TMP}/{name}.mp4'], check=True)
     return f'{TMP}/{name}.mp4'
 
@@ -204,38 +222,15 @@ def join(clips, out, fade=0.3):
 
 demo = f'{OUT}/whiteboard-demo.mp4'
 if TERM:
-    # slides.json beside the snapshots: which snapshot each slide shows and
-    # where it goes: `after` the title card, after a recorder mark plus a
-    # second (the answer sent), or at the `end`.
-    slides = json.load(open(f'{TERM}/slides.json'))
-    cuts, clips = {}, []
-    for i, slide in enumerate(slides):
-        im = redact(Image.open(f"{TERM}/{slide['file']}").convert('RGB'))
-        if 'clear' in slide:
-            # The snapshot as it was earlier: the lines after `clear` (y) not written yet.
-            ImageDraw.Draw(im).rectangle((0, slide['clear'], im.width, im.height - 70), fill=im.getpixel((im.width // 2, im.height - 120)))
-        cut = CARD if slide['after'] == 'title' else None if slide['after'] == 'end' else out_time(at(slide['after']) + 1.0) + CARD
-        cuts.setdefault(cut, []).append(terminal_still(im, slide, f'term-{i}'))
-        if slide.get('browser'):
-            # Then an empty browser window, the page about to load, under the same caption.
-            blank = Image.new('RGB', (W, H + BAR), STAGE)
-            blank.paste(window(Image.new('RGB', PAGE, 'white')).crop((0, 0, W, H)), (0, 0))
-            blank.paste(caption(slide['caption']), (0, H))
-            blank.save(f'{TMP}/blank-{i}.png')
-            cuts[cut].append(still(f'{TMP}/blank-{i}.png', 0.9 / SPEED, f'blank-{i}'))
-    times = sorted(t for t in cuts if t is not None)
-    pieces = []
-    for i, (a, b) in enumerate(zip([0.0] + times, times + [None])):
-        piece = f'{TMP}/board-{i}.mp4'
-        span = ['-ss', f'{a:.3f}'] + (['-t', f'{b - a:.3f}'] if b else [])
-        subprocess.run([FF, '-y', '-loglevel', 'error', '-i', demo, *span, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '10', piece], check=True)
-        pieces.append(piece)
-    order = []
-    for i, piece in enumerate(pieces):
-        order.append(piece)
-        order += cuts[times[i]] if i < len(times) else cuts.get(None, [])
+    # clips.json beside the frames: the Terminal clip that goes after the
+    # title card (`after: title`) and the one at the end (`after: end`).
+    clips = json.load(open(f'{TERM}/clips.json'))
+    made = {c['after']: terminal_clip(c, f"term-{c['after']}") for c in clips}
+    title, board = f'{TMP}/title-cut.mp4', f'{TMP}/board-cut.mp4'
+    subprocess.run([FF, '-y', '-loglevel', 'error', '-i', demo, '-t', f'{CARD:.3f}', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '10', title], check=True)
+    subprocess.run([FF, '-y', '-loglevel', 'error', '-ss', f'{CARD:.3f}', '-i', demo, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '10', board], check=True)
     demo = f'{OUT}/whiteboard-demo-terminal.mp4'
-    join(order, demo)
+    join([title] + ([made['title']] if 'title' in made else []) + [board] + ([made['end']] if 'end' in made else []), demo)
 
 # The README's GIF: smaller, 12 fps, one palette for the whole clip.
 gif = f'{OUT}/whiteboard.gif'

@@ -41,30 +41,42 @@ differently each time; three to five takes are normal.
 
 ## The Terminal in the demo
 
-The GIF opens in Claude Code and comes back to it at the end, so it is plain
-that the board belongs to the session: Claude calling the whiteboard, an
-empty browser window, the page loading, and after the wrap-up the summary in
-the Terminal. For that, take snapshots of the session's Terminal window
-during the take (window only, never the screen), name each `<epoch ms>.jpg`
-in a folder, and add a `slides.json` there:
+The GIF opens in Claude Code, live: the prompt, Claude reading the
+investigation and calling the whiteboard, until "Drawn on the whiteboard
+page, which just opened in the browser". Then the board, from its first
+diagram, with the cursor running along the boxes while Claude reads the
+trace. After the wrap-up, the summary arriving in the Terminal.
+
+For the Terminal, record its window alone (never the screen) with
+`window-recorder.swift`, beside the board's recorder:
+
+```bash
+swiftc -O media/board-demo/window-recorder.swift -o /tmp/window-recorder
+/tmp/window-recorder <Terminal window id> "$REC/terminal" 8
+```
+
+The window id is Terminal's AppleScript `id of front window`; the recorder
+needs the Screen Recording permission and stops on Ctrl-C. Start Claude
+Code a moment after it (`sleep 2` first), and stop it a few seconds after
+the board's recorder ends. Then add `clips.json` to `$REC/terminal`:
 
 ```json
 [
-  {"file": "1791325690777.jpg", "after": "title", "crop": [40, 648], "mark": [625, 640],
-   "seconds": 2.6, "browser": true,
-   "caption": "Claude draws on the whiteboard, a page it opens in your browser"},
-  {"file": "1791325734376.jpg", "after": "end", "crop": [505, 915], "seconds": 3.8,
-   "caption": "Wrap up: the summary is back in Claude Code"}
+  {"after": "title", "from": "start", "from_plus": 2.3, "to": "first diagram", "plus": 0.6, "speed": 6,
+   "crop": [40, 592], "mark": [563, 581], "hold": 1.4,
+   "caption": "In Claude Code, Claude draws on a whiteboard it opens in your browser"},
+  {"after": "end", "from": "wrap up", "from_plus": 0.5, "to": "wrapped up", "plus": 1.7, "speed": 2.5,
+   "crop": [420, 945], "hold": 1.8,
+   "caption": "Wrap up: the summary arrives back in Claude Code"}
 ]
 ```
 
-`after` is where the slide goes (after the title card, a second after a
-recorder mark, or at the end), `crop` the lines shown (y from, y to), `mark`
-a line outlined, `browser` an empty browser window after it, before the page
-loads; `clear` blanks what came after a line, to show an earlier moment. The
-title bar and Claude Code's banner (account, path) are blurred. `WINDOW=1`
-puts the page in a plain browser window. The take for the README ran with
-`REC_W=1120` for the recorder, so the page has a browser window's width.
+Each clip runs from `from` to `to` (`start`, `end`, or a recorder mark, plus
+seconds), `speed` times faster, showing the window's title bar and the lines
+in `crop` (points), its last frame held `hold` seconds with the line at
+`mark` outlined. The title bar and Claude Code's banner (account, path) are
+blurred. `WINDOW=1` puts the page in a plain browser window; the take for
+the README ran with `REC_W=1120` for the recorder, a browser window's width.
 
 ## The before/after GIF
 
@@ -83,4 +95,4 @@ WINDOW=1 SPEED=1.4 GIF_W=1000 python3 media/board-demo/edit.py "$REC" out/ "$REC
 
 It adds the title card, speeds up the waits (and everything by `SPEED`), puts a caption under each step,
 adds the Terminal slides, and writes the MP4s and `out/whiteboard.gif`
-(about 32 s, about 5 MB). Copy the GIF to `media/whiteboard.gif`.
+(about 34 s, about 5 MB). Copy the GIF to `media/whiteboard.gif`.

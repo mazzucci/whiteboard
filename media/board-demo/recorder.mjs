@@ -116,6 +116,24 @@ try {
   await moveTo(W - 300, H - 200, 1)
   await waitFor(s => s.tabs >= 1, 'the first diagram')
   mark('first diagram')
+  await sleep(600)
+  // While Claude reads the trace, the cursor follows the request path box by
+  // box, quickly, as someone reading it would: the page is live, not a slide.
+  const boxes = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('.node')]
+        .map(n => n.getBoundingClientRect())
+        .filter(r => r.width > 0)
+        .map(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 })),
+    )
+  tracing: for (;;) {
+    for (const box of await boxes()) {
+      if ((await state()).stickies >= 1) break tracing
+      await moveTo(box.x, box.y, 6)
+      await sleep(120)
+    }
+    await sleep(200)
+  }
   // The trace, and the sticky note with Claude's question.
   await waitFor(s => s.stickies >= 1, 'a sticky note')
   mark('sticky note')
