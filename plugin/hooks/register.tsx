@@ -9,6 +9,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 const TOOL = 'post_to_board'
 const READ_TOOL = 'read_board'
+const EDIT_TOOL = 'edit_board'
 
 type Doc = { title: string; source: string }
 
@@ -34,7 +35,9 @@ const INTRO =
   'protocol, standard or system works (OAuth, TLS, DNS), architecture, request flows, sequences, state machines, ' +
   'schemas, an investigation. Draw first, then keep your written answer short and point at the board. Read the ' +
   `whiteboard:drawing skill before the first diagram. ${READ_TOOL} reads back what is on the page, Mermaid source ` +
-  'and sticky notes included, when the user talks about something there you did not draw in this conversation.'
+  'and sticky notes included, when the user talks about something there you did not draw in this conversation. ' +
+  `The user can edit a diagram on the page; ${EDIT_TOOL} amends one in place (add, connect, recolour, rename, remove ` +
+  'boxes) instead of drawing it again.'
 let isIntroduced = false
 
 /** What Claude is told when the person asks to discuss on the board. */
@@ -305,6 +308,17 @@ async function boardGet<T>($: EngineInterface, open: Board, path: string): Promi
   return JSON.parse(res.text) as T
 }
 
+/** A POST to the board, with its token: what it answers, as JSON. */
+async function boardPost<T>($: EngineInterface, open: Board, body: Record<string, unknown>): Promise<T> {
+  const res = await $.http.fetch(`http://127.0.0.1:${open.port}/post`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-board-token': open.token },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`the page answered ${res.status}`)
+  return JSON.parse(res.text) as T
+}
+
 /** How many pages are showing the board; 0 when the person closed its tab. */
 async function viewersOf($: EngineInterface, open: Board): Promise<number> {
   try {
@@ -411,6 +425,30 @@ function mermaidOf(text: string): string {
   return (fence?.[1] ?? text).trim()
 }
 
+/** An edited diagram's canvas, as the page summarizes it. */
+type Scene = {
+  boxes?: { ref: string; text: string; class: string }[]
+  notes?: { ref: string; text: string; on?: string }[]
+  arrows?: { from: string | null; to: string | null; text: string }[]
+  texts?: { text: string; near: string | null }[]
+  drawings?: { near: string | null }[]
+  images?: number
+}
+
+/** A canvas in lines: every box by its ref, the arrows between them, notes, text and drawings. */
+function sceneText(s: Scene): string[] {
+  const q = (t: string) => `"${t.replace(/\s+/g, ' ').trim()}"`
+  const lines = ['Edited on the canvas; as it is now (the Mermaid above is where it started; amend it with edit_board):']
+  for (const b of s.boxes ?? []) lines.push(`- box \`${b.ref}\` ${q(b.text)}${b.class !== 'plain' ? ` (${b.class})` : ''}`)
+  for (const a of s.arrows ?? []) lines.push(`- arrow ${a.from ? `\`${a.from}\`` : '(loose)'} → ${a.to ? `\`${a.to}\`` : '(loose)'}${a.text ? ` ${q(a.text)}` : ''}`)
+  for (const n of s.notes ?? []) lines.push(`- sticky note \`${n.ref}\`${n.on ? ` by \`${n.on}\`` : ''}: ${q(n.text)}`)
+  for (const t of s.texts ?? []) lines.push(`- text ${q(t.text)}${t.near ? ` near \`${t.near}\`` : ''}`)
+  const drawn = s.drawings?.length ?? 0
+  if (drawn) lines.push(`- ${drawn} freehand mark${drawn === 1 ? '' : 's'} (only a picture shows them: ${READ_TOOL} with image: true)`)
+  if (s.images) lines.push(`- ${s.images} pasted image${s.images === 1 ? '' : 's'} (${READ_TOOL} with image: true shows them)`)
+  return lines
+}
+
 type BoardCard = {
   id: number
   kind: 'diagram' | 'note' | 'sticky' | 'you' | 'end'
@@ -426,13 +464,23 @@ type BoardCard = {
 const noteLine = (n: Note) => `- sticky note${n.on ? ` on ${n.on}` : ''}: ${n.text}`
 
 /** The board as Claude reads it back: every card in order, diagrams with their source and sticky notes. */
-function boardText(viewers: number, cards: BoardCard[], isLatest: boolean): string {
+function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scenes: Record<string, Scene> = {}): string {
   const diagrams = cards.filter(c => c.kind === 'diagram')
   const stickiesOf = (id: number) => cards.filter(c => c.kind === 'sticky' && c.diagram === id).map(c => noteLine({ on: c.on, text: c.text ?? '' }))
   const diagramText = (c: BoardCard) => {
     const n = diagrams.indexOf(c) + 1
-    const notes = [...(c.notes ?? []).map(noteLine), ...stickiesOf(c.id)]
-    return [`Diagram ${n} of ${diagrams.length}${c.title ? `, "${c.title}"` : ''}:`, ...(c.text ? [c.text] : []), '```mermaid', c.mermaid ?? '', '```', ...notes].join('\n')
+    const scene = scenes[String(c.id)]
+    // An edited diagram's notes are on its canvas.
+    const notes = scene ? [] : [...(c.notes ?? []).map(noteLine), ...stickiesOf(c.id)]
+    return [
+      `Diagram ${n} of ${diagrams.length}${c.title ? `, "${c.title}"` : ''}:`,
+      ...(c.text ? [c.text] : []),
+      '```mermaid',
+      c.mermaid ?? '',
+      '```',
+      ...notes,
+      ...(scene ? sceneText(scene) : []),
+    ].join('\n')
   }
   const seen = viewers ? `open in ${viewers === 1 ? 'one tab' : `${viewers} tabs`}` : 'not open in any tab'
   if (isLatest) {
@@ -538,7 +586,62 @@ export const register: Register = on => {
         type: 'object',
         properties: {
           latest: { type: 'boolean', description: 'Only the latest diagram, with its sticky notes' },
+          image: {
+            type: 'boolean',
+            description:
+              'Also a picture of one diagram (the latest edited, else the latest, unless `diagram` says): for what words ' +
+              'cannot carry, such as freehand marks the user drew or where things sit',
+          },
+          diagram: { type: 'integer', description: 'With `image`: which diagram, by its number on the board (1 is the first)' },
         },
+      },
+    })
+    await $.tool.register({
+      name: EDIT_TOOL,
+      description:
+        'Amend a diagram on the whiteboard in place, keeping everything else as it is, the layout the user arranged ' +
+        `included, instead of drawing it again with ${TOOL}. Use it for changes to a diagram already on the board, ` +
+        'above all one the user has edited (their changes reach you as "I changed … on the board"): add a box beside ' +
+        'another, connect or disconnect two, rename one, recolour one with a drawing-skill class, remove one, or pin a ' +
+        `sticky note. Text on the canvas is plain, no Markdown. Boxes are named by their ref: the node id from the ` +
+        `Mermaid, or the ref ${READ_TOOL} shows for a ` +
+        'box the user drew. A diagram that has not been edited yet becomes editable on the board when you amend it. ' +
+        `Draw a new diagram with ${TOOL} when the picture changes as a whole.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          diagram: { type: 'integer', description: 'Which diagram, by its number on the board (1 is the first); default: the latest edited one, else the latest' },
+          ops: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 50,
+            description: 'The amendments, applied in order; each one that fails is reported and the rest still apply',
+            items: {
+              type: 'object',
+              properties: {
+                op: {
+                  type: 'string',
+                  enum: ['add', 'connect', 'disconnect', 'text', 'class', 'remove', 'note'],
+                  description:
+                    'add: a box `id` with `text` (near: a box to put it beside, joined to it by an arrow unless connect: false; side: right, below, left or above; class; shape: rectangle, ellipse or diamond). connect / disconnect: an arrow `from` → `to` (label). text: new `text` for box `id`. class: recolour box `id` (unverified, fine, problem, proposed, suspect, plain). remove: box `id` and its arrows. note: a sticky note `id` with `text`, `on` a box.',
+                },
+                id: { type: 'string', description: "The box's ref (for add and note: a new, short ref)" },
+                text: { type: 'string' },
+                near: { type: 'string', description: 'add: the ref of the box to put it beside' },
+                side: { type: 'string', enum: ['right', 'below', 'left', 'above'] },
+                connect: { type: 'boolean', description: 'add: false for no arrow from `near`' },
+                shape: { type: 'string', enum: ['rectangle', 'ellipse', 'diamond'] },
+                class: { type: 'string', enum: ['unverified', 'fine', 'problem', 'proposed', 'suspect', 'plain'] },
+                from: { type: 'string' },
+                to: { type: 'string' },
+                label: { type: 'string', description: 'connect (or add with near): text on the arrow' },
+                on: { type: 'string', description: 'note: the ref of the box it is about' },
+              },
+              required: ['op'],
+            },
+          },
+        },
+        required: ['ops'],
       },
     })
     return next(e)
@@ -623,13 +726,46 @@ export const register: Register = on => {
 
   on('tool.call', { tool: `mcp__whiteboard__${READ_TOOL}` }, async ($, e) => {
     if (!board) return { result: 'There is no whiteboard page in this session yet (or the last one was wrapped up): nothing is on it.' }
+    let text: string
+    let open: Board
     try {
-      const open = await board
-      const { viewers, cards } = await boardGet<{ viewers: number; cards: BoardCard[] }>($, open, '/cards')
-      return { result: boardText(viewers, cards, e.latest === true) }
+      open = await board
+      const { viewers, cards, scenes } = await boardGet<{ viewers: number; cards: BoardCard[]; scenes?: Record<string, Scene> }>($, open, '/cards')
+      text = boardText(viewers, cards, e.latest === true, scenes)
     } catch (error) {
       return { result: `The whiteboard page has stopped (${error instanceof Error ? error.message : String(error)}): nothing to read.` }
     }
+    if (e.image !== true) return { result: text }
+    // A picture as well, from the page: the image goes to Claude with the words.
+    const shot = await boardPost<{ ok: boolean; png?: string; diagram?: string; error?: string }>($, open, {
+      snapshot: true,
+      ...(Number.isInteger(e.diagram) ? { diagram: e.diagram } : {}),
+    }).catch(error => ({ ok: false, error: error instanceof Error ? error.message : String(error) }) as { ok: boolean; png?: string; diagram?: string; error?: string })
+    if (!shot.png) return { result: `${text}\n\n(No picture: ${shot.error ?? 'the page did not send one'}.)` }
+    return {
+      result: [
+        { type: 'text', text: `${text}\n\nThe picture below is "${shot.diagram ?? ''}" as it is on the page.` },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: shot.png } },
+      ],
+    }
+  })
+
+  on('tool.call', { tool: `mcp__whiteboard__${EDIT_TOOL}` }, async ($, e) => {
+    const ops = Array.isArray(e.ops) ? e.ops.filter((op): op is Record<string, unknown> => !!op && typeof op === 'object') : []
+    if (!ops.length) return { deny: 'Nothing to amend: give `ops`.' }
+    if (!board) return { deny: `There is no whiteboard page in this session yet: draw the diagram with ${TOOL} first.` }
+    let out: { ok: boolean; diagram?: string; tab?: number; done?: string[]; errors?: string[]; error?: string }
+    try {
+      // A closed tab opens again, so the amendment is seen.
+      const started = await boardOpen($)
+      out = await boardPost($, started.open, { ops, ...(Number.isInteger(e.diagram) ? { diagram: e.diagram } : {}) })
+    } catch (error) {
+      return { deny: failed(error) }
+    }
+    if (out.error) return { deny: `The board could not apply it: ${out.error}.` }
+    // Not counted as an answer on the board: what Claude then writes still goes there.
+    const errors = out.errors?.length ? ` Not applied: ${out.errors.join('; ')}.` : ''
+    return { result: `Amended diagram ${out.tab ?? ''} "${out.diagram ?? ''}" on the board: ${out.done?.length ?? 0} of ${ops.length} applied.${errors}` }
   })
 
   on('command.run', { command: 'whiteboard' }, async ($, e) => {

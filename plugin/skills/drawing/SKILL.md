@@ -1,6 +1,6 @@
 ---
 name: drawing
-description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser, also to answer 'how does X work?' questions about protocols and systems outside the project. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, and fixing a diagram Mermaid rejects."
+description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser, also to answer 'how does X work?' questions about protocols and systems outside the project. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, fixing a diagram Mermaid rejects, and amending a diagram the user edited on the page (edit_board)."
 ---
 
 # Drawing on the whiteboard
@@ -217,6 +217,27 @@ Proposing a fix:
    sticky note: the proposal is in the diagram now.
 3. Until someone measures it, say it is a proposal, in the note, the legend
    ("Proposed") and your answer.
+
+## When the user edits a diagram
+
+The user can press Edit on a diagram and change it on the page: drag boxes,
+write, add boxes, sticky notes and arrows. Their changes reach you with their
+next message, as words: "I changed "Orders" on the board: moved `cache`
+(below `api`); added a box `redis` "Redis?"; connected `api` → `redis`".
+
+- From then on, amend that diagram with `edit_board` instead of drawing it
+  again with `post_to_board`: a redraw would throw away the layout they
+  arranged. Name boxes by ref: the Mermaid node id, or the ref given for a box
+  the user drew (`read_board` lists them all).
+- Amendments are small: `add` a box `near` another (joined by an arrow unless
+  `connect: false`), `connect` / `disconnect` two, `text` to rename, `class` to
+  recolour (the colours above), `remove`, `note` for a sticky note. Canvas text
+  is plain: no Markdown.
+- Say what you changed in a line, and ask before reshaping their work.
+- When their words are not enough (they drew freehand, or "this bit here"),
+  `read_board` with `image: true` gives you a picture of the diagram.
+- You can amend a diagram they have not edited too; it becomes editable then.
+  Draw a new diagram with `post_to_board` when the picture changes as a whole.
 
 ## When Mermaid rejects it
 

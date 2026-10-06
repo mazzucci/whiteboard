@@ -19,6 +19,8 @@ const token = (() => {
   if (location.search) history.replaceState(null, '', location.pathname)
   return t
 })()
+/** This page's own id: the server asks the page that last spoke to apply Claude's amendments. */
+const pageId = Math.random().toString(36).slice(2, 12)
 const $ = id => document.getElementById(id)
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 const post = (path, body) =>
@@ -170,7 +172,11 @@ function select(i) {
   renderStickies()
   keepInView(d)
   renderTabs()
+  showEditor(d)
 }
+
+/** Whether the diagram on screen is a canvas being edited: then the canvas has the pointer and the keys. */
+const isEditing = () => !!diagrams[current]?.scene
 
 /** The view of the current diagram: zoom and offset in stage pixels. */
 function apply() {
@@ -455,7 +461,7 @@ let queue = Promise.resolve()
 let isReplaying = false
 // Without the token this page cannot reach the session (a bookmark, a copied
 // address): it says how to open the board instead of trying.
-const events = token ? new EventSource(`/events?t=${encodeURIComponent(token)}`) : null
+const events = token ? new EventSource(`/events?t=${encodeURIComponent(token)}&c=${pageId}`) : null
 // (After the whole script has run: showLost uses state declared further down.)
 if (!events) setTimeout(() => showLost('no-token'))
 else events.onopen = () => {
@@ -573,7 +579,9 @@ function onEvent(e) {
   }
   card._at = at
   const replay = isReplaying
-  queue = queue.then(() => add(card, replay)).catch(err => console.error(err))
+  // A canvas, Claude's amendments to one, or a request for a picture: after the cards before them.
+  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card) }[card.kind]
+  queue = queue.then(() => (act ? act() : add(card, replay))).catch(err => console.error(err))
 }
 
 // ---------------------------------------------------------------- controls
@@ -601,7 +609,7 @@ const pinchOf = () => {
   return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top }
 }
 stage.addEventListener('pointerdown', e => {
-  if (isCode || (e.pointerType === 'mouse' && e.button !== 0) || !diagrams.length || e.target.closest('.sticky')) return
+  if (isCode || isEditing() || (e.pointerType === 'mouse' && e.button !== 0) || !diagrams.length || e.target.closest('.sticky')) return
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
   try {
     stage.setPointerCapture(e.pointerId)
@@ -644,14 +652,14 @@ stage.addEventListener('pointerup', endPointer)
 stage.addEventListener('pointercancel', endPointer)
 // A double-click or double-tap fits the diagram.
 stage.addEventListener('dblclick', e => {
-  if (!isCode && !e.target.closest('.sticky')) fit()
+  if (!isCode && !isEditing() && !e.target.closest('.sticky')) fit()
 })
 
 // A pinch (or Ctrl/Cmd + scroll) zooms around the pointer; plain scroll pans.
 stage.addEventListener(
   'wheel',
   e => {
-    if (isCode || !diagrams.length) return
+    if (isCode || isEditing() || !diagrams.length) return
     e.preventDefault()
     const r = stage.getBoundingClientRect()
     if (e.ctrlKey || e.metaKey) zoomBy(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top)
@@ -663,6 +671,9 @@ stage.addEventListener(
 // Keys, when not typing: arrows pan; i o f zoom; [ ] step; c the source.
 document.addEventListener('keydown', e => {
   if ((e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]')) || e.metaKey || e.ctrlKey || e.altKey) return
+  // On a canvas, only stepping between diagrams: every other key is the editor's.
+  if (isEditing() && e.key !== '[' && e.key !== ']') return
+  if (isEditing() && e.target instanceof Element && e.target.closest('.editor')) return
   const step = 80
   const keys = {
     i: () => zoomBy(1.25), o: () => zoomBy(0.8), f: () => fit(),
@@ -692,8 +703,9 @@ new ResizeObserver(() => {
 
 const box = $('text')
 async function send(text) {
-  text = text.trim()
-  if (text) await post('/say', { text })
+  // Changes made on a canvas go first, in words.
+  text = withChanges(text.trim())
+  if (text) await post('/say', { page: pageId, text })
 }
 $('form').onsubmit = e => {
   e.preventDefault()

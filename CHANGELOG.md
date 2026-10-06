@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Edit a diagram yourself.** Edit turns a diagram into a canvas (Excalidraw,
+  bundled): drag boxes, write, add boxes, arrows and sticky notes. Your
+  changes reach Claude in words with your next message.
+- **Claude amends instead of redrawing.** A new tool, `edit_board`, adds,
+  connects, renames, recolours and removes boxes on a diagram, keeping your
+  layout.
+- **Claude can look.** `read_board` describes an edited diagram as it now is,
+  and with `image: true` gives Claude a picture of it.
+
 ## 0.3.1
 
 - **A closed tab opens again** with Claude's next post, everything so far on it.

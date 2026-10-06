@@ -40,6 +40,8 @@ function host(
     viewers?: () => number
     /** What the board holds, for read_board. */
     cards?: Record<string, unknown>[]
+    /** Edited diagrams' summaries, by card id. */
+    scenes?: Record<string, unknown>
   } = {},
 ) {
   const spawned: string[][] = []
@@ -91,7 +93,7 @@ function host(
     expect(e.init?.headers).toMatchObject({ 'x-board-token': 'tok' })
     if (e.init?.method === 'GET') {
       const path = new URL(e.url).pathname
-      const value = path === '/viewers' ? { viewers: options.viewers?.() ?? 1 } : { viewers: 1, cards: options.cards ?? [] }
+      const value = path === '/viewers' ? { viewers: options.viewers?.() ?? 1 } : { viewers: 1, cards: options.cards ?? [], scenes: options.scenes ?? {} }
       return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(value) } }
     }
     const body = JSON.parse(String(e.init?.body)) as Record<string, unknown>
@@ -384,5 +386,46 @@ test('node from asdf installs is found ahead of its shim, symlinked nvm versions
   })
   await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
   expect(spawned[0]?.[0]).toBe(`${asdf}/22.9.0/bin/node`)
+  stop()
+})
+
+test('edit_board amends a diagram in place: the board applies the ops and says which failed', async ($, on) => {
+  const { posts, stop } = host(on, {
+    page: body => (body.ops ? ({ ok: true, diagram: 'Orders', tab: 1, done: ['#1 (add)'], errors: ['#2 (connect): no box `nope`'] } as never) : { ok: true, viewers: 1, drawn: true }),
+  })
+  const early = await $.tool.call({ tool: 'mcp__whiteboard__edit_board', ops: [{ op: 'add', id: 'cache', text: 'Cache' }] })
+  expect(said(early)).toContain('draw the diagram with post_to_board first')
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  const out = await $.tool.call({ tool: 'mcp__whiteboard__edit_board', diagram: 1, ops: [{ op: 'add', id: 'cache', text: 'Cache', near: 'api' }, { op: 'connect', from: 'db', to: 'nope' }] })
+  expect(posts.at(-1)).toMatchObject({ diagram: 1, ops: [{ op: 'add', id: 'cache' }, { op: 'connect', from: 'db' }] })
+  expect(said(out)).toContain('1 of 2 applied')
+  expect(said(out)).toContain('no box `nope`')
+  expect(said(await $.tool.call({ tool: 'mcp__whiteboard__edit_board', ops: [] }))).toContain('Nothing to amend')
+  stop()
+})
+
+test('read_board shows an edited diagram as it now is, and a picture when asked', async ($, on) => {
+  const cards = [{ id: 1, kind: 'diagram', title: 'Orders', mermaid: SOURCE, notes: [{ on: 'api', text: 'old note' }] }]
+  const scenes = {
+    1: {
+      boxes: [{ ref: 'api', text: 'Orders API', class: 'plain' }, { ref: 'redis', text: 'Redis?', class: 'proposed' }],
+      arrows: [{ from: 'api', to: 'redis', text: '' }],
+      notes: [{ ref: 'n1', text: 'TTL?', on: 'redis' }],
+      texts: [],
+      drawings: [{ near: 'api' }],
+    },
+  }
+  const { stop } = host(on, { cards, scenes, page: body => (body.snapshot ? ({ ok: true, png: 'iVBORw0KGgo=', diagram: 'Orders' } as never) : { ok: true, viewers: 1, drawn: true }) })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  const read = said(await $.tool.call({ tool: 'mcp__whiteboard__read_board' }))
+  expect(read).toContain('Edited on the canvas')
+  expect(read).toContain('box `redis` \\"Redis?\\" (proposed)')
+  expect(read).toContain('arrow `api` → `redis`')
+  expect(read).toContain('sticky note `n1` by `redis`')
+  expect(read).toContain('1 freehand mark')
+  // The canvas has the notes now; the old ones are not repeated.
+  expect(read).not.toContain('old note')
+  const pictured = (await $.tool.call({ tool: 'mcp__whiteboard__read_board', image: true })) as { result: { type: string; source?: { data: string } }[] }
+  expect(pictured.result[1]).toMatchObject({ type: 'image', source: { media_type: 'image/png', data: 'iVBORw0KGgo=' } })
   stop()
 })

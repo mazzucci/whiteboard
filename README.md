@@ -90,8 +90,15 @@ evidence shows, then a proposed fix.
   **Claude is working** while Claude answers. What you ask on the board is
   answered on the board; when you type in the terminal again, Claude answers
   there.
-- **Claude can read the board back:** every diagram's source, its sticky notes
-  and your messages, including a sample or a file you opened yourself.
+- **Edit a diagram yourself.** Press **Edit** and the diagram becomes a canvas:
+  drag boxes, write, add boxes, arrows and sticky notes. Your changes go to
+  Claude in words with your next message ("moved `cache` below `api`; added a
+  box "Redis?""), and Claude amends the diagram in place, keeping your layout,
+  instead of drawing it again. Flowcharts, sequence, class, state and ER
+  diagrams.
+- **Claude can read the board back:** every diagram's source, its sticky notes,
+  what you changed on a canvas and your messages, including a sample or a file
+  you opened yourself; and a picture of a diagram when words are not enough.
 - **Closed the tab?** Claude's next post opens it again, with everything so far.
 - **Wrap up.** One button asks Claude to summarise what you concluded in the
   conversation; then the page says so and closes its tab (or, if the browser
@@ -140,11 +147,12 @@ flowchart LR
   style host fill:#f7f7f7,stroke:#8a8a8a,stroke-dasharray:6 4,color:#555555
 ```
 
-The mod gives Claude two tools, `post_to_board` and `read_board`, and the
-`/whiteboard` command.
+The mod gives Claude three tools, `post_to_board`, `edit_board` and
+`read_board`, and the `/whiteboard` command.
 The first post starts a small server for the session (Node's standard library,
 nothing installed) and opens its page in your browser. The page draws with the
-Mermaid bundled in the plugin, so nothing is downloaded and no CDN is used.
+Mermaid bundled in the plugin, and edits with the bundled Excalidraw, so
+nothing is downloaded and no CDN is used.
 Each session has its own board, labelled with its folder's name.
 
 ```mermaid
@@ -340,8 +348,9 @@ goes into your Claude Code session as your own words. So:
   only its own host name (so a website cannot reach it by pointing a domain at
   127.0.0.1), refuses requests from any other website even when they carry the
   token, and accepts only JSON.
-- **Nothing downloaded, nothing sent.** Mermaid is bundled in the plugin. The
-  page's security policy lets it load only the board itself, it passes no
+- **Nothing downloaded, nothing sent.** Mermaid and the canvas editor
+  (Excalidraw) are bundled in the plugin. The page's security policy lets it
+  load only the board itself, it passes no
   referrer on, and it cannot be framed by another site.
 - **Diagrams and notes are inert.** Mermaid runs in strict mode (no scripts or
   click callbacks), and any links it draws are removed. Notes are a small
@@ -349,6 +358,9 @@ goes into your Claude Code session as your own words. So:
 - **Only what you type.** The page sends a message only when you press Send or
   Wrap up. It cannot answer Claude Code's permission prompts: a request Claude
   makes because of your message still asks you, unless you already allowed it.
+- **Pictures only when Claude asks.** When Claude reads the board with a
+  picture, the page draws the diagram as an image and it goes into the
+  conversation, like a screenshot you pasted.
 - **Gone with the session.** The board keeps everything in memory and stops
   when the session ends or after Wrap up.
 
@@ -365,6 +377,9 @@ goes into your Claude Code session as your own words. So:
   Code, not on a phone or another computer.
 - Sticky notes sit beside a box in flowcharts; in other diagram types they line
   up beside the diagram.
+- A diagram you edit keeps its boxes, colours and arrows but not every Mermaid
+  detail (a database cylinder becomes a box, for one); gantt, pie and the
+  other types without boxes and arrows cannot be edited.
 
 ## Development
 
@@ -375,9 +390,10 @@ node --test plugin/tests/server.test.mjs
 ```
 
 `plugin/` is everything Claude Code loads, and all an install copies: the mod
-(`hooks/`), the board server and its page (`board/`, with Mermaid in
-`board/vendor/`), the drawing skill (`skills/`) and the tests. The rest of the
-repository is the project around it: `demo/` holds the simulated checkout
+(`hooks/`), the board server and its page (`board/`, with Mermaid and the
+built canvas editor in `board/vendor/`), the drawing skill (`skills/`) and the
+tests. The rest of the repository is the project around it: `editor/` builds
+the canvas editor (`cd editor && npm install && npm run build`); `demo/` holds the simulated checkout
 investigation and the recording guide; `fixtures/` one diagram per type;
 `media/` the README's GIFs and the scripts that record and edit them
 (`media/board-demo/`). Changes are listed in [CHANGELOG.md](CHANGELOG.md).

@@ -31,12 +31,14 @@
         <button type="button" id="fit" title="Fit to the board (f)"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg><span class="lbl">Fit</span></button>
         <span class="sep"></span>
         <button type="button" id="code" title="Mermaid source (c)" aria-pressed="false"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4"/></svg><span class="lbl">Code</span></button>
+        <button type="button" id="edit" title="Edit this diagram: drag, write and connect boxes; your changes go to Claude" hidden><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg><span class="lbl">Edit</span></button>
 
       </div>
       <div class="legend" id="legend"></div>
     </div>
     <div class="stage" id="stage" tabindex="0" aria-label="Diagram: drag to pan, pinch or Ctrl+scroll to zoom">
       <div class="canvas" id="canvas"></div>
+      <div class="editor" id="editor" hidden></div>
       <div class="empty" id="stage-empty">Diagrams Claude draws appear here.</div>
       <div class="source" id="source" hidden><button type="button" id="copy">Copy</button><pre><code id="source-code"></code></pre></div>
       <div class="hint" id="stage-hint"><span class="keys">Drag or arrow keys to pan · pinch or Ctrl+scroll to zoom · i o f · [ ] · c</span><span class="touch">Drag to pan · pinch to zoom · double-tap to fit</span></div>
@@ -59,5 +61,6 @@
 </main>
 <script src="/mermaid.js"></script>
 <script src="/app.js"></script>
+<script src="/editing.js"></script>
 </body>
 </html>

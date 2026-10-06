@@ -1,0 +1,18 @@
+{
+  "name": "whiteboard-editor",
+  "private": true,
+  "description": "The board's canvas editor (Excalidraw), built into plugin/board/vendor/. Not shipped as source.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "@excalidraw/mermaid-to-excalidraw": "2.2.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

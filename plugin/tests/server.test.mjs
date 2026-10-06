@@ -111,3 +111,60 @@ test('the plugin can ask how many pages are open, and read back what is on the b
   assert.equal(viewers, 0)
   assert.ok(cards.some(c => c.kind === 'note' && c.text === 'a note to read back'))
 })
+
+test('the editor and its fonts load from the board itself, and nothing outside the font folder', async () => {
+  for (const path of ['/editor.js', '/editor.css']) {
+    const res = await call(path)
+    assert.equal(res.status, 200, path)
+    assert.ok((await res.arrayBuffer()).byteLength > 1000, path)
+  }
+  assert.equal((await call('/editor/fonts/Excalifont/nope.woff2')).status, 404)
+  assert.equal((await call('/editor/fonts/../editor.js.gz')).status, 403)
+  assert.equal((await call('/editor/fonts/Excalifont/..%2F..%2Feditor.js.gz')).status, 403)
+  assert.match((await call('/')).headers.get('content-security-policy'), /font-src 'self'/)
+})
+
+test("a canvas is kept and replayed; Claude's amendments go to a page and come back answered", async () => {
+  const auth = { 'x-board-token': ready.token }
+  const { id } = await (await postJson('/post', { title: 'Canvas', mermaid: 'flowchart LR\n  a --> b' })).json()
+  // A page, as the browser's EventSource would connect.
+  const events = []
+  const res = await fetch(`${base()}/events?t=${ready.token}&c=testpage`)
+  const reader = res.body.getReader()
+  ;(async () => {
+    let buffer = ''
+    for (;;) {
+      const { value, done } = await reader.read().catch(() => ({ done: true }))
+      if (done) return
+      buffer += new TextDecoder().decode(value)
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop()
+      for (const p of parts) if (p.startsWith('data: ')) events.push(JSON.parse(p.slice(6)))
+    }
+  })()
+  const scene = { page: 'testpage', diagram: id, elements: [{ id: 'a', type: 'rectangle' }], summary: { boxes: [{ ref: 'a', text: 'A', class: 'plain' }] } }
+  assert.equal((await postJson('/scene', { ...scene, diagram: 9999 })).status, 400)
+  assert.equal((await postJson('/scene', scene, { 'x-board-token': 'wrong' })).status, 403)
+  assert.equal((await postJson('/scene', scene)).status, 200)
+  const cards = await (await call('/cards', { headers: auth })).json()
+  assert.deepEqual(cards.scenes[id], scene.summary)
+  // The page answers the amendments it is sent.
+  const answering = (async () => {
+    for (let i = 0; i < 50; i++) {
+      const ops = events.find(e => e.kind === 'ops')
+      if (ops) return postJson('/applied', { page: 'testpage', id: ops.id, done: ['#1 (add)'], errors: [] })
+      await new Promise(r => setTimeout(r, 50))
+    }
+  })()
+  const applied = await (await postJson('/post', { ops: [{ op: 'add', id: 'c', text: 'C' }] })).json()
+  await answering
+  assert.equal(applied.ok, true)
+  assert.deepEqual(applied.done, ['#1 (add)'])
+  assert.equal(applied.diagram, 'Canvas')
+  // A page that opens later gets the canvas after the cards.
+  const later = await fetch(`${base()}/events?t=${ready.token}`)
+  const first = new TextDecoder().decode((await later.body.getReader().read()).value)
+  await later.body.cancel().catch(() => {})
+  reader.cancel().catch(() => {})
+  assert.ok(first.includes('"kind":"diagram"'))
+})

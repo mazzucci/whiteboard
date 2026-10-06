@@ -74,6 +74,10 @@ button { font: inherit; color: inherit; }
 .stage .empty { position: absolute; inset: 0; display: grid; place-items: center; color: #667085; }
 /* The stage is the whiteboard: light in dark mode too, so its hint is dark text. */
 .stage .hint { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: #5b6372; background: color-mix(in srgb, var(--stage) 85%, transparent); padding: 2px 6px; border-radius: 6px; pointer-events: none; }
+/* A diagram being edited: the canvas editor fills the stage and has the pointer and keys. */
+.editor { position: absolute; inset: 0; background: #fff; cursor: auto; }
+.editor[hidden] { display: none; }
+body.editing .canvas, body.editing .stage .hint, body.editing #zoom-in, body.editing #zoom-out, body.editing #pct, body.editing #fit, body.editing #code { display: none; }
 .source { position: absolute; inset: 0; overflow: auto; background: var(--panel); cursor: auto; padding: 14px 16px; user-select: text; }
 .source[hidden] { display: none; }
 .source pre { margin: 0; font: 12.5px/1.55 var(--mono); white-space: pre; }

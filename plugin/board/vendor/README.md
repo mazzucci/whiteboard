@@ -47,3 +47,31 @@ derivative work of it.
 
 The table lists `mermaid@12.1.0`'s direct dependencies on npm. If you find a
 component missing or misattributed, please open an issue.
+
+# Vendored: the canvas editor
+
+`editor/` holds the editor a diagram turns into when someone presses Edit:
+[Excalidraw](https://github.com/excalidraw/excalidraw) 0.18.1 (MIT), its
+[Mermaid converter](https://github.com/excalidraw/mermaid-to-excalidraw)
+2.2.2 (MIT) and React 19 (MIT), bundled unmodified by `editor/build.mjs` at
+the repository's root (`cd editor && npm install && npm run build`). The
+converter uses the board's own Mermaid, above, not a second copy. The page
+loads it only when a diagram is edited.
+[editor/THIRD_PARTY_LICENSES.md](editor/THIRD_PARTY_LICENSES.md) lists the
+70 packages in the bundle, each with its licence text.
+
+The fonts Excalidraw draws text with, unmodified:
+
+| Font | Licence |
+|---|---|
+| Assistant | SIL Open Font License 1.1 |
+| Cascadia Code | SIL Open Font License 1.1 |
+| Comic Shanns | MIT (c) 2018 Shannon Miwa |
+| Liberation Sans | SIL Open Font License 1.1 |
+| Lilita One | SIL Open Font License 1.1 |
+| Nunito | SIL Open Font License 1.1 |
+| Virgil | SIL Open Font License 1.1 (https://github.com/excalidraw/virgil) |
+
+Excalifont and Xiaolai are left out: the canvas writes in Helvetica, and a
+font the board does not have is not fetched from anywhere else (the page
+allows fonts from the board only).
