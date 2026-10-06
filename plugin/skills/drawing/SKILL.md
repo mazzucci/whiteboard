@@ -224,6 +224,8 @@ The user can press Edit on a diagram and change it on the page: drag boxes,
 write, add boxes, sticky notes and arrows. Their changes reach you with their
 next message, as words: "I changed "Orders" on the board: moved `cache`
 (below `api`); added a box `redis` "Redis?"; connected `api` → `redis`".
+What they have selected comes with it ("Selected on the board: `inv`
+"inventory.check""): that is what "this" means in their message.
 
 - From then on, amend that diagram with `edit_board` instead of drawing it
   again with `post_to_board`: a redraw would throw away the layout they

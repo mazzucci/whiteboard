@@ -32,8 +32,28 @@ function loadEditor() {
 
 const NAMES = { unverified: 'grey (not measured)', fine: 'green (no problem)', problem: 'red (a problem)', proposed: 'lavender (proposed)', suspect: 'amber (suspect)', note: 'a sticky note', plain: 'plain' }
 
+/** What the person has selected on a canvas, in words, each box by its ref. */
+function selectionOf(elements, ids = []) {
+  const live = elements.filter(e => !e.isDeleted)
+  const byId = new Map(live.map(e => [e.id, e]))
+  const shapes = live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type))
+  const label = e => live.find(t => t.type === 'text' && t.containerId === e.id)?.originalText ?? ''
+  const refOf = e => e?.customData?.ref ?? e?.id
+  const q = t => `"${String(t).replace(/\s+/g, ' ').trim()}"`
+  const picked = new Set(ids.map(id => byId.get(id)).filter(Boolean).map(e => (e.containerId && byId.get(e.containerId)) || e))
+  return [...picked].map(e =>
+    e.customData?.kind === 'note' ? `the sticky note ${q(label(e))}`
+    : ['rectangle', 'ellipse', 'diamond'].includes(e.type) ? `\`${refOf(e)}\` ${q(label(e))}`
+    : e.type === 'arrow' || e.type === 'line'
+      ? `the arrow ${byId.get(e.startBinding?.elementId) ? `\`${refOf(byId.get(e.startBinding.elementId))}\`` : '(loose)'} → ${byId.get(e.endBinding?.elementId) ? `\`${refOf(byId.get(e.endBinding.elementId))}\`` : '(loose)'}`
+    : e.type === 'text' ? `the text ${q(e.originalText)}`
+    : e.type === 'freedraw' ? `a freehand mark${nearest(e, shapes) ? ` near \`${refOf(nearest(e, shapes))}\`` : ''}`
+    : `a ${e.type}`,
+  )
+}
+
 /** A canvas in words: boxes, arrows, notes, text and drawings, each box by the ref Claude uses. */
-function summaryOf(elements) {
+function summaryOf(elements, selectedIds = []) {
   const live = elements.filter(e => !e.isDeleted)
   const byId = new Map(live.map(e => [e.id, e]))
   const label = e => live.find(t => t.type === 'text' && t.containerId === e.id)?.originalText ?? ''
@@ -53,6 +73,7 @@ function summaryOf(elements) {
     texts: live.filter(e => e.type === 'text' && !e.containerId).map(e => ({ text: e.originalText, near: refOf(nearest(e, shapes)) ?? null })),
     drawings: live.filter(e => e.type === 'freedraw').map(e => ({ near: refOf(nearest(e, shapes)) ?? null })),
     images: live.filter(e => e.type === 'image').length,
+    selected: selectionOf(elements, selectedIds),
   }
 }
 
@@ -159,14 +180,20 @@ async function showEditor(d) {
   let timer = null
   editor = W.mount(host, {
     elements: d.scene,
-    onChange: els => {
+    onChange: (els, appState) => {
+      const selected = Object.keys(appState?.selectedElementIds ?? {}).filter(id => appState.selectedElementIds[id])
       clearTimeout(timer)
       timer = setTimeout(() => {
         // Only a change the person made: the same elements again (a redraw) are not one.
         const version = els.reduce((n, e) => n + e.version, 0)
-        if (version === d.version) return
-        d.version = version
-        d.scene = withRefs(els)
+        const isSelectionNew = selected.join() !== (d.selected ?? []).join()
+        if (version === d.version && !isSelectionNew) return
+        d.selected = selected
+        if (version !== d.version) {
+          d.version = version
+          d.scene = withRefs(els)
+        }
+        // What is selected is part of what Claude reads back.
         saveScene(d)
         showPending()
       }, 400)
@@ -191,7 +218,7 @@ function withRefs(elements) {
 }
 
 function saveScene(d) {
-  post('/scene', { page: pageId, diagram: d.id, elements: d.scene.filter(e => !e.isDeleted), summary: summaryOf(d.scene) })
+  post('/scene', { page: pageId, diagram: d.id, elements: d.scene.filter(e => !e.isDeleted), summary: summaryOf(d.scene, d.selected) })
 }
 
 /**
@@ -214,11 +241,15 @@ function showPending() {
 /** The person's changes, in words, ahead of what they typed; then they count as seen. */
 function withChanges(text) {
   const pending = pendingChanges()
-  if (!pending.length) return text
-  const said = pending.map(({ d, lines }) => `I changed "${d.title}" on the board:\n${lines.map(l => `- ${l}`).join('\n')}`).join('\n\n')
+  const said = pending.map(({ d, lines }) => `I changed "${d.title}" on the board:\n${lines.map(l => `- ${l}`).join('\n')}`)
   for (const { d } of pending) d.known = d.scene
-  showPending()
-  return text ? `${said}\n\n${text}` : said
+  if (pending.length) showPending()
+  // What they have selected is what "this" means in what they wrote.
+  const d = diagrams[current]
+  const selected = d?.scene && text ? selectionOf(d.scene, d.selected) : []
+  if (selected.length) said.push(`Selected on the board, in "${d.title}": ${selected.join(', ')}`)
+  if (!said.length) return text
+  return text ? `${said.join('\n\n')}\n\n${text}` : said.join('\n\n')
 }
 
 // ---------------------------------------------------------------- from the server

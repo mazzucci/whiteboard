@@ -4,7 +4,8 @@
 
 - **Edit a diagram yourself.** Edit turns a diagram into a canvas (Excalidraw,
   bundled): drag boxes, write, add boxes, arrows and sticky notes. Your
-  changes reach Claude in words with your next message.
+  changes reach Claude in words with your next message, and so does what you
+  have selected, so "make this red" means the box you picked.
 - **Claude amends instead of redrawing.** A new tool, `edit_board`, adds,
   connects, renames, recolours and removes boxes on a diagram, keeping your
   layout.

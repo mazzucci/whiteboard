@@ -62,7 +62,7 @@ function mount(el, { elements, onChange }) {
           api = a
           resolve(a)
         }}
-        onChange={els => onChange?.(els)}
+        onChange={(els, appState) => onChange?.(els, appState)}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false } }}
       />,
     )

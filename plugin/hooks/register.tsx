@@ -433,6 +433,7 @@ type Scene = {
   texts?: { text: string; near: string | null }[]
   drawings?: { near: string | null }[]
   images?: number
+  selected?: string[]
 }
 
 /** A canvas in lines: every box by its ref, the arrows between them, notes, text and drawings. */
@@ -445,6 +446,7 @@ function sceneText(s: Scene): string[] {
   for (const t of s.texts ?? []) lines.push(`- text ${q(t.text)}${t.near ? ` near \`${t.near}\`` : ''}`)
   const drawn = s.drawings?.length ?? 0
   if (drawn) lines.push(`- ${drawn} freehand mark${drawn === 1 ? '' : 's'} (only a picture shows them: ${READ_TOOL} with image: true)`)
+  if (s.selected?.length) lines.push(`- selected on the page now: ${s.selected.join(', ')}`)
   if (s.images) lines.push(`- ${s.images} pasted image${s.images === 1 ? '' : 's'} (${READ_TOOL} with image: true shows them)`)
   return lines
 }
