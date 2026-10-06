@@ -15,8 +15,9 @@ const require = createRequire(process.env.PUPPETEER_HOME ? `${process.env.PUPPET
 const puppeteer = require('puppeteer-core')
 
 const dir = process.argv[2]
-const W = 1440
-const H = 1000
+// The page's size: REC_W and REC_H, for a take shown beside the Terminal.
+const W = Number(process.env.REC_W) || 1440
+const H = Number(process.env.REC_H) || 1000
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 

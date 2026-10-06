@@ -39,6 +39,33 @@ Check the take before editing: the sticky note should sit by
 terminal), and the proposal should be lavender. Claude draws a little
 differently each time; three to five takes are normal.
 
+## The Terminal in the demo
+
+The GIF opens in Claude Code and comes back to it twice, so it is plain that
+the board belongs to the session: the prompt, Claude calling the whiteboard,
+the answer typed on the board arriving in the session, and the summary at
+the end. For that, take snapshots of the session's Terminal window during
+the take (window only, never the screen), name each `<epoch ms>.jpg` in a
+folder, and add a `slides.json` there:
+
+```json
+[
+  {"file": "1791325690777.jpg", "after": "title", "clear": 182, "crop": [40, 200], "seconds": 2.4,
+   "caption": "It starts in Claude Code, in your terminal"},
+  {"file": "1791325703339.jpg", "after": "said yes", "crop": [580, 910], "mark": [821, 835], "seconds": 3.0,
+   "caption": "What you type on the board arrives in the same session"},
+  {"file": "1791325734376.jpg", "after": "end", "crop": [505, 915], "seconds": 3.8,
+   "caption": "Wrap up: the summary is back in Claude Code"}
+]
+```
+
+`after` is where the slide goes (after the title card, a second after a
+recorder mark, or at the end), `crop` the lines shown (y from, y to),
+`mark` a line outlined, `clear` blanks what came after a line, for the
+moment the prompt went in. The title bar and Claude Code's banner (account,
+path) are blurred. The take for the README ran with `REC_W=1120` for the
+recorder, so the page looks like a browser window beside a terminal.
+
 ## The before/after GIF
 
 The same idea with `media/board-demo/recorder-qa.mjs`, which asks a
@@ -51,9 +78,9 @@ the board opened, and the follow-up arriving in the session.
 ## The edit
 
 ```bash
-python3 media/board-demo/edit.py "$REC" out/
+GIF_W=1000 python3 media/board-demo/edit.py "$REC" out/ "$REC/terminal"
 ```
 
 It adds the title card, speeds up the waits, puts a caption under each step,
-and writes `out/whiteboard-demo.mp4` and `out/whiteboard.gif` (about 40 s,
-under 4 MB). Copy the GIF to `media/whiteboard.gif`.
+adds the Terminal slides, and writes the MP4s and `out/whiteboard.gif`
+(about 50 s, under 5 MB). Copy the GIF to `media/whiteboard.gif`.
