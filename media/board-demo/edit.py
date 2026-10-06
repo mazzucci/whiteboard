@@ -21,6 +21,8 @@ BAR = 96
 BAR_BG, CARD_BG, INK, MUTED = '#161b26', '#f5f6f8', '#1b2130', '#667085'
 # The GIF's width: GIF_W, 1200 unless said (a take beside the Terminal is wider).
 GIF_W = int(os.environ.get('GIF_W', 1200))
+# How much faster than the pace below the whole demo plays: SPEED, 1 unless said.
+SPEED = float(os.environ.get('SPEED', 1))
 
 rec = json.load(open(f'{REC}/frames.json'))
 frames, marks = rec['frames'], {m['label']: m['t'] for m in rec['marks']}
@@ -56,7 +58,8 @@ CAPTIONS = [
     (at('settled'), at('wrap up'), 'Zoom, pan, and step through the diagrams'),
     (at('wrap up'), end, 'Wrap up: the summary lands in Claude Code, and the page closes'),
 ]
-CARD = 2.2
+SEGMENTS = [(a, b, s * SPEED) for a, b, s in SEGMENTS]
+CARD = 2.2 / SPEED
 
 def out_time(t):
     acc = 0.0
@@ -96,7 +99,7 @@ for i, (a, b, text) in enumerate(CAPTIONS):
     caption(text).save(f'{TMP}/cap{i}.png')
     caps.append((f'{TMP}/cap{i}.png', out_time(a) + CARD, out_time(b) + CARD))
 
-parts = [f'[0:v]trim={a:.3f}:{b:.3f},setpts=(PTS-STARTPTS)/{s}[s{i}]' for i, (a, b, s) in enumerate(SEGMENTS)]
+parts = [f'[0:v]trim={a:.3f}:{b:.3f},setpts=(PTS-STARTPTS)/{s}[s{i}]' for i, (a, b, s) in enumerate(SEGMENTS)]  # speeds already include SPEED
 chain = ';'.join(parts) + ';' + ''.join(f'[s{i}]' for i in range(len(SEGMENTS))) + f'concat=n={len(SEGMENTS)}:v=1:a=0,fps=30[cat]'
 chain += f';[cat]pad={W}:{H + BAR}:0:0:{BAR_BG},setsar=1[body]'
 chain += f';[1:v]loop=loop={int(CARD * 30)}:size=1:start=0,fps=30,setpts=N/30/TB,format=yuv420p,setsar=1,fade=t=out:st={CARD - 0.4}:d=0.4:color={CARD_BG}[card]'
@@ -140,7 +143,7 @@ def terminal_still(im, slide, name):
     frame.paste(win, ((W - win.width) // 2, (H - win.height) // 2))
     frame.paste(caption(slide['caption']), (0, H))
     frame.save(f'{TMP}/{name}.png')
-    subprocess.run([FF, '-y', '-loglevel', 'error', '-loop', '1', '-t', str(slide['seconds']), '-i', f'{TMP}/{name}.png',
+    subprocess.run([FF, '-y', '-loglevel', 'error', '-loop', '1', '-t', f"{slide['seconds'] / SPEED:.2f}", '-i', f'{TMP}/{name}.png',
                     '-vf', 'fps=30,format=yuv420p,setsar=1', '-c:v', 'libx264', '-crf', '18', f'{TMP}/{name}.mp4'], check=True)
     return f'{TMP}/{name}.mp4'
 

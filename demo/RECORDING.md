@@ -41,10 +41,9 @@ differently each time; three to five takes are normal.
 
 ## The Terminal in the demo
 
-The GIF opens in Claude Code and comes back to it twice, so it is plain that
-the board belongs to the session: the prompt, Claude calling the whiteboard,
-the answer typed on the board arriving in the session, and the summary at
-the end. For that, take snapshots of the session's Terminal window during
+The GIF opens in Claude Code and comes back to it at the end, so it is plain
+that the board belongs to the session: the prompt, Claude calling the
+whiteboard, and the summary after the wrap-up. For that, take snapshots of the session's Terminal window during
 the take (window only, never the screen), name each `<epoch ms>.jpg` in a
 folder, and add a `slides.json` there:
 
@@ -78,9 +77,9 @@ the board opened, and the follow-up arriving in the session.
 ## The edit
 
 ```bash
-GIF_W=1000 python3 media/board-demo/edit.py "$REC" out/ "$REC/terminal"
+SPEED=1.4 GIF_W=1000 python3 media/board-demo/edit.py "$REC" out/ "$REC/terminal"
 ```
 
-It adds the title card, speeds up the waits, puts a caption under each step,
+It adds the title card, speeds up the waits (and everything by `SPEED`), puts a caption under each step,
 adds the Terminal slides, and writes the MP4s and `out/whiteboard.gif`
-(about 50 s, under 5 MB). Copy the GIF to `media/whiteboard.gif`.
+(about 35 s, under 4 MB). Copy the GIF to `media/whiteboard.gif`.
