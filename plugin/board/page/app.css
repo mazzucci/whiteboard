@@ -26,10 +26,6 @@ button { font: inherit; color: inherit; }
 
 /* layout: the board, the conversation beside it */
 .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; }
-@media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; grid-template-rows: minmax(360px, 60vh) auto; overflow: auto; }
-  .chat { border-left: 0; border-top: 1px solid var(--line); min-height: 50vh; }
-}
 .board { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 
 /* the diagrams so far, newest last and selected */
@@ -163,3 +159,46 @@ button { font: inherit; color: inherit; }
 .controls .i { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
 /* Mermaid draws in a scratch element of its own before handing the SVG over: never on screen. */
 body > div[id^="dd"] { position: fixed !important; left: -100000px !important; top: 0 !important; }
+
+/* ---------------------------------------------------------------- small screens and touch */
+html, body { height: 100dvh; }
+.views { display: none; }
+.hint .touch { display: none; }
+@media (hover: none) {
+  .hint .keys { display: none; }
+  .hint .touch { display: inline; }
+}
+/* Phones and upright tablets: the board and the conversation are two full-screen views, switched in the header. */
+@media (max-width: 900px) {
+  .top { padding: 8px 12px; gap: 8px; }
+  .top h1 { font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .top h1 .label { display: none; }
+  #conn-text { display: none; }
+  .views { display: inline-flex; margin-left: auto; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; flex: none; }
+  .views button { padding: 6px 14px; border: 0; background: var(--panel); color: var(--muted); font-size: 13.5px; cursor: pointer; }
+  .views button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .views .unread { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: #e5484d; color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+  .views .unread[hidden] { display: none; }
+  .layout { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .board, .chat { grid-area: 1 / 1; min-height: 0; }
+  body:not(.view-chat) .chat { display: none; }
+  body.view-chat .board { display: none; }
+  .chat { border-left: 0; border-top: 0; }
+  .tabs { padding: 8px 10px 0; }
+  .tab { max-width: 180px; padding: 6px 10px; }
+  .toolbar { margin: 8px 10px 0; padding: 6px 8px; gap: 4px; }
+  .toolbar .title { font-size: 13.5px; }
+  .controls { gap: 4px; }
+  .controls .lbl { display: none; }
+  .controls button { padding: 6px 9px; }
+  .controls .i { width: 17px; height: 17px; }
+  .controls .sep { margin: 0 2px; }
+  .stage { margin: 8px 10px 10px; }
+  .stage .hint { left: 10px; right: 10px; text-align: center; }
+  .messages { padding: 12px 10px 6px; }
+  .composer { padding: 8px 10px calc(10px + env(safe-area-inset-bottom)); }
+  .composer textarea { font-size: 16px; min-height: 48px; }
+  .composer .hint { display: none; }
+  .composer .actions { justify-content: flex-end; }
+  .ended { bottom: calc(12px + env(safe-area-inset-bottom)); }
+}
