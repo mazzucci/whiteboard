@@ -6,9 +6,10 @@
 #   python3 media/board-demo/edit.py <recording dir> <out dir> [terminal dir]
 #
 # With a terminal dir (snapshots of the session's Terminal window during the
-# take, named <epoch ms>.jpg), the demo shows where the board comes from: the
-# prompt in Claude Code, the board opening; the answer typed on the board
-# arriving in the session; and the summary landing there at the end.
+# take, named <epoch ms>.jpg, and slides.json; see demo/RECORDING.md), the
+# demo shows where the board comes from: Claude Code calling the whiteboard,
+# an empty browser window, the page loading; and the summary landing back in
+# Claude Code at the end. WINDOW=1 shows the page in a plain browser window.
 import json, os, subprocess, sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -26,8 +27,40 @@ SPEED = float(os.environ.get('SPEED', 1))
 
 rec = json.load(open(f'{REC}/frames.json'))
 frames, marks = rec['frames'], {m['label']: m['t'] for m in rec['marks']}
-# The frames' own size (an even one, for the encoder): the board alone, or split.py's composite.
-W, H = (v - v % 2 for v in Image.open(f"{REC}/frames/{frames[0]['n']:05d}.jpg").size)
+PAGE = Image.open(f"{REC}/frames/{frames[0]['n']:05d}.jpg").size
+STAGE, TOOLBAR, MARGIN = '#e7eaf0', 40, 24
+WINDOW = os.environ.get('WINDOW') == '1'
+URL = open(f'{REC}/url.txt').read().strip().split('?')[0] if os.path.exists(f'{REC}/url.txt') else 'http://127.0.0.1/'
+
+def window(page):
+    """The page in a plain browser window, on the stage the Terminal slides use."""
+    w, h = page.size
+    im = Image.new('RGB', (w + 2 * MARGIN, h + TOOLBAR + 2 * MARGIN), STAGE)
+    d = ImageDraw.Draw(im)
+    x, y = MARGIN, MARGIN
+    d.rounded_rectangle((x - 1, y - 1, x + w, y + TOOLBAR + h), radius=10, fill='#eceef2', outline='#cdd2da')
+    for i, c in enumerate(('#ff5f57', '#febc2e', '#28c840')):
+        d.ellipse((x + 16 + i * 20, y + 14, x + 28 + i * 20, y + 26), fill=c)
+    pill = (x + 100, y + 8, x + w - 100, y + TOOLBAR - 8)
+    d.rounded_rectangle(pill, radius=12, fill='white')
+    d.text(((pill[0] + pill[2]) / 2, (pill[1] + pill[3]) / 2), URL.replace('http://', ''), font=font(15, 'Regular'), fill=MUTED, anchor='mm')
+    im.paste(page, (x, y + TOOLBAR))
+    return im
+
+def font(size, weight='Semibold'):
+    f = ImageFont.truetype('/System/Library/Fonts/SFNS.ttf', size)
+    try: f.set_variation_by_name(weight)
+    except Exception: pass
+    return f
+
+FRAMES = f'{REC}/frames'
+if WINDOW:
+    FRAMES = f'{TMP}/window'
+    os.makedirs(FRAMES, exist_ok=True)
+    for fr in frames:
+        window(Image.open(f"{REC}/frames/{fr['n']:05d}.jpg").convert('RGB')).save(f"{FRAMES}/{fr['n']:05d}.jpg", quality=92)
+# The frames' own size (an even one, for the encoder).
+W, H = (v - v % 2 for v in Image.open(f"{FRAMES}/{frames[0]['n']:05d}.jpg").size)
 t0 = frames[0]['t']
 at = lambda label: marks[label] - t0
 end = at('wrapped up') + 3.0
@@ -36,14 +69,17 @@ end = at('wrapped up') + 3.0
 with open(f'{TMP}/frames.txt', 'w') as f:
     for a, b in zip(frames, frames[1:] + [{'t': t0 + end + 0.1}]):
         if a['t'] - t0 > end: break
-        f.write(f"file '{REC}/frames/{a['n']:05d}.jpg'\nduration {max(b['t'] - a['t'], 0.001):.4f}\n")
+        f.write(f"file '{FRAMES}/{a['n']:05d}.jpg'\nduration {max(b['t'] - a['t'], 0.001):.4f}\n")
 subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', f'{TMP}/frames.txt',
                 '-vf', f'fps=30,scale={W}:{H},setsar=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '16',
                 f'{TMP}/session.mp4'], check=True)
 
 # (from, to, speed) in session seconds: waits fast, what matters at 1x.
+# The page loading: "connecting", the empty board, the first diagram; slowed, so it is seen.
+LOAD = at('first diagram') + 0.3
 SEGMENTS = [
-    (0.0, at('sticky note'), 1.4),              # step 1, then the trace arrives
+    (0.0, LOAD, 0.3),
+    (LOAD, at('sticky note'), 1.4),             # step 1, then the trace arrives
     (at('sticky note'), at('said yes'), 1.0),   # the note, the question, the answer typed
     (at('said yes'), at('proposal drawn'), 3.0),  # Claude works on it
     (at('proposal drawn'), at('settled'), 1.3),
@@ -52,7 +88,8 @@ SEGMENTS = [
     (at('wrapped up'), end, 1.0),
 ]
 CAPTIONS = [
-    (0.0, at('sticky note'), 'Claude walks you through it, one diagram per step'),
+    (0.0, LOAD, 'Claude draws on the whiteboard, a page it opens in your browser'),
+    (LOAD, at('sticky note'), 'Claude walks you through it, one diagram per step'),
     (at('sticky note'), at('said yes'), 'The trace shows the problem. The fix waits on a sticky note'),
     (at('said yes'), at('settled'), 'You answer on the board, and Claude draws the proposal'),
     (at('settled'), at('wrap up'), 'Zoom, pan, and step through the diagrams'),
@@ -68,12 +105,6 @@ def out_time(t):
         if t < b: return acc + (t - a) / s
         acc += (b - a) / s
     return acc
-
-def font(size, weight='Semibold'):
-    f = ImageFont.truetype('/System/Library/Fonts/SFNS.ttf', size)
-    try: f.set_variation_by_name(weight)
-    except Exception: pass
-    return f
 
 # The title card.
 card = Image.new('RGB', (W, H + BAR), CARD_BG)
@@ -111,7 +142,7 @@ for i, (path, a, b) in enumerate(caps):
     prev = f'c{i}'
 with open(f'{TMP}/filter.txt', 'w') as f: f.write(chain)
 subprocess.run([FF, '-y', '-loglevel', 'error', *inputs, '-filter_complex_script', f'{TMP}/filter.txt', '-map', f'[{prev}]',
-                '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-preset', 'slow', '-an', f'{OUT}/whiteboard-demo.mp4'], check=True)
+                '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '10', '-preset', 'slow', '-an', f'{OUT}/whiteboard-demo.mp4'], check=True)
 
 
 def redact(im):
@@ -139,13 +170,37 @@ def terminal_still(im, slide, name):
         ImageDraw.Draw(win).rounded_rectangle((6, 32 + m0 - y0 - 4, im.width - 6, 32 + m1 - y0 + 4), radius=6, outline='#f5b544', width=3)
     scale = min((W - 60) / win.width, (H - 60) / win.height)
     win = win.resize((round(win.width * scale), round(win.height * scale)), Image.LANCZOS)
-    frame = Image.new('RGB', (W, H + BAR), '#e7eaf0')
+    frame = Image.new('RGB', (W, H + BAR), STAGE)
     frame.paste(win, ((W - win.width) // 2, (H - win.height) // 2))
     frame.paste(caption(slide['caption']), (0, H))
     frame.save(f'{TMP}/{name}.png')
     subprocess.run([FF, '-y', '-loglevel', 'error', '-loop', '1', '-t', f"{slide['seconds'] / SPEED:.2f}", '-i', f'{TMP}/{name}.png',
-                    '-vf', 'fps=30,format=yuv420p,setsar=1', '-c:v', 'libx264', '-crf', '18', f'{TMP}/{name}.mp4'], check=True)
+                    '-vf', 'fps=30,format=yuv420p,setsar=1', '-c:v', 'libx264', '-crf', '10', f'{TMP}/{name}.mp4'], check=True)
     return f'{TMP}/{name}.mp4'
+
+def still(png, seconds, name):
+    subprocess.run([FF, '-y', '-loglevel', 'error', '-loop', '1', '-t', f'{seconds:.2f}', '-i', png,
+                    '-vf', 'fps=30,format=yuv420p,setsar=1', '-c:v', 'libx264', '-crf', '10', f'{TMP}/{name}.mp4'], check=True)
+    return f'{TMP}/{name}.mp4'
+
+def seconds_of(clip):
+    return float(subprocess.run([FF.replace('ffmpeg', 'ffprobe'), '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', clip],
+                                capture_output=True, text=True).stdout)
+
+def join(clips, out, fade=0.3):
+    """The clips one after another, each crossfading into the next."""
+    inputs, chain, prev, total = [], [], '0:v', 0.0
+    for i, clip in enumerate(clips):
+        inputs += ['-i', clip]
+        d = seconds_of(clip)
+        if i:
+            chain.append(f'[{prev}][{i}:v]xfade=transition=fade:duration={fade}:offset={total - fade:.3f}[x{i}]')
+            prev, total = f'x{i}', total + d - fade
+        else:
+            total = d
+    with open(f'{TMP}/join.txt', 'w') as f: f.write(';'.join(chain))
+    subprocess.run([FF, '-y', '-loglevel', 'error', *inputs, '-filter_complex_script', f'{TMP}/join.txt', '-map', f'[{prev}]',
+                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '10', out], check=True)
 
 demo = f'{OUT}/whiteboard-demo.mp4'
 if TERM:
@@ -161,21 +216,26 @@ if TERM:
             ImageDraw.Draw(im).rectangle((0, slide['clear'], im.width, im.height - 70), fill=im.getpixel((im.width // 2, im.height - 120)))
         cut = CARD if slide['after'] == 'title' else None if slide['after'] == 'end' else out_time(at(slide['after']) + 1.0) + CARD
         cuts.setdefault(cut, []).append(terminal_still(im, slide, f'term-{i}'))
+        if slide.get('browser'):
+            # Then an empty browser window, the page about to load, under the same caption.
+            blank = Image.new('RGB', (W, H + BAR), STAGE)
+            blank.paste(window(Image.new('RGB', PAGE, 'white')).crop((0, 0, W, H)), (0, 0))
+            blank.paste(caption(slide['caption']), (0, H))
+            blank.save(f'{TMP}/blank-{i}.png')
+            cuts[cut].append(still(f'{TMP}/blank-{i}.png', 0.9 / SPEED, f'blank-{i}'))
     times = sorted(t for t in cuts if t is not None)
     pieces = []
     for i, (a, b) in enumerate(zip([0.0] + times, times + [None])):
         piece = f'{TMP}/board-{i}.mp4'
         span = ['-ss', f'{a:.3f}'] + (['-t', f'{b - a:.3f}'] if b else [])
-        subprocess.run([FF, '-y', '-loglevel', 'error', '-i', demo, *span, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', piece], check=True)
+        subprocess.run([FF, '-y', '-loglevel', 'error', '-i', demo, *span, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '10', piece], check=True)
         pieces.append(piece)
     order = []
     for i, piece in enumerate(pieces):
         order.append(piece)
         order += cuts[times[i]] if i < len(times) else cuts.get(None, [])
-    with open(f'{TMP}/all.txt', 'w') as f:
-        f.writelines(f"file '{p}'\n" for p in order)
     demo = f'{OUT}/whiteboard-demo-terminal.mp4'
-    subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', f'{TMP}/all.txt', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', demo], check=True)
+    join(order, demo)
 
 # The README's GIF: smaller, 12 fps, one palette for the whole clip.
 gif = f'{OUT}/whiteboard.gif'
