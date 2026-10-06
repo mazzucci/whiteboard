@@ -208,8 +208,10 @@ function fit(d = diagrams[current]) {
   const e = extentOf(d)
   const w = e.x1 - e.x0
   const h = e.y1 - e.y0
-  const zoom = Math.max(0.05, Math.min((W - pad * 2) / w, (H - pad * 2) / h, 1.5))
-  d.view = { zoom, x: (W - w * zoom) / 2 - e.x0 * zoom, y: Math.max(pad, (H - h * zoom) / 2) - e.y0 * zoom, isFit: true }
+  // Room at the bottom for the key hint.
+  const hint = 28
+  const zoom = Math.max(0.05, Math.min((W - pad * 2) / w, (H - pad * 2 - hint) / h, 1.5))
+  d.view = { zoom, x: (W - w * zoom) / 2 - e.x0 * zoom, y: Math.max(pad, (H - hint - h * zoom) / 2) - e.y0 * zoom, isFit: true }
   apply()
 }
 
