@@ -161,3 +161,5 @@ button { font: inherit; color: inherit; }
 /* toolbar icons */
 .controls button { display: inline-flex; align-items: center; gap: 5px; }
 .controls .i { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+/* Mermaid draws in a scratch element of its own before handing the SVG over: never on screen. */
+body > div[id^="dd"] { position: fixed !important; left: -100000px !important; top: 0 !important; }

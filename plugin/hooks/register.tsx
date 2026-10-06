@@ -135,9 +135,13 @@ async function boardStatus($: EngineInterface, status: 'working' | 'idle') {
   }
 }
 
-/** Opens a URL in the person's browser: `open` on macOS, `xdg-open` elsewhere. */
+/**
+ * Opens a URL in the person's browser: the command in $BROWSER when they set
+ * one (the usual convention), else `open` on macOS and `xdg-open` elsewhere.
+ */
 async function openInBrowser($: EngineInterface, url: string): Promise<boolean> {
-  const opener = (await $.fs.exists('/usr/bin/open')) ? '/usr/bin/open' : 'xdg-open'
+  const chosen = ((await $.env.get('BROWSER')) ?? '').split(':')[0]?.trim()
+  const opener = chosen || ((await $.fs.exists('/usr/bin/open')) ? '/usr/bin/open' : 'xdg-open')
   try {
     return (await $.process.run([opener, url])).exitCode === 0
   } catch {
@@ -257,8 +261,10 @@ export const register: Register = on => {
         'skill. The first post opens the page in the browser. If Mermaid rejects the source, the call fails with ' +
         'its error and the card is taken off the page: fix the source and post again. ' +
         'Sticky notes (`sticky_notes`) pin a short note beside a box (`on`: its node id in the Mermaid source) ' +
-        'without changing the diagram: use one for a proposal, a question or an aside, and redraw the diagram itself ' +
-        'only once the user agrees. With a `mermaid` they go on that diagram; without one, on the latest diagram. ' +
+        'without changing the diagram: use one for a proposal, a question or an aside. Whenever you have a fix or a ' +
+        'change to propose, pin it as a sticky note on the box it changes and ask on the board (in `text`) whether ' +
+        'the user wants to see it; redraw the diagram with the change only once they say so. With a `mermaid` notes ' +
+        'go on that diagram; without one, on the latest diagram. ' +
         'Messages that begin "(on the whiteboard)" were typed by the user on the page: answer them there with ' +
         'this tool, and keep what you write in the conversation to a line. When they wrap up, write the summary in ' +
         'the conversation itself, then call this tool with end: true: the page says the discussion is over and closes.',

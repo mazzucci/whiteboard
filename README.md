@@ -7,9 +7,9 @@ up on the board as it goes: real [Mermaid](https://mermaid.js.org), every
 diagram type, with zoom, pan, a legend and sticky notes, and the conversation
 beside them.
 
-![Claude walks through a slow checkout investigation on the whiteboard: the p95 trace with the slow spans in red, a sticky note proposing a fix, and the conversation beside it](media/board.png)
+![Claude walks through a slow checkout investigation on the whiteboard: the request path, the p95 trace with the problem in red and a sticky note proposing a fix; the user answers on the board and Claude draws the proposal in lavender, then the user zooms, pans and wraps up](media/whiteboard.gif)
 
-<sub>The whiteboard during a simulated investigation (`demo/checkout-service/`): Claude, the plugin and every diagram are real.</sub>
+<sub>A recording of a real Claude Code session, sped up while Claude works. The project is simulated (`demo/checkout-service/`); Claude, the plugin and every diagram are real, and the replies on the board were typed by a script standing in for the user.</sub>
 
 > **Open source project, not affiliated with or endorsed by Anthropic.** Claude and
 > Claude Code are trademarks of Anthropic, PBC.
@@ -274,8 +274,9 @@ board: any Mermaid works.
 - One board per session. Restarting Claude Code (or the plugin) ends it; the
   open page then says so and stays readable.
 - `claude -p` has no board: nobody could reply to it.
-- In the desktop app, the board opens in your default browser, not inside the
-  app.
+- The board opens in your default browser (in the desktop app too, not inside
+  the app). To use another, set `BROWSER` to its command before starting
+  Claude Code.
 
 ## Development
 
@@ -289,8 +290,9 @@ claude plugin test plugin
 `board/vendor/`), the drawing skill (`skills/`) and the tests. The rest of the
 repository is the project around it: `demo/` holds the simulated checkout
 investigation and a walkthrough with reference diagrams; `fixtures/` one
-diagram per type; `media/` the README's picture and the explainer video's
-sources.
+diagram per type; `media/` the README's GIF, the scripts that record and edit
+it (`media/board-demo/`, see `demo/RECORDING.md`) and the 0.1 explainer
+video's sources.
 
 ## License
 

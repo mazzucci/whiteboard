@@ -1,52 +1,50 @@
-# Recording the demo video
+# Recording the demo
 
-A real screen recording of Claude Code with the whiteboard, from a simulated
-investigation (`checkout-service/investigation.md`: fictional service, code and
-numbers). Claude, the plugin and every diagram are real. The edit adds the
-intro and outro cards from `media/explainer/` and speeds up the waiting.
+The README's GIF is a recording of a real Claude Code session with the
+whiteboard, on the simulated investigation in `checkout-service/`
+(fictional service, code and numbers). Claude, the plugin and every diagram
+are real. A script stands in for the person on the board: it records the
+page, answers Claude's question, shows the controls and wraps up, so a take
+needs no hands and can be repeated until Claude's drawing is good.
 
-## Before recording
+## A take
 
-1. Install the plugin (desktop app: Settings, plugins section, add the
-   marketplace `mazzucci/whiteboard`, install **whiteboard**;
-   after an update to it, update the plugin there too), then run
-   `/whiteboard setup` once in any session.
-2. In the Claude Code desktop app, start a **new session** in
-   `demo/checkout-service/`, so Claude sees only the investigation notes.
-3. Collapse the sidebar, so no other session names or account details show.
-   Use the light appearance.
-4. Make the window about 1600 × 1000, with the conversation on the left and
-   room for the pane on the right.
-5. Optional: run `/whiteboard` once to open the pane, so the first diagram does
-   not resize the layout mid-recording.
+You need Node.js, Google Chrome and `puppeteer-core` (the recorder looks for
+it in `~/.cache/whiteboard`, where 0.1's setup put it; any install works if
+you change the `createRequire` path).
 
-## Recording
+1. Pick a folder for the take, say `REC=/tmp/take1`, and `mkdir -p $REC/frames`.
+2. Start the recorder; it waits for the board:
 
-Press ⇧⌘5, choose **Record Selected Portion**, and frame the Claude window.
+   ```bash
+   node media/board-demo/recorder.mjs "$REC"
+   ```
 
-1. Paste this prompt and send it:
+3. In another terminal, in a copy of `demo/checkout-service/` (its folder
+   name is the board's label), start Claude Code with the recorder as the
+   browser and this prompt:
 
-   > This is our investigation of the slow checkout endpoint
-   > (investigation.md). Walk me through it step by step, drawing each stage on
-   > the whiteboard as you go: first the request path, then what the trace
-   > shows, then the proposed fix. Keep your answers short.
+   ```bash
+   REC=/tmp/take1 BROWSER=/path/to/whiteboard/media/board-demo/opener.sh claude "This is our investigation of the slow checkout endpoint (investigation.md). Walk me through it step by step on the whiteboard: first the request path, then what the trace shows. Keep your answers short." --plugin-dir /path/to/whiteboard/plugin --allowedTools=mcp__whiteboard__post_to_board,Read
+   ```
 
-2. Let Claude finish all three diagrams. Don't touch anything; the waiting is
-   cut in the edit.
-3. Click once on the whiteboard pane, then press, about a second apart:
-   - `i` `i`: zoom in to 150%
-   - `d` `d`: pan right, across the N+1
-   - `o` `o`: back to 100%
-   - `c`, then `c` again: the Mermaid source, then back
-   - `p` `p`: step back through the history to the request path
-   - `n` `n`: forward to the proposed fix
-4. Stop the recording (the stop button in the menu bar).
+   A new folder asks whether you trust it first: answer before the take.
 
-A take where Claude's diagrams look wrong or cluttered: start a new session
-and record again. Two or three takes are normal.
+4. The recorder logs each step: the first diagram, the sticky note, Claude's
+   question, "yes", the proposal, the controls, the wrap-up. It stops on its
+   own and writes `$REC/frames.json`.
 
-## What to send for the edit
+Check the take before editing: the sticky note should sit by
+`inventory.check`, Claude's question should be on the board (not only in the
+terminal), and the proposal should be lavender. Claude draws a little
+differently each time; three to five takes are normal.
 
-The `.mov` file from the Desktop. It is cropped to the conversation and the
-pane, sped up while Claude thinks or streams, given the caption bar, and placed
-between the shortened intro and the lifecycle outro.
+## The edit
+
+```bash
+python3 media/board-demo/edit.py "$REC" out/
+```
+
+It adds the title card, speeds up the waits, puts a caption under each step,
+and writes `out/whiteboard-demo.mp4` and `out/whiteboard.gif` (about 40 s,
+under 4 MB). Copy the GIF to `media/whiteboard.gif`.

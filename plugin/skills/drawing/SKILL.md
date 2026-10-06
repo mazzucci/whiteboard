@@ -202,7 +202,9 @@ Proposing a fix:
 
 1. Once the evidence shows the problem, pin the fix as a sticky note on the
    box it changes ("Proposal: one `inventory.check_batch` call instead of
-   1,240"), and ask whether the user wants to see it in detail.
+   1,240"), and ask on the board, in the same post's `text`, whether the user
+   wants to see it in detail: they are looking at the board, and the question
+   belongs next to the note.
 2. If they do, redraw the same diagram with the change in it: the changed
    boxes `proposed` (lavender), the rest as they were. The redraw has no
    sticky note: the proposal is in the diagram now.

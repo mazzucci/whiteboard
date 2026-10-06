@@ -153,8 +153,7 @@ function select(i) {
   } else if (!d.view) fit(d)
   else apply()
   renderStickies()
-  // Notes placed: a fitted view takes them in too.
-  if (d.view?.isFit && canvas.querySelector('.sticky')) fit(d)
+  keepInView(d)
   renderTabs()
 }
 
@@ -195,7 +194,8 @@ function holdView(shown, nodes) {
   if (common.length < 0.6 * Math.max(before.size, nodes.size)) return null
   const a = before.get(common[0])
   const b = nodes.get(common[0])
-  return { zoom: view.zoom, x: view.x + (a.x - b.x) * view.zoom, y: view.y + (a.y - b.y) * view.zoom, isFit: false }
+  // Held from a fitted view: the board may still fit it again if it no longer fits.
+  return { zoom: view.zoom, x: view.x + (a.x - b.x) * view.zoom, y: view.y + (a.y - b.y) * view.zoom, isFit: false, isFromFit: !!(view.isFit || view.isFromFit) }
 }
 
 /** Fits the whole diagram in the stage, never above 150%, centred. */
@@ -213,6 +213,21 @@ function fit(d = diagrams[current]) {
   const zoom = Math.max(0.05, Math.min((W - pad * 2) / w, (H - pad * 2 - hint) / h, 1.5))
   d.view = { zoom, x: (W - w * zoom) / 2 - e.x0 * zoom, y: Math.max(pad, (H - hint - h * zoom) / 2) - e.y0 * zoom, isFit: true }
   apply()
+}
+
+/**
+ * A view the board chose (fitted, or held from a fitted one) shows the whole
+ * diagram and its notes: when they no longer fit, it fits again. A view the
+ * person zoomed or panned is theirs, and stays.
+ */
+function keepInView(d) {
+  const v = d?.view
+  if (!v || !(v.isFit || v.isFromFit)) return
+  const e = extentOf(d)
+  const W = stage.clientWidth
+  const H = stage.clientHeight - 28
+  const isInside = v.x + e.x0 * v.zoom >= 0 && v.y + e.y0 * v.zoom >= 0 && v.x + e.x1 * v.zoom <= W && v.y + e.y1 * v.zoom <= H
+  if (v.isFit ? canvas.querySelector('.sticky') : !isInside) fit(d)
 }
 
 /** What a fit takes in, in the drawing's own pixels: the diagram and the notes drawn on it. */
@@ -244,7 +259,7 @@ function zoomBy(factor, px = stage.clientWidth / 2, py = stage.clientHeight / 2)
 function panBy(dx, dy) {
   const d = diagrams[current]
   if (!d?.view) return
-  d.view = { ...d.view, x: d.view.x + dx, y: d.view.y + dy, isFit: false }
+  d.view = { ...d.view, x: d.view.x + dx, y: d.view.y + dy, isFit: false, isFromFit: false }
   apply()
 }
 
@@ -335,8 +350,7 @@ async function add(card, isReplay) {
     pinned(card.diagram).push(card)
     if (diagrams[current]?.id === card.diagram) {
       renderStickies()
-      // A fitted diagram makes room for its note.
-      if (diagrams[current].view?.isFit) fit()
+      keepInView(diagrams[current])
     }
     // A note on an earlier diagram brings that diagram up.
     const d = diagrams.find(x => x.id === card.diagram)
@@ -637,7 +651,8 @@ function toCanvas(clientX, clientY) {
 
 /**
  * Where a note on a box goes: just below it, or else in the first free place
- * to its right, left or above, clear of other boxes and notes.
+ * to its right, left or above, clear of other boxes and notes; failing that,
+ * below the diagram.
  */
 function placeOf(note, stack) {
   const g = boxOf(note.on)
@@ -659,7 +674,10 @@ function placeOf(note, stack) {
         if (!overlaps(p, rects)) return p
       }
     }
-    return { x: (a.x + b.x - NOTE_W) / 2, y: b.y + gap + stack * (NOTE_H + 8) }
+    // Nowhere free beside it: below the whole diagram, under its box, where it
+    // covers nothing.
+    const d = diagrams[current]
+    return { x: Math.max(0, Math.min((a.x + b.x - NOTE_W) / 2, d.w - NOTE_W)), y: d.h + gap + stack * (NOTE_H + 8) }
   }
   if (Number.isFinite(note.x)) return { x: note.x, y: note.y }
   const d = diagrams[current]
