@@ -15,15 +15,13 @@
 //   GET  /mermaid.js  Mermaid, vendored (gzipped on disk, served as is)
 //   GET  /events      server-sent events: every card so far, then each new one
 //   POST /post        a card from the plugin; answers once the page has drawn it
-//                     { notes: [{ on?, text }] } with mermaid: sticky notes on
+//                     { notes: [{ on?, text }] } with mermaid: Claude's sticky notes on
 //                     that diagram; without: pinned to the latest diagram
 //                     { status: 'working' | 'idle' }: whether Claude is in a turn
 //                     { end: true, text? }: the discussion is over; the page
 //                     says so and closes, and this server stops
 //   POST /rendered    { id, error? } from the page: how a card's diagram drew
 //   POST /say         { text } from the page
-//   POST /sticky      { diagram, on?, x?, y?, text, label } from the page: the
-//                     person's sticky note on a diagram, also said to Claude
 
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
@@ -166,7 +164,7 @@ const server = createServer(async (req, res) => {
     req.on('close', () => listeners.delete(res))
     return
   }
-  if (req.method !== 'POST' || !['/post', '/say', '/rendered', '/sticky'].includes(url.pathname)) return json(404, { error: 'not found' })
+  if (req.method !== 'POST' || !['/post', '/say', '/rendered'].includes(url.pathname)) return json(404, { error: 'not found' })
 
   let input
   try {
@@ -179,16 +177,6 @@ const server = createServer(async (req, res) => {
     if (!text) return json(400, { error: 'empty' })
     publish({ kind: 'you', text })
     say(text)
-    return json(200, { ok: true })
-  }
-  if (url.pathname === '/sticky') {
-    const text = clip(input.text, 1000)?.trim()
-    const diagram = cards.find(c => c.kind === 'diagram' && c.id === Number(input.diagram))
-    if (!text || !diagram) return json(400, { error: 'a note needs text and a diagram' })
-    const on = typeof input.on === 'string' && /^[\w-]{1,64}$/.test(input.on) ? input.on : undefined
-    const at = n => (Number.isFinite(n) ? Math.round(n) : undefined)
-    publish({ kind: 'sticky', by: 'you', diagram: diagram.id, on, x: at(input.x), y: at(input.y), text })
-    say(`Sticky note on ${clip(input.label, 200) || `"${diagram.title ?? 'the diagram'}"`}: ${text}`)
     return json(200, { ok: true })
   }
   if (url.pathname === '/rendered') {

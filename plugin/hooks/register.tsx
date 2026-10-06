@@ -163,7 +163,7 @@ type Legend = { label: string; stroke?: string; isDashed: boolean }
 type Note = { on?: string; text: string }
 type Card = { title?: string; text?: string; mermaid?: string; legend?: Legend[]; notes?: Note[] }
 
-/** Claude's sticky notes, as the page takes them: text, and the node id they are pinned to. */
+/** Claude's sticky notes (`sticky_notes`), as the page takes them: text, and the node id each is pinned to. */
 function notesOf(value: unknown): Note[] | undefined {
   if (!Array.isArray(value)) return undefined
   const notes = value
@@ -256,10 +256,9 @@ export const register: Register = on => {
         'card below the last, so a sequence of posts tells a story. Before drawing, read the whiteboard:drawing ' +
         'skill. The first post opens the page in the browser. If Mermaid rejects the source, the call fails with ' +
         'its error and the card is taken off the page: fix the source and post again. ' +
-        'Sticky notes (`notes`) pin a short note beside a box (`on`: its node id in the Mermaid source) without ' +
-        'changing the diagram: use one for a proposal, a question or an aside, and redraw the diagram itself only ' +
-        'once the user agrees. Notes with a `mermaid` go on that diagram; without one, on the latest diagram. The ' +
-        "user's own notes arrive as \"(on the whiteboard) Sticky note on …\": they are about that box; answer them. " +
+        'Sticky notes (`sticky_notes`) pin a short note beside a box (`on`: its node id in the Mermaid source) ' +
+        'without changing the diagram: use one for a proposal, a question or an aside, and redraw the diagram itself ' +
+        'only once the user agrees. With a `mermaid` they go on that diagram; without one, on the latest diagram. ' +
         'Messages that begin "(on the whiteboard)" were typed by the user on the page: answer them there with ' +
         'this tool, and keep what you write in the conversation to a line. When they wrap up, write the summary in ' +
         'the conversation itself, then call this tool with end: true: the page says the discussion is over and closes.',
@@ -269,7 +268,7 @@ export const register: Register = on => {
           title: { type: 'string', description: 'A short heading for the card' },
           text: { type: 'string', description: 'A note, in simple Markdown, above the diagram if there is one' },
           mermaid: { type: 'string', description: 'A Mermaid diagram, starting with the diagram type' },
-          notes: {
+          sticky_notes: {
             type: 'array',
             maxItems: 8,
             description: 'Sticky notes pinned beside boxes: a proposal, a question, an aside. Without `mermaid`, they go on the latest diagram.',
@@ -334,8 +333,8 @@ export const register: Register = on => {
         return { result: `The whiteboard page had already stopped (${error instanceof Error ? error.message : String(error)}).` }
       }
     }
-    const notes = notesOf(e.notes)
-    if (!text && !mermaid && !notes) return { deny: 'Nothing posted: give `text`, `mermaid`, `notes`, or a mix.' }
+    const notes = notesOf(e.sticky_notes)
+    if (!text && !mermaid && !notes) return { deny: 'Nothing posted: give `text`, `mermaid`, `sticky_notes`, or a mix.' }
     if (!(await $.session.surfaces()).length) {
       return { deny: 'Nobody can see the whiteboard from this session (it has no screen attached). Explain in prose instead.' }
     }
@@ -352,7 +351,7 @@ export const register: Register = on => {
         deny: `Mermaid could not draw this diagram:\n${mermaidError(out.posted.error)}\nIt was taken off the page. Fix the source and post again.`,
       }
     }
-    if (out.posted.noDiagram) return { deny: 'No diagram on the board to pin these notes to: post the diagram with them.' }
+    if (out.posted.noDiagram) return { deny: 'No diagram on the board to pin these sticky notes to: post the diagram with them.' }
     const unknownNote = unknown.length ? ` The legend names classes with no classDef: ${unknown.join(', ')}.` : ''
     return { result: `${postedWhere(out, Boolean(mermaid))}${unknownNote}` }
   })

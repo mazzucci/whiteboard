@@ -108,16 +108,25 @@ mechanism (HTTP, queue, function call, query). Cite the `file:line` behind key
 edges in your answer, and draw a part you have not looked at as "not yet checked"
 rather than guessing its insides.
 
-**Confidence and evidence.** Four classes, each with its own border so they read
-without colour too. A proposal is not a box state: pin it as a sticky note
-(below) until the user agrees.
+**Confidence and evidence.** Each colour answers one question, and each has
+its own border so it reads without colour too:
+
+- grey, dashed: **not checked or measured yet**
+- green: **checked, no problem**
+- red, thick: **checked, a problem** (red always means a problem, never "confirmed")
+- lavender, dashed: **a proposed change**, not made or measured yet
+- amber, rarely: looks wrong, not confirmed yet
 
 ```
-  classDef confirmed fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px,color:#0d3b1a
-  classDef suspect fill:#fff4ce,stroke:#b58100,stroke-width:3px,color:#4d3800
   classDef unverified fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4,color:#444444
-  classDef ruledout fill:#fdecea,stroke:#c0392b,stroke-dasharray:3 3,color:#8a1f11
+  classDef fine fill:#e6f4ea,stroke:#1e7e34,stroke-width:2px,color:#0d3b1a
+  classDef problem fill:#fdecea,stroke:#c0392b,stroke-width:3px,color:#8a1f11
+  classDef proposed fill:#f1ebfc,stroke:#6f42c1,stroke-width:2px,stroke-dasharray:6 3,color:#3b1f6e
+  classDef suspect fill:#fff4ce,stroke:#b58100,stroke-width:3px,color:#4d3800
 ```
+
+Legend labels in the same words: "Not measured yet", "No problem", "The
+problem", "Proposed".
 
 **Redraw without reshuffling.** Mermaid lays a diagram out from the order of its
 lines, so reordering them can flip the whole layout even when nothing else
@@ -132,10 +141,10 @@ through the diagrams (the tabs, or `p` and `n`) shows only what changed.
 
 Troubleshooting with it: draw the hypothesis first, every step `unverified`.
 As evidence arrives, redraw the same diagram (same title plus "step n", so the
-history reads as the investigation): a step a log or test confirms becomes
-`confirmed`, the step that looks wrong `suspect`, a disproved branch `ruledout`
-with a "✗" in its label and a dotted edge. Say in your answer which evidence
-moved which box. The last diagram should hold only what the evidence supports.
+tabs read as the investigation): a step the evidence clears becomes `fine`,
+the step where the evidence shows the fault `problem`, one that looks wrong
+but is not proven `suspect`. Say in your answer which evidence moved which
+box. Then propose the fix on a sticky note, not in the diagram (below).
 
 **Any lens.** Confidence is one lens; the same recipe colours a diagram by any
 property that helps the conversation: pick the property, three to five levels,
@@ -185,16 +194,20 @@ colours consistent between levels, so the cards read as one zoom.
 ## Sticky notes
 
 A proposal, a question or an aside about one box goes on a sticky note
-(`notes: [{ on: "<node id>", text }]`), pinned beside that box, not into the
-diagram: a box drawn into the system looks like part of it. Propose a fix as
-a note on the box it changes ("Proposal: one `inventory.check_batch` call
-instead of 1,240"); once the user agrees, redraw the diagram with the change
-in it. Notes without `mermaid` go on the latest diagram. Keep a note to a line
-or two.
+(`sticky_notes: [{ on: "<node id>", text }]`), pinned beside that box, not into
+the diagram: a box drawn into the system looks like part of it. Notes without
+`mermaid` go on the latest diagram. Keep a note to a line or two.
 
-The user pins notes too. They arrive as "(on the whiteboard) Sticky note on
-"<box>" in the diagram "<title>": …": answer on the board, and treat them as
-part of the discussion to remember and act on.
+Proposing a fix:
+
+1. Once the evidence shows the problem, pin the fix as a sticky note on the
+   box it changes ("Proposal: one `inventory.check_batch` call instead of
+   1,240"), and ask whether the user wants to see it in detail.
+2. If they do, redraw the same diagram with the change in it: the changed
+   boxes `proposed` (lavender), the rest as they were. The redraw has no
+   sticky note: the proposal is in the diagram now.
+3. Until someone measures it, say it is a proposal, in the note, the legend
+   ("Proposed") and your answer.
 
 ## When Mermaid rejects it
 

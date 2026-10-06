@@ -195,11 +195,11 @@ test('sticky notes go with a diagram, or on the latest one; with no diagram yet,
           ? { ok: false, viewers: 1, drawn: false, noDiagram: true }
           : { ok: true, viewers: 1, drawn: false },
   })
-  const early = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', notes: [{ on: 'api', text: 'Proposal: cache it' }] })
+  const early = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', sticky_notes: [{ on: 'api', text: 'Proposal: cache it' }] })
   expect(said(early)).toContain('No diagram on the board')
-  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE, notes: [{ on: 'api', text: 'slow here' }] })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE, sticky_notes: [{ on: 'api', text: 'slow here' }] })
   expect(posts[1]).toMatchObject({ mermaid: SOURCE, notes: [{ on: 'api', text: 'slow here' }] })
-  const later = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', notes: [{ on: 'db', text: 'Proposal: an index' }, { text: '' }] })
+  const later = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', sticky_notes: [{ on: 'db', text: 'Proposal: an index' }, { text: '' }] })
   expect(said(later)).toContain('Posted')
   expect(posts[2]?.notes).toEqual([{ on: 'db', text: 'Proposal: an index' }])
   stop()
