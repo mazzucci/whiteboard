@@ -43,7 +43,7 @@ subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-
 
 # (from, to, speed) in session seconds: waits fast, what matters at 1x.
 SEGMENTS = [
-    (0.0, at('sticky note'), 1.0),              # step 1, then the trace arrives
+    (0.0, at('sticky note'), 1.4),              # step 1, then the trace arrives
     (at('sticky note'), at('said yes'), 1.0),   # the note, the question, the answer typed
     (at('said yes'), at('proposal drawn'), 3.0),  # Claude works on it
     (at('proposal drawn'), at('settled'), 1.3),
