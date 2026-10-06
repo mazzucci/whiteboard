@@ -9,9 +9,9 @@ needs no hands and can be repeated until Claude's drawing is good.
 
 ## A take
 
-You need Node.js, Google Chrome and `puppeteer-core` (the recorder looks for
-it in `~/.cache/whiteboard`, where 0.1's setup put it; any install works if
-you change the `createRequire` path).
+You need Node.js, Google Chrome, and `puppeteer-core` beside the recorder:
+`npm install --no-save puppeteer-core` in `media/board-demo/` (or point
+`PUPPETEER_HOME` at a folder where it is installed).
 
 1. Pick a folder for the take, say `REC=/tmp/take1`, and `mkdir -p $REC/frames`.
 2. Start the recorder; it waits for the board:

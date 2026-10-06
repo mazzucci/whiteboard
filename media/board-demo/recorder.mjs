@@ -5,12 +5,13 @@
 //
 //   node media/board-demo/recorder.mjs <dir>   writes <dir>/frames/*.jpg and <dir>/frames.json
 //
-// Needs puppeteer-core (it uses the copy in ~/.cache/whiteboard from 0.1; any
-// install works) and Google Chrome. See demo/RECORDING.md.
+// Needs puppeteer-core (npm install puppeteer-core in this folder) and Google
+// Chrome. See demo/RECORDING.md.
 
 import { createRequire } from 'node:module'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-const require = createRequire(`${process.env.HOME}/.cache/whiteboard/package.json`)
+// puppeteer-core from this folder (npm install puppeteer-core here), or from PUPPETEER_HOME.
+const require = createRequire(process.env.PUPPETEER_HOME ? `${process.env.PUPPETEER_HOME}/package.json` : import.meta.url)
 const puppeteer = require('puppeteer-core')
 
 const dir = process.argv[2]

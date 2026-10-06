@@ -34,9 +34,9 @@ show the difference (see "Show what you know" below).
 
 ## Keep it legible
 
-The page fits each diagram to its width (about 1100 px at most), with
-"Actual size" and browser zoom for detail; a diagram much wider than that is
-scaled down until text is hard to read.
+The board fits each whole diagram to its stage at first (the person can zoom
+and pan after); a diagram far wider or taller than the stage is fitted small,
+until its text is hard to read.
 - About 5 to 15 nodes. More than that: split it into two diagrams, or zoom one level out.
 - Choose the direction by shape: a long chain reads best `TB`; a wide fan-out or
   a pipeline across a few lanes reads best `LR`. A diagram that renders as a thin
@@ -198,7 +198,8 @@ colours consistent between levels, so the cards read as one zoom.
 ## Sticky notes
 
 A proposal, a question or an aside about one box goes on a sticky note
-(`sticky_notes: [{ on: "<node id>", text }]`), pinned beside that box, not into
+(`sticky_notes: [{ on: "<node id>", text }]`), pinned beside that box (in a
+flowchart; in other diagram types notes line up beside the diagram), not into
 the diagram: a box drawn into the system looks like part of it. Notes without
 `mermaid` go on the latest diagram. Keep a note to a line or two.
 

@@ -8,7 +8,7 @@
     {
       "name": "whiteboard",
       "source": "./plugin",
-      "description": "A whiteboard for your Claude Code conversation: Claude draws Mermaid diagrams and sticky notes on a page in your browser, and you can answer there. Needs Node.js"
+      "description": "A whiteboard for your Claude Code session: Claude draws Mermaid diagrams and sticky notes on a page in your browser, and you can answer there. Open source, unofficial. Needs Node.js 18+"
     }
   ]
 }

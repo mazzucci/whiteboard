@@ -8,7 +8,7 @@
 #
 #   python3 media/board-demo/compare.py <before frames dir> <board recording dir> <terminal dir> <out dir>
 import json, os, subprocess, sys
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 BEFORE, REC, TERM, OUT = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 FF = '/usr/local/bin/ffmpeg'
@@ -43,9 +43,26 @@ card([('How does OAuth work?', 64, INK, 0.40, 'Semibold'),
       ('The same question to Claude Code, without and with the whiteboard.', 30, MUTED, 0.51, 'Regular'),
       ('Whiteboard · open source · not affiliated with Anthropic', 20, MUTED, 0.9, 'Regular')], f'{TMP}/title.png')
 
+def redact(im):
+    """
+    Blurs what is private in a Terminal snapshot: the title bar (the user's
+    name, the command), the status line at the bottom, and, while Claude
+    Code's banner is on screen, its account and path lines. Measured on
+    1160 x 760 window snapshots; other sizes scale.
+    """
+    k = im.width / 1160
+    boxes = [(0, 0, im.width, round(34 * k)), (0, round(726 * k), im.width, im.height)]
+    # The banner's mascot, orange, at its usual place: the lines beside it are the account and path.
+    r, g, b = im.getpixel((round(40 * k), round(70 * k)))[:3]
+    if r > 180 and 90 < g < 150 and b < 120:
+        boxes.append((round(84 * k), round(66 * k), round(720 * k), round(100 * k)))
+    for box in boxes:
+        im.paste(im.crop(box).filter(ImageFilter.GaussianBlur(7 * k)), box)
+    return im
+
 def terminal_frame(src, caption, out):
-    """A snapshot of the Terminal window, centred on the stage, with its caption."""
-    im = Image.open(src).convert('RGB')
+    """A snapshot of the Terminal window, private parts blurred, centred on the stage, with its caption."""
+    im = redact(Image.open(src).convert('RGB'))
     scale = min((W - 80) / im.width, (H - 60) / im.height)
     im = im.resize((round(im.width * scale), round(im.height * scale)), Image.LANCZOS)
     frame = Image.new('RGB', (W, H + BAR), TERM_BG)

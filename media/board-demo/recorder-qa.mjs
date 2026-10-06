@@ -8,7 +8,8 @@
 
 import { createRequire } from 'node:module'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-const require = createRequire(`${process.env.HOME}/.cache/whiteboard/package.json`)
+// puppeteer-core from this folder (npm install puppeteer-core here), or from PUPPETEER_HOME.
+const require = createRequire(process.env.PUPPETEER_HOME ? `${process.env.PUPPETEER_HOME}/package.json` : import.meta.url)
 const puppeteer = require('puppeteer-core')
 
 const dir = process.argv[2]
