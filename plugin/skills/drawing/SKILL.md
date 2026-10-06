@@ -131,7 +131,8 @@ its own border so it reads without colour too:
 
 Legend labels in the same words: "Not measured yet", "No problem", "The
 problem", "Proposed". Any `classDef` of your own sets `color:` as well as
-`fill:`, so its text stays readable against the fill.
+`fill:`, so its text stays readable against the fill. The board is white, in
+dark mode too: don't set Mermaid's `dark` theme in a diagram.
 
 **Redraw without reshuffling.** Mermaid lays a diagram out from the order of its
 lines, so reordering them can flip the whole layout even when nothing else

@@ -11,7 +11,10 @@
   the one it finds is older than 18.
 - **`BROWSER` is honoured without waiting on it**, with `%s` for the address.
 - **Phones and tablets:** Board and Chat views, pinch to zoom, double-tap to fit.
-- The page says when Claude answered in the conversation instead of on the board.
+- The page says when Claude answered in the conversation instead of on the board,
+  and a tab opened without the board's key says how to open it.
+- The drawing area stays white in dark mode, so every diagram's colours stay
+  readable.
 - The marketplace is now `mazzucci`: install `whiteboard@mazzucci`. Installs as
   `whiteboard@whiteboard` keep working.
 - The 0.1 explainer video sources and walkthrough are gone; a fuller licence
