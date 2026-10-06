@@ -10,9 +10,10 @@ contributors: https://github.com/mermaid-js/mermaid/blob/develop/LICENSE.
 
 ## What the bundle contains
 
-Mermaid's build includes its dependencies. Each keeps its own licence, listed
-here as their npm packages declare it; the full texts are in each project's
-repository. None of them was modified.
+Mermaid's build includes its dependencies. Each keeps its own licence; the
+main ones are below, and [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
+has every package in the tree with its licence text. None of them was
+modified.
 
 | Package | Licence |
 |---|---|
@@ -27,7 +28,7 @@ repository. None of them was modified.
 | dagre-d3-es | MIT |
 | dayjs | MIT |
 | dompurify | MPL-2.0 or Apache-2.0 (used under Apache-2.0) |
-| elkjs | EPL-2.0 or GPL-3.0-or-later (used under EPL-2.0) |
+| elkjs | EPL-2.0 |
 | es-toolkit | MIT |
 | katex | MIT |
 | khroma | MIT |
@@ -44,5 +45,5 @@ https://github.com/eclipse/elk. It is included here, unmodified, only as part
 of Mermaid's bundle; the rest of this project is MIT licensed and is not a
 derivative work of it.
 
-The list was taken from `mermaid@12.1.0`'s declared dependencies on npm. If
-you find a component missing or misattributed, please open an issue.
+The table lists `mermaid@12.1.0`'s direct dependencies on npm. If you find a
+component missing or misattributed, please open an issue.

@@ -13,7 +13,8 @@ https://github.com/mazzucci/whiteboard.
   page draws with.
 - `skills/drawing/`: the skill that teaches Claude to draw legible, honest
   diagrams, with sticky notes for proposals.
-- `tests/`: the mod's tests (`claude plugin test .` from this folder).
+- `tests/`: the mod's tests (`claude plugin test .` from this folder) and the
+  board server's (`node --test tests/server.test.mjs`).
 
 Nothing is downloaded and nothing is sent anywhere: the board and its page
 run on this machine, and stop with the session.

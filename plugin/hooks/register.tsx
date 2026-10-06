@@ -83,27 +83,41 @@ async function findNode($: EngineInterface): Promise<string> {
   )
 }
 
-/** Where nvm, volta, fnm, asdf and mise keep node, newest nvm version first. */
+/**
+ * Where nvm, volta, fnm, asdf and mise keep node: their installs first, newest
+ * version first (a shim may need a fuller PATH than the app gives), then their
+ * shims and default aliases.
+ */
 async function managedNodeDirs($: EngineInterface, home: string): Promise<string[]> {
   if (!home) return []
-  const dirs = [
+  const installs = [
+    `${home}/.nvm/versions/node`,
+    `${home}/.asdf/installs/nodejs`,
+    `${home}/.local/share/mise/installs/node`,
+  ]
+  const dirs: string[] = []
+  for (const base of installs) dirs.push(...(await versionDirs($, base)).map(v => `${base}/${v}/bin`))
+  return [
+    ...dirs,
     `${home}/.volta/bin`,
-    `${home}/.asdf/shims`,
-    `${home}/.local/share/mise/shims`,
     `${home}/.fnm/aliases/default/bin`,
     `${home}/.local/share/fnm/aliases/default/bin`,
     `${home}/Library/Application Support/fnm/aliases/default/bin`,
+    `${home}/.asdf/shims`,
+    `${home}/.local/share/mise/shims`,
   ]
+}
+
+/** The version folders in a version manager's install folder, newest first; links count. */
+async function versionDirs($: EngineInterface, base: string): Promise<string[]> {
   try {
-    const versions = (await $.fs.list(`${home}/.nvm/versions/node`))
-      .filter(e => e.kind === 'dir' && /^v\d+/.test(e.name))
+    return (await $.fs.list(base))
+      .filter(e => (e.kind === 'dir' || e.isLink) && /^v?\d+/.test(e.name))
       .map(e => e.name)
       .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-    dirs.unshift(...versions.map(v => `${home}/.nvm/versions/node/${v}/bin`))
   } catch {
-    // No nvm.
+    return []
   }
-  return dirs
 }
 
 async function nodeVersion($: EngineInterface, node: string): Promise<{ major: number; text: string }> {
@@ -224,22 +238,17 @@ async function boardStatus($: EngineInterface, status: 'working' | 'idle') {
 async function openInBrowser($: EngineInterface, url: string): Promise<boolean> {
   const chosen = ((await $.env.get('BROWSER')) ?? '').split(':')[0]?.trim()
   if (chosen) {
-    // A browser command may run until the browser quits: start it, never wait
-    // on it. `%s` stands for the URL, as in xdg-open's convention.
+    // `%s` stands for the URL, as in xdg-open's convention; words split on spaces.
     const parts = chosen.split(/\s+/).filter(Boolean)
     const argv = parts.includes('%s') ? parts.map(p => (p === '%s' ? url : p)) : [...parts, url]
     try {
-      const run = $.process.spawn({ argv })
-      void (async () => {
-        try {
-          for await (const _ of run) {
-            // The browser's output is of no interest.
-          }
-        } catch {
-          // It failed to start or ended badly: the page is still at its URL.
-        }
-      })()
-      return true
+      // The command must exist; then it starts detached, through sh with its
+      // words as arguments (never as script), so it neither holds up the call
+      // nor goes down with this plugin, which would close the person's browser.
+      const found = await $.process.run(['/bin/sh', '-c', 'command -v "$1" >/dev/null 2>&1', 'sh', argv[0] ?? ''])
+      if (found.exitCode !== 0) return false
+      const started = await $.process.run(['/bin/sh', '-c', 'nohup "$@" >/dev/null 2>&1 </dev/null &', 'sh', ...argv])
+      return started.exitCode === 0
     } catch {
       return false
     }

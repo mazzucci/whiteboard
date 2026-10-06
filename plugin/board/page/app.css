@@ -6,7 +6,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #12151b; --panel: #1a1e26; --ink: #e7eaf0; --muted: #98a2b3; --line: #2a303b; --soft: #232833;
-    --accent: #6ea0ff; --accent-ink: #0d1424; --you: #1e2a42; --error: #ff7b6b; --stage: #161a21;
+    --accent: #6ea0ff; --accent-ink: #0d1424; --you: #1e2a42; --error: #ff7b6b; --stage: #eef0f3;
   }
 }
 * { box-sizing: border-box; }
@@ -71,8 +71,9 @@ button { font: inherit; color: inherit; }
 .stage.dragging { cursor: grabbing; }
 .canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 .canvas svg { display: block; max-width: none !important; }
-.stage .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
-.stage .hint { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: var(--muted); background: color-mix(in srgb, var(--stage) 85%, transparent); padding: 2px 6px; border-radius: 6px; pointer-events: none; }
+.stage .empty { position: absolute; inset: 0; display: grid; place-items: center; color: #667085; }
+/* The stage is the whiteboard: light in dark mode too, so its hint is dark text. */
+.stage .hint { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: #5b6372; background: color-mix(in srgb, var(--stage) 85%, transparent); padding: 2px 6px; border-radius: 6px; pointer-events: none; }
 .source { position: absolute; inset: 0; overflow: auto; background: var(--panel); cursor: auto; padding: 14px 16px; user-select: text; }
 .source[hidden] { display: none; }
 .source pre { margin: 0; font: 12.5px/1.55 var(--mono); white-space: pre; }
@@ -201,4 +202,12 @@ html, body { height: 100dvh; }
   .composer .hint { display: none; }
   .composer .actions { justify-content: flex-end; }
   .ended { bottom: calc(12px + env(safe-area-inset-bottom)); }
+}
+
+/* A banner at the bottom (wrapped up, lost connection) takes the key hint's place. */
+body.has-banner .stage .hint { display: none; }
+/* Narrow screens: the Chat button pulses while Claude works or a message waits. */
+.views [data-view="chat"].busy::after {
+  content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%;
+  background: currentColor; vertical-align: 1px; animation: blink 1.2s infinite ease-in-out;
 }

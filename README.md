@@ -212,9 +212,10 @@ the new name: `claude plugin marketplace remove whiteboard`, then add
 `mazzucci/whiteboard` again and install `whiteboard@mazzucci`.
 
 **Upgrading from 0.1?** Version 0.1 drew in a pane of the desktop app with a
-headless Chrome that `/whiteboard setup` downloaded into `~/.cache/whiteboard`.
-Version 0.2 needs none of it: run `/whiteboard uninstall` once before updating,
-or delete `~/.cache/whiteboard` afterwards.
+headless Chrome that its `/whiteboard setup` downloaded into
+`~/.cache/whiteboard`. Later versions need none of it: delete
+`~/.cache/whiteboard` after updating (or run 0.1's `/whiteboard uninstall`
+before).
 
 ### Ask Claude to install it
 
@@ -287,7 +288,7 @@ the board, and you discuss there until you press **Wrap up**.
 |---|---|
 | Tabs, or `[` / `]` | previous / next diagram |
 | `i` / `o`, pinch, Ctrl+scroll | zoom in / out |
-| `f` | fit the diagram to the board |
+| `f`, double-click, double-tap | fit the diagram to the board |
 | drag, arrow keys | pan |
 | `c` | Mermaid source, with Copy |
 | Enter | send your reply (Shift+Enter for a new line) |
@@ -326,8 +327,9 @@ goes into your Claude Code session as your own words. So:
   token. Whoever has it, a person or a program on your machine, can send
   messages into your session as you, and Claude acts on them with the
   permissions you have given it (in auto mode, without asking). Don't share the
-  link. Once the page has loaded, the token leaves the address bar and stays
-  only in that browser tab.
+  link. Once the page has loaded, the token leaves the address bar and the page
+  keeps it in that tab; the address first opened may stay in your browser's
+  history, which is harmless once the session has ended.
 - **Local only.** The server listens on 127.0.0.1, on a random port. It answers
   only its own host name (so a website cannot reach it by pointing a domain at
   127.0.0.1), refuses requests from any other website even when they carry the
@@ -350,8 +352,9 @@ goes into your Claude Code session as your own words. So:
   open page then says so and stays readable.
 - `claude -p` has no board: nobody could reply to it.
 - The board opens in your default browser (in the desktop app too, not inside
-  the app). To use another, set `BROWSER` to its command (`%s` stands for the
-  address) before starting Claude Code.
+  the app). To use another, set `BROWSER` to its command before starting
+  Claude Code: its words are split on spaces, and `%s` stands for the address
+  (otherwise the address goes last).
 - The board is on 127.0.0.1, so it opens only on the machine running Claude
   Code, not on a phone or another computer.
 - Sticky notes sit beside a box in flowcharts; in other diagram types they line

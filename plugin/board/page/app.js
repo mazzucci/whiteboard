@@ -19,7 +19,6 @@ const token = (() => {
   if (location.search) history.replaceState(null, '', location.pathname)
   return t
 })()
-const isDark = matchMedia('(prefers-color-scheme: dark)').matches
 const $ = id => document.getElementById(id)
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 const post = (path, body) =>
@@ -81,8 +80,10 @@ function markdown(text) {
     const list = /^\s*([-*]|\d+[.)])\s+/.exec(line)
     if (list) {
       const ordered = /\d/.test(list[1])
+      // One kind per list: a numbered list right after bullets starts a new one.
+      const sameKind = ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-*]\s+/
       const items = []
-      for (; i < lines.length && /^\s*([-*]|\d+[.)])\s+/.test(lines[i]); i++) items.push(lines[i].replace(/^\s*([-*]|\d+[.)])\s+/, ''))
+      for (; i < lines.length && sameKind.test(lines[i]); i++) items.push(lines[i].replace(/^\s*([-*]|\d+[.)])\s+/, ''))
       const tag = ordered ? 'ol' : 'ul'
       out.push(`<${tag}>${items.map(it => `<li>${inline(it)}</li>`).join('')}</${tag}>`)
       continue
@@ -320,8 +321,8 @@ function addMessage(card, html, isReplay = false) {
   const messages = $('messages')
   const isAtBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80
   messages.insertBefore(el, $('typing'))
-  // Waiting for an answer from the moment the person speaks; Claude's next card answers it.
-  waiting = isYou ? waiting + 1 : 0
+  if (isYou && !isReplay) pending.push({ at: card._at ?? 0, el })
+  if (!isYou) answered()
   if (!isYou && !isReplay) countUnread()
   showTyping()
   if (isAtBottom || isYou) messages.scrollTop = messages.scrollHeight
@@ -331,15 +332,39 @@ function addMessage(card, html, isReplay = false) {
 // ---------------------------------------------------------------- is Claude working?
 //
 // The plugin reports each Claude turn's start and end; the person's messages
-// that have no answer yet are "waiting". Between the two, the page always
-// says what is happening after they press Send.
+// that have no answer yet are pending. Every event is numbered as it arrives,
+// so a message is answered only by a turn that started after it: one typed
+// while Claude works waits for the next turn, which is when Claude reads it.
 
 let claudeState = 'idle'
-let waiting = 0
+let arrival = 0
+/** Arrival numbers: the latest turn's start, and the latest status of either kind. */
+let turnStartedAt = 0
+let lastStatusAt = 0
+/** The person's messages with no answer yet: { at, el }. */
+let pending = []
+const waitingCount = () => pending.length
+
+/** Claude answered on the board: settles the messages its current turn has read. */
+function answered() {
+  pending = claudeState === 'working' ? pending.filter(p => p.at > turnStartedAt) : []
+}
+
+/** A turn ended: what it read and did not answer on the board, it answered in the conversation. */
+function turnEnded() {
+  for (const p of pending.filter(p => p.at < turnStartedAt)) {
+    const state = p.el.querySelector('.state')
+    if (state) state.textContent = 'Claude answered in the Claude Code conversation'
+  }
+  pending = pending.filter(p => p.at > turnStartedAt)
+}
 
 function showTyping() {
   const typing = $('typing')
   const isWorking = claudeState === 'working'
+  const waiting = waitingCount()
+  // On a narrow screen the conversation may be hidden: the Chat button shows it too.
+  document.querySelector('.views [data-view="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
   typing.hidden = !isWorking && !waiting
   $('typing-text').textContent = isWorking
     ? waiting > 1 ? `Claude is working… your ${waiting} messages are queued` : 'Claude is working…'
@@ -364,6 +389,11 @@ async function add(card, isReplay) {
     return
   }
   if (card.kind === 'sticky') {
+    // Claude's activity on the board answers what its turn has read.
+    if (!isReplay) {
+      answered()
+      showTyping()
+    }
     pinned(card.diagram).push(card)
     if (diagrams[current]?.id === card.diagram) {
       renderStickies()
@@ -379,7 +409,8 @@ async function add(card, isReplay) {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
-      theme: card.theme ?? (isDark ? 'dark' : 'default'),
+      // The board is white in dark mode too, so a diagram's own colours stay readable.
+      theme: card.theme ?? 'default',
       htmlLabels: false,
       flowchart: { htmlLabels: false, wrappingWidth: 400 },
     })
@@ -422,8 +453,12 @@ async function add(card, isReplay) {
 
 let queue = Promise.resolve()
 let isReplaying = false
-const events = new EventSource(`/events?t=${token}`)
-events.onopen = () => {
+// Without the token this page cannot reach the session (a bookmark, a copied
+// address): it says how to open the board instead of trying.
+const events = token ? new EventSource(`/events?t=${encodeURIComponent(token)}`) : null
+// (After the whole script has run: showLost uses state declared further down.)
+if (!events) setTimeout(() => showLost('no-token'))
+else events.onopen = () => {
   // A reconnect replays every card: start again from nothing.
   diagrams = []
   current = -1
@@ -432,15 +467,21 @@ events.onopen = () => {
   $('toolbar').hidden = true
   $('stage-empty').hidden = false
   document.querySelectorAll('.msg').forEach(m => m.remove())
-  waiting = 0
+  pending = []
   stickies.clear()
   setConnected(true)
   isReplaying = true
   // Replayed cards arrive at once; anything after a short pause is new.
   setTimeout(() => (isReplaying = false), 400)
 }
-events.onerror = () => {
-  if (!isEnded) setConnected(false)
+if (events) {
+  events.onerror = () => {
+    if (isEnded) return
+    setConnected(false)
+    // Refused (an old or wrong token): the browser will not try again.
+    if (events.readyState === EventSource.CLOSED) showLost('refused')
+  }
+  events.onmessage = onEvent
 }
 
 // ---------------------------------------------------------------- the connection
@@ -462,51 +503,75 @@ function setConnected(isOn) {
     clearTimeout(lostTimer)
     lostTimer = null
     $('lost')?.remove()
+    document.body.classList.remove('has-banner')
     return
   }
   // No answer is coming while disconnected.
   claudeState = 'idle'
-  waiting = 0
+  pending = []
   showTyping()
   lostTimer ??= setTimeout(showLost, LOST_AFTER_MS)
 }
 
-function showLost() {
-  if (isEnded || $('lost')) return
+/**
+ * Says why the page cannot reach the session: lost (the session ended or
+ * restarted, still retrying), refused (this page's token is not the board's),
+ * or no-token (opened without one).
+ */
+function showLost(why = 'lost') {
+  if (isEnded) return
+  $('lost')?.remove()
+  clearTimeout(lostTimer)
+  $('conn').classList.remove('on')
   $('conn-text').textContent = 'disconnected'
+  $('text').disabled = true
+  document.querySelectorAll('.composer button').forEach(b => (b.disabled = true))
+  const open = 'Run <code>/whiteboard</code> in Claude Code to open the board.'
+  const say = {
+    lost: [
+      '<b>Lost the connection to Claude Code.</b> The session ended or restarted, so this page is read-only now; ' +
+        `everything on it stays here. ${open}`,
+      'Still trying to reconnect…',
+    ],
+    refused: ['<b>This page cannot reach the session.</b> It belongs to an earlier board. ' + open, 'Not reconnecting.'],
+    'no-token': ['<b>This page was opened without its key.</b> ' + open, ''],
+  }[why]
   const banner = document.createElement('div')
   banner.className = 'ended lost'
   banner.id = 'lost'
+  document.body.classList.add('has-banner')
   banner.setAttribute('role', 'alert')
   banner.innerHTML =
-    '<div><b>Lost the connection to Claude Code.</b> The session ended or restarted, so this page is read-only now; ' +
-    'everything on it stays here. To carry on, run <code>/whiteboard</code> in Claude Code: it opens a new page.</div>' +
-    '<div class="row"><span>Still trying to reconnect…</span><button type="button" id="dismiss">Dismiss</button></div>'
+    `<div>${say[0]}</div>` + `<div class="row"><span>${say[1]}</span><button type="button" id="dismiss">Dismiss</button></div>`
   document.body.append(banner)
-  $('dismiss').onclick = () => banner.remove()
+  $('dismiss').onclick = () => {
+    banner.remove()
+    document.body.classList.remove('has-banner')
+  }
 }
-events.onmessage = e => {
+function onEvent(e) {
   const card = JSON.parse(e.data)
-  // Status is now, not history: shown at once, not queued behind drawings.
+  const at = ++arrival
   if (card.kind === 'status') {
+    lastStatusAt = at
+    // A turn's start is shown at once, not queued behind drawings.
     if (card.state === 'working') {
       claudeState = 'working'
+      turnStartedAt = at
       showTyping()
       return
     }
-    // A turn's end waits behind its cards, which may still be drawing.
+    // A turn's end waits behind its cards, which may still be drawing; a
+    // newer turn that started meanwhile keeps the page "working".
     queue = queue.then(() => {
-      // The turn ended with no answer on the board: Claude answered in the session.
-      if (claudeState === 'working' && waiting) {
-        const last = [...document.querySelectorAll('.msg.you .state')].pop()
-        if (last) last.textContent = 'Claude answered in the Claude Code conversation'
-        waiting = 0
-      }
+      if (lastStatusAt !== at) return
+      if (claudeState === 'working') turnEnded()
       claudeState = 'idle'
       showTyping()
     })
     return
   }
+  card._at = at
   const replay = isReplaying
   queue = queue.then(() => add(card, replay)).catch(err => console.error(err))
 }
@@ -612,8 +677,14 @@ document.addEventListener('keydown', e => {
 })
 
 // A fitted diagram stays fitted as the window changes.
+// Notes on no box go beside the diagram, or under it on an upright board: a
+// rotation that changes which, places them again.
+let wasUpright = null
 new ResizeObserver(() => {
   const d = diagrams[current]
+  const isUpright = stage.clientHeight > stage.clientWidth * 1.2
+  if (d && wasUpright !== null && isUpright !== wasUpright && stage.clientWidth) renderStickies()
+  wasUpright = isUpright
   if (d?.view?.isFit) fit(d)
 }).observe(stage)
 
@@ -647,15 +718,16 @@ let isEnded = false
 function wrappedUp(card) {
   isEnded = true
   claudeState = 'idle'
-  waiting = 0
+  pending = []
   showTyping()
-  events.close()
+  events?.close()
   $('conn').classList.remove('on')
   $('conn-text').textContent = 'wrapped up'
   box.disabled = true
   document.querySelectorAll('.composer button').forEach(b => (b.disabled = true))
   const banner = document.createElement('div')
   banner.className = 'ended'
+  document.body.classList.add('has-banner')
   banner.innerHTML =
     `<div><b>Wrapped up.</b> ${card.text ? markdown(card.text).replace(/^<p>|<\/p>$/g, '') : "Claude's summary is in the Claude Code conversation."}</div>` +
     '<div class="row"><span id="countdown"></span><button type="button" id="keep">Keep open</button></div>'

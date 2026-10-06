@@ -34,6 +34,8 @@ function host(
     paths?: string[]
     /** How long a prompt takes to be submitted. */
     submitMs?: number
+    /** Commands `command -v` finds. */
+    browsers?: string[]
   } = {},
 ) {
   const spawned: string[][] = []
@@ -57,6 +59,13 @@ function host(
   })
   on('process.run', (_$, e) => {
     if (e.argv[1] === '--version') return { value: { exitCode: 0, stdout: `${options.nodeVersion ?? 'v22.12.0'}\n`, stderr: '' } }
+    // $BROWSER: looked up with `command -v`, then started detached through sh.
+    if (e.argv[0] === '/bin/sh') {
+      const script = String(e.argv[2])
+      if (script.startsWith('command -v')) return { value: { exitCode: (options.browsers ?? []).includes(String(e.argv[4])) ? 0 : 1, stdout: '', stderr: '' } }
+      opened.push(`detached:${e.argv.slice(4).join(' ')}`)
+      return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    }
     opened.push(String(e.argv[1]))
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
@@ -263,10 +272,31 @@ test('a node older than 18 is named, with what to install', async ($, on) => {
   expect(shown).toContain('v16.20.2')
 })
 
-test('$BROWSER opens the board without being waited on, %s standing for the URL', async ($, on) => {
-  const { opened, stop } = host(on, { env: { BROWSER: 'firefox --new-tab %s' } })
+test('$BROWSER starts detached, %s standing for the URL', async ($, on) => {
+  const { opened, stop } = host(on, { env: { BROWSER: 'firefox --new-tab %s' }, browsers: ['firefox'] })
   const shown = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
   expect(said(shown)).toContain('which just opened in the browser')
-  expect(opened).toEqual([`spawn:firefox --new-tab ${READY.url}`])
+  expect(opened).toEqual([`detached:firefox --new-tab ${READY.url}`])
+  stop()
+})
+
+test('a $BROWSER that does not exist is not reported as opened: Claude gets the link', async ($, on) => {
+  const { opened, stop } = host(on, { env: { BROWSER: 'no-such-browser' } })
+  const shown = said(await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' }))
+  expect(shown).toContain('the browser could not be opened')
+  expect(shown).toContain(READY.url)
+  expect(opened).toEqual([])
+  stop()
+})
+
+test('node from asdf installs is found ahead of its shim, symlinked nvm versions count', async ($, on) => {
+  const asdf = '/Users/someone/.asdf/installs/nodejs'
+  const { spawned, stop } = host(on, {
+    hasNode: false,
+    dirs: { [asdf]: ['20.11.1', '22.9.0'] },
+    paths: [`${asdf}/22.9.0/bin/node`, '/Users/someone/.asdf/shims/node'],
+  })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  expect(spawned[0]?.[0]).toBe(`${asdf}/22.9.0/bin/node`)
   stop()
 })
