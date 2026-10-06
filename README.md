@@ -87,7 +87,12 @@ evidence shows, then a proposed fix.
   diagrams. What you type there goes into the same Claude Code session, as if
   you had typed it in the terminal, and the session remembers the whole
   discussion. The page shows **Sent** when your message is delivered and
-  **Claude is working** while Claude answers.
+  **Claude is working** while Claude answers. What you ask on the board is
+  answered on the board; when you type in the terminal again, Claude answers
+  there.
+- **Claude can read the board back:** every diagram's source, its sticky notes
+  and your messages, including a sample or a file you opened yourself.
+- **Closed the tab?** Claude's next post opens it again, with everything so far.
 - **Wrap up.** One button asks Claude to summarise what you concluded in the
   conversation; then the page says so and closes its tab (or, if the browser
   does not let a page close itself, tells you it is done).
@@ -135,7 +140,8 @@ flowchart LR
   style host fill:#f7f7f7,stroke:#8a8a8a,stroke-dasharray:6 4,color:#555555
 ```
 
-The mod gives Claude one tool, `post_to_board`, and the `/whiteboard` command.
+The mod gives Claude two tools, `post_to_board` and `read_board`, and the
+`/whiteboard` command.
 The first post starts a small server for the session (Node's standard library,
 nothing installed) and opens its page in your browser. The page draws with the
 Mermaid bundled in the plugin, so nothing is downloaded and no CDN is used.

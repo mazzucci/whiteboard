@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **A closed tab opens again** with Claude's next post, everything so far on it.
+- **Claude can read the board back** with a new tool, `read_board`: each
+  diagram's Mermaid source and sticky notes, its notes, and what you typed.
+- **`/whiteboard sample` tells Claude what it drew**, node ids included, so
+  "pin a note on the email service" just works. A file you open is told the same way.
+- **Asked on the board, answered on the board.** If Claude replies to a board
+  message only in the conversation, that reply is posted to the board too.
+- **Back in the terminal, answered in the terminal.** After talking on the
+  board, the next thing you type in the conversation tells Claude you are back,
+  and focus mode ends.
+
 ## 0.3.0
 
 - **Safer board.** The page and its files load without the session's token,

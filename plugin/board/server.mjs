@@ -14,6 +14,8 @@
 //   GET  /            the page (page/index.html, app.js, app.css)
 //   GET  /mermaid.js  Mermaid, vendored (gzipped on disk, served as is)
 //   GET  /events      server-sent events: every card so far, then each new one
+//   GET  /viewers     { viewers }: how many pages are open on this board
+//   GET  /cards       { viewers, cards }: everything on the board, for Claude to read back
 //   (the page and its files load without the token; the rest needs it, in the
 //   x-board-token header, or ?t= for /events, and never from another site)
 //   POST /post        a card from the plugin; answers once the page has drawn it
@@ -190,6 +192,8 @@ async function handle(req, res) {
     req.on('close', () => listeners.delete(res))
     return
   }
+  if (req.method === 'GET' && url.pathname === '/viewers') return json(200, { viewers: listeners.size })
+  if (req.method === 'GET' && url.pathname === '/cards') return json(200, { viewers: listeners.size, cards })
   if (req.method !== 'POST' || !['/post', '/say', '/rendered'].includes(url.pathname)) return json(404, { error: 'not found' })
   if (!/^application\/json\b/.test(req.headers['content-type'] ?? '')) return json(415, { error: 'JSON only' })
 

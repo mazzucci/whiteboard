@@ -100,3 +100,14 @@ test('what the person types is handed to the plugin on stdout', async () => {
   await new Promise(resolve => setTimeout(resolve, 50))
   assert.ok(lines.some(m => m.say === 'why 1,240 calls?'))
 })
+
+test('the plugin can ask how many pages are open, and read back what is on the board, with the token only', async () => {
+  assert.equal((await call('/viewers')).status, 403)
+  assert.equal((await call('/cards', { headers: { 'x-board-token': 'wrong' } })).status, 403)
+  const auth = { headers: { 'x-board-token': ready.token } }
+  assert.deepEqual(await (await call('/viewers', auth)).json(), { viewers: 0 })
+  await postJson('/post', { title: 'Read me', text: 'a note to read back' })
+  const { viewers, cards } = await (await call('/cards', auth)).json()
+  assert.equal(viewers, 0)
+  assert.ok(cards.some(c => c.kind === 'note' && c.text === 'a note to read back'))
+})

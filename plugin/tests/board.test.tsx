@@ -36,12 +36,16 @@ function host(
     submitMs?: number
     /** Commands `command -v` finds. */
     browsers?: string[]
+    /** How many pages show the board, asked before each post (1 unless said). */
+    viewers?: () => number
+    /** What the board holds, for read_board. */
+    cards?: Record<string, unknown>[]
   } = {},
 ) {
   const spawned: string[][] = []
   const opened: string[] = []
   const posts: Record<string, unknown>[] = []
-  const prompts: { text: string; asUser?: boolean }[] = []
+  const prompts: { text: string; context?: readonly string[] }[] = []
   const boards: (() => void)[] = []
   on('session.surfaces', () => ({ value: options.surfaces ?? ['terminal'] }))
   const env: Record<string, string> = { PATH: '/usr/local/bin', HOME: '/Users/someone', ...options.env }
@@ -85,6 +89,11 @@ function host(
   })
   on('http.fetch', (_$, e) => {
     expect(e.init?.headers).toMatchObject({ 'x-board-token': 'tok' })
+    if (e.init?.method === 'GET') {
+      const path = new URL(e.url).pathname
+      const value = path === '/viewers' ? { viewers: options.viewers?.() ?? 1 } : { viewers: 1, cards: options.cards ?? [] }
+      return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(value) } }
+    }
     const body = JSON.parse(String(e.init?.body)) as Record<string, unknown>
     posts.push({ ...body, port: Number(new URL(e.url).port) })
     if (body.end === true) boards.shift()?.()
@@ -92,7 +101,7 @@ function host(
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(posted) } }
   })
   on('prompt.submit', async (_$, e) => {
-    prompts.push({ text: e.text })
+    prompts.push({ text: e.text, context: e.context })
     if (options.submitMs) await new Promise(resolve => setTimeout(resolve, options.submitMs))
     return { text: e.text }
   })
@@ -132,12 +141,89 @@ test("Mermaid's error on the page goes back to Claude", async ($, on) => {
   stop()
 })
 
-test('with no page open, Claude is told how the user opens it', async ($, on) => {
-  const { stop } = host(on, { page: () => ({ ok: true, viewers: 0, drawn: false }) })
+test('a closed tab opens again with the next post, which waits for the page', async ($, on) => {
+  let viewers = 1
+  const { opened, posts, stop } = host(on, { viewers: () => viewers })
   await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'first' })
-  const shown = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'second' })
-  expect(said(shown)).toContain('no whiteboard page is open')
-  expect(said(shown)).toContain('/whiteboard opens it')
+  expect(opened).toHaveLength(1)
+  // The person closed the tab.
+  viewers = 0
+  const shown = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  expect(opened).toHaveLength(2)
+  expect(said(shown)).toContain('opened again in the browser')
+  expect(posts[1]).toMatchObject({ waitForPage: true })
+  // With a tab showing it, nothing opens.
+  viewers = 1
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'third' })
+  expect(opened).toHaveLength(2)
+  stop()
+})
+
+test('a page that never shows up: Claude is told how the user opens it', async ($, on) => {
+  const { stop } = host(on, { page: () => ({ ok: true, viewers: 0, drawn: false }), browsers: [], env: { BROWSER: 'nosuchbrowser' } })
+  const shown = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'first' })
+  expect(said(shown)).toContain('give the user this link')
+  stop()
+})
+
+test('read_board gives Claude back each diagram with its source and sticky notes, and what the user wrote', async ($, on) => {
+  const cards = [
+    { id: 1, kind: 'diagram', title: 'Orders', mermaid: SOURCE, notes: [{ on: 'api', text: 'slow here' }] },
+    { id: 2, kind: 'sticky', by: 'claude', diagram: 1, on: 'db', text: 'Proposal: an index' },
+    { id: 3, kind: 'you', text: 'what about the cache?' },
+    { id: 4, kind: 'note', text: 'The cache is cold.' },
+  ]
+  const { stop } = host(on, { cards })
+  const empty = await $.tool.call({ tool: 'mcp__whiteboard__read_board' })
+  expect(said(empty)).toContain('no whiteboard page in this session')
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  const read = said(await $.tool.call({ tool: 'mcp__whiteboard__read_board' }))
+  expect(read).toContain('Diagram 1 of 1, \\"Orders\\"')
+  expect(read).toContain('api[Orders API]')
+  expect(read).toContain('sticky note on api: slow here')
+  expect(read).toContain('sticky note on db: Proposal: an index')
+  expect(read).toContain('The user wrote: what about the cache?')
+  expect(read).toContain('Your note: The cache is cold.')
+  const latest = said(await $.tool.call({ tool: 'mcp__whiteboard__read_board', latest: true }))
+  expect(latest).toContain('latest diagram')
+  expect(latest).not.toContain('The user wrote')
+  stop()
+})
+
+test('/whiteboard sample tells Claude what it drew, node ids and all', async ($, on) => {
+  const { stop } = host(on)
+  const out = await $.command.run({ command: 'whiteboard', args: 'sample' })
+  expect(said(out)).toContain('Sample diagram drawn')
+  expect(said(out)).toContain('mail[Email service]')
+  expect(said(out)).toContain('node id')
+  stop()
+})
+
+test('a message from the page is answered on the page, even when Claude replied only in the conversation', async ($, on) => {
+  const { prompts, posts, stop } = host(on)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  await $.prompt.submit({ text: '(on the whiteboard) why is it slow?' } as never)
+  expect(prompts.at(-1)?.context?.join(' ')).toContain('answer there with post_to_board')
+  // Answered only in the conversation: the plugin posts the answer.
+  await $.turn.start({ text: '(on the whiteboard) why is it slow?', turnId: 't1' })
+  await $.turn.complete({ answer: 'The cache is cold.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+  expect(posts.filter(p => p.text === 'The cache is cold.')).toHaveLength(1)
+  // Answered on the board: nothing more is posted.
+  await $.turn.start({ text: '(on the whiteboard) and now?', turnId: 't2' })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'Warm it at deploy.' })
+  await $.turn.complete({ answer: 'Answered on the board.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' } as never)
+  expect(posts.some(p => p.text === 'Answered on the board.')).toBe(false)
+  // Typed in the conversation after that: Claude is told the user is back, once.
+  await $.prompt.submit({ text: 'what time is it?', origin: { kind: 'composer' } } as never)
+  expect(prompts.at(-1)?.context?.join(' ')).toContain('back in this conversation')
+  await $.prompt.submit({ text: 'and the date?', origin: { kind: 'composer' } } as never)
+  expect((prompts.at(-1)?.context ?? []).join(' ')).not.toContain('back in this conversation')
+  // A prompt typed in the conversation is answered there.
+  await $.turn.start({ text: 'what time is it?', turnId: 't3' })
+  await $.turn.complete({ answer: 'Noon.', durationMs: 1, isAborted: false, turnId: 't3', reason: 'answer' } as never)
+  expect(posts.some(p => p.text === 'Noon.')).toBe(false)
   stop()
 })
 

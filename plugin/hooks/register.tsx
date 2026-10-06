@@ -8,11 +8,13 @@ import type { EngineInterface, Register } from 'claude-code'
 // session as their own words, so the whole discussion is in the conversation.
 
 const TOOL = 'post_to_board'
+const READ_TOOL = 'read_board'
 
 type Doc = { title: string; source: string }
 
 const SAMPLE: Doc = {
   title: 'Sample: checkout',
+  // Told to Claude with its node ids, so "the email box" is `mail` when the person asks about it.
   source: `flowchart LR
   shopper([Shopper]) --> web[Storefront]
   web --> api[Orders API]
@@ -31,7 +33,8 @@ const INTRO =
   'beside this conversation. Use it whenever a picture explains better than prose, in this project or not: how a ' +
   'protocol, standard or system works (OAuth, TLS, DNS), architecture, request flows, sequences, state machines, ' +
   'schemas, an investigation. Draw first, then keep your written answer short and point at the board. Read the ' +
-  'whiteboard:drawing skill before the first diagram.'
+  `whiteboard:drawing skill before the first diagram. ${READ_TOOL} reads back what is on the page, Mermaid source ` +
+  'and sticky notes included, when the user talks about something there you did not draw in this conversation.'
 let isIntroduced = false
 
 /** What Claude is told when the person asks to discuss on the board. */
@@ -196,6 +199,25 @@ async function endBoard($: EngineInterface, text: string | undefined): Promise<b
  * say) cannot be submitted then: it waits here for the turn to complete.
  */
 const said: string[] = []
+/** How the person's words from the page start, in the conversation. */
+const FROM_BOARD = '(on the whiteboard)'
+/** Said beside each of them: they are looking at the page, not here. */
+const BOARD_NOTE =
+  `The user typed this on the whiteboard page and is watching the page, not this conversation: answer there with ${TOOL} ` +
+  '(a note, a diagram, sticky notes), and keep what you write here to a line.'
+/** Said when the person, after talking on the page, types in the conversation again. */
+const BACK_NOTE =
+  'The user is back in this conversation: they typed this here, not on the whiteboard. Focus mode, if it was on, ' +
+  `is over: answer here, and use ${TOOL} again only where a picture helps, as before.`
+/** Whether the person's last words came from the page (or they asked for focus mode). */
+let isOnBoard = false
+
+/**
+ * The turn answering a message from the page, while nothing of it has
+ * reached the page: if it ends that way, its answer is posted there, so the
+ * person never waits on a reply that went only to the conversation.
+ */
+let boardTurn: { turnId: string; isPosted: boolean } | null = null
 let delivering: Promise<void> | null = null
 /** One delivery at a time: a second caller waits on the first, so nothing is submitted twice. */
 function deliver($: EngineInterface): Promise<void> {
@@ -203,7 +225,7 @@ function deliver($: EngineInterface): Promise<void> {
     try {
       while (said.length) {
         try {
-          await $.prompt.submit({ text: `(on the whiteboard) ${said[0]}`, asUser: true })
+          await $.prompt.submit({ text: `${FROM_BOARD} ${said[0]}`, asUser: true })
         } catch {
           return
         }
@@ -214,6 +236,21 @@ function deliver($: EngineInterface): Promise<void> {
     }
   })()
   return delivering
+}
+
+/** Posts the answer of a turn that came from the page and reached only the conversation. */
+async function postAnswer($: EngineInterface, answer: string) {
+  if (!board || !answer.trim()) return
+  try {
+    const open = await board
+    await $.http.fetch(`http://127.0.0.1:${open.port}/post`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-board-token': open.token },
+      body: JSON.stringify({ text: answer.trim().slice(0, 20_000) }),
+    })
+  } catch {
+    // The board stopped: the answer is in the conversation.
+  }
 }
 
 /** Tells an open board whether Claude is in a turn; nothing when no board is open. */
@@ -261,18 +298,37 @@ async function openInBrowser($: EngineInterface, url: string): Promise<boolean> 
   }
 }
 
-type Started = { open: Board; isNew: boolean; isOpened: boolean }
+/** A GET on the board, with its token: what it answers, as JSON. */
+async function boardGet<T>($: EngineInterface, open: Board, path: string): Promise<T> {
+  const res = await $.http.fetch(`http://127.0.0.1:${open.port}${path}`, { method: 'GET', headers: { 'x-board-token': open.token } })
+  if (!res.ok) throw new Error(`the page answered ${res.status}`)
+  return JSON.parse(res.text) as T
+}
+
+/** How many pages are showing the board; 0 when the person closed its tab. */
+async function viewersOf($: EngineInterface, open: Board): Promise<number> {
+  try {
+    return (await boardGet<{ viewers: number }>($, open, '/viewers')).viewers
+  } catch {
+    return 0
+  }
+}
+
+/** Whether the browser was asked to open the board (`isTried`), and whether it did. */
+type Started = { open: Board; isNew: boolean; isTried: boolean; isOpened: boolean }
 
 /**
- * The board for this session, started on first use. A new board opens in the
- * person's browser by itself, so the first post is seen; later posts go to the
- * tab they already have.
+ * The board for this session, started on first use. It opens in the person's
+ * browser when it is new, when no page is showing it (they closed the tab), or
+ * always when they asked for it (`isAsked`); otherwise posts go to the tab
+ * they have.
  */
-async function boardOpen($: EngineInterface): Promise<Started> {
+async function boardOpen($: EngineInterface, isAsked = false): Promise<Started> {
   const isNew = !board
   board ??= startBoard($)
   const open = await board
-  return { open, isNew, isOpened: isNew && (await openInBrowser($, open.url)) }
+  const isTried = isNew || isAsked || (await viewersOf($, open)) === 0
+  return { open, isNew, isTried, isOpened: isTried && (await openInBrowser($, open.url)) }
 }
 
 type Legend = { label: string; stroke?: string; isDashed: boolean }
@@ -304,13 +360,17 @@ async function postToBoard($: EngineInterface, card: Card): Promise<{ started: S
 
 /** Where the post went, said to Claude. */
 function postedWhere({ started, posted }: { started: Started; posted: Posted }, isDiagram: boolean): string {
-  if (started.isNew && !started.isOpened) {
+  if (started.isTried && !started.isOpened) {
     return `Posted to the whiteboard page, but the browser could not be opened: give the user this link: ${started.open.url}`
   }
-  if (!posted.viewers) {
+  if (!posted.viewers && !started.isOpened) {
     return 'Posted, but no whiteboard page is open, so nobody has seen it yet. Tell the user that /whiteboard opens it.'
   }
-  const opened = started.isNew ? ', which just opened in the browser' : ''
+  const opened = started.isNew
+    ? ', which just opened in the browser'
+    : started.isOpened
+      ? ', which opened again in the browser (its tab had been closed)'
+      : ''
   if (!isDiagram) return `Posted to the whiteboard page${opened}.`
   if (posted.drawn) return `Drawn on the whiteboard page${opened}.`
   return `Posted to the whiteboard page${opened}; the page did not confirm the drawing in time.`
@@ -349,6 +409,46 @@ function mermaidError(error: string): string {
 function mermaidOf(text: string): string {
   const fence = /```mermaid\s*\n([\s\S]*?)```/.exec(text)
   return (fence?.[1] ?? text).trim()
+}
+
+type BoardCard = {
+  id: number
+  kind: 'diagram' | 'note' | 'sticky' | 'you' | 'end'
+  title?: string
+  text?: string
+  mermaid?: string
+  notes?: Note[]
+  on?: string
+  diagram?: number
+}
+
+/** A sticky note, as Claude reads it back. */
+const noteLine = (n: Note) => `- sticky note${n.on ? ` on ${n.on}` : ''}: ${n.text}`
+
+/** The board as Claude reads it back: every card in order, diagrams with their source and sticky notes. */
+function boardText(viewers: number, cards: BoardCard[], isLatest: boolean): string {
+  const diagrams = cards.filter(c => c.kind === 'diagram')
+  const stickiesOf = (id: number) => cards.filter(c => c.kind === 'sticky' && c.diagram === id).map(c => noteLine({ on: c.on, text: c.text ?? '' }))
+  const diagramText = (c: BoardCard) => {
+    const n = diagrams.indexOf(c) + 1
+    const notes = [...(c.notes ?? []).map(noteLine), ...stickiesOf(c.id)]
+    return [`Diagram ${n} of ${diagrams.length}${c.title ? `, "${c.title}"` : ''}:`, ...(c.text ? [c.text] : []), '```mermaid', c.mermaid ?? '', '```', ...notes].join('\n')
+  }
+  const seen = viewers ? `open in ${viewers === 1 ? 'one tab' : `${viewers} tabs`}` : 'not open in any tab'
+  if (isLatest) {
+    const last = diagrams.at(-1)
+    return last ? `The whiteboard page (${seen}); its latest diagram:\n\n${diagramText(last)}` : `The whiteboard page (${seen}) has no diagram yet.`
+  }
+  const parts = cards.flatMap(c =>
+    c.kind === 'diagram'
+      ? [diagramText(c)]
+      : c.kind === 'note' && c.text
+        ? [`Your note${c.title ? `, "${c.title}"` : ''}: ${c.text}`]
+        : c.kind === 'you' && c.text
+          ? [`The user wrote: ${c.text}`]
+          : [],
+  )
+  return parts.length ? `The whiteboard page (${seen}), oldest first:\n\n${parts.join('\n\n')}` : `The whiteboard page (${seen}) is empty.`
 }
 
 const failed = (error: unknown) => `The whiteboard page could not start: ${error instanceof Error ? error.message : String(error)}`
@@ -426,11 +526,35 @@ export const register: Register = on => {
         },
       },
     })
+    await $.tool.register({
+      name: READ_TOOL,
+      description:
+        "Read back what is on this session's whiteboard page: each diagram's Mermaid source (so its node ids), " +
+        'its sticky notes, your notes, and what the user typed there, oldest first. Use it when the user talks ' +
+        'about something on the board that you did not draw in this conversation (a /whiteboard sample or file ' +
+        'they opened, or anything from before the conversation was summarized), or to check what a diagram says ' +
+        `before changing it with ${TOOL}.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          latest: { type: 'boolean', description: 'Only the latest diagram, with its sticky notes' },
+        },
+      },
+    })
     return next(e)
   })
 
   // Never in the way of the prompt: anything going wrong here sends it on as typed.
   on('prompt.submit', async ($, e, next) => {
+    if (e.text.startsWith(FROM_BOARD)) {
+      isOnBoard = true
+      return next({ ...e, context: [...(e.context ?? []), BOARD_NOTE] })
+    }
+    // Typed here after talking there: they are back, and Claude answers here.
+    if (isOnBoard && ['composer', 'bridge', 'sdk'].includes(e.origin?.kind)) {
+      isOnBoard = false
+      return next({ ...e, context: [...(e.context ?? []), BACK_NOTE] })
+    }
     if (isIntroduced) return next(e)
     let hasScreen = false
     try {
@@ -446,12 +570,17 @@ export const register: Register = on => {
   // The page shows whether Claude is working, so a message sent there is
   // never met with silence.
   on('turn.start', async ($, e, next) => {
+    boardTurn = e.text.startsWith(FROM_BOARD) ? { turnId: e.turnId, isPosted: false } : null
     void boardStatus($, 'working')
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
+    if (!e.agentId && boardTurn?.turnId === e.turnId) {
+      if (!boardTurn.isPosted && e.reason === 'answer') await postAnswer($, e.answer)
+      boardTurn = null
+    }
     void boardStatus($, 'idle')
     if (said.length) void deliver($)
     return done
@@ -487,8 +616,20 @@ export const register: Register = on => {
       }
     }
     if (out.posted.noDiagram) return { deny: 'No diagram on the board to pin these sticky notes to: post the diagram with them.' }
+    if (boardTurn) boardTurn.isPosted = true
     const unknownNote = unknown.length ? ` The legend names classes with no classDef: ${unknown.join(', ')}.` : ''
     return { result: `${postedWhere(out, Boolean(mermaid))}${unknownNote}` }
+  })
+
+  on('tool.call', { tool: `mcp__whiteboard__${READ_TOOL}` }, async ($, e) => {
+    if (!board) return { result: 'There is no whiteboard page in this session yet (or the last one was wrapped up): nothing is on it.' }
+    try {
+      const open = await board
+      const { viewers, cards } = await boardGet<{ viewers: number; cards: BoardCard[] }>($, open, '/cards')
+      return { result: boardText(viewers, cards, e.latest === true) }
+    } catch (error) {
+      return { result: `The whiteboard page has stopped (${error instanceof Error ? error.message : String(error)}): nothing to read.` }
+    }
   })
 
   on('command.run', { command: 'whiteboard' }, async ($, e) => {
@@ -505,17 +646,30 @@ export const register: Register = on => {
     }
     if (!arg || arg === 'focus') {
       try {
-        const started = await boardOpen($)
-        // Asked for: open it again, in case the tab was closed.
-        const isOpened = started.isNew ? started.isOpened : await openInBrowser($, started.open.url)
-        const where = isOpened ? 'opened in your browser' : `open it in your browser: ${started.open.url}`
+        // Asked for: it opens again even with a tab showing it, which may be out of sight.
+        const started = await boardOpen($, true)
+        const where = started.isOpened ? 'opened in your browser' : `open it in your browser: ${started.open.url}`
+        if (arg === 'focus') isOnBoard = true
         if (arg === 'focus') return { text: `Whiteboard ${where}. Discuss there; Claude answers on the board.`, context: [FOCUS_NOTE] }
         return { text: `Whiteboard ${where}.` }
       } catch (error) {
         return { text: failed(error) }
       }
     }
-    if (arg === 'sample') return draw(SAMPLE, 'Sample diagram drawn')
+    if (arg === 'sample') {
+      const shown = await draw(SAMPLE, 'Sample diagram drawn')
+      // Claude did not draw it, so it is told what is there: the user's next
+      // question is likely about it ("pin a note on the email service").
+      return {
+        ...shown,
+        context: [
+          `The user opened the whiteboard's sample diagram, "${SAMPLE.title}", to try the board; it is on the page now. ` +
+            'It is a sample, not their project. If they ask about it or for a change, work from this source: pin ' +
+            `sticky notes with \`on\` set to a node id, or redraw it with ${TOOL} keeping the ids and labels that ` +
+            `stay the same.\n\n\`\`\`mermaid\n${SAMPLE.source}\n\`\`\``,
+        ],
+      }
+    }
     let text: string
     try {
       text = await $.fs.read(arg)
@@ -524,6 +678,12 @@ export const register: Register = on => {
     }
     const next = { title: arg.split('/').at(-1) ?? arg, source: mermaidOf(text) }
     const shown = await draw(next, `Diagram from ${arg} drawn`)
-    return { ...shown, context: [`The diagram the user is looking at (Mermaid):\n${next.source}`] }
+    return {
+      ...shown,
+      context: [
+        `The user opened ${arg} on the whiteboard page. Its diagram, as Mermaid (pin sticky notes with \`on\` set ` +
+          `to a node id, or redraw it with ${TOOL}):\n\n\`\`\`mermaid\n${next.source}\n\`\`\``,
+      ],
+    }
   })
 }
