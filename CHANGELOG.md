@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
 - **A closed tab opens again** with Claude's next post, everything so far on it.
 - **Claude can read the board back** with a new tool, `read_board`: each
@@ -12,6 +12,8 @@
 - **Back in the terminal, answered in the terminal.** After talking on the
   board, the next thing you type in the conversation tells Claude you are back,
   and focus mode ends.
+- The demo opens in Claude Code and comes back to it, so it is plain the board
+  is part of the session.
 
 ## 0.3.0
 
