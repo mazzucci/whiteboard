@@ -292,7 +292,7 @@ const typeOf = source =>
 
 // ---------------------------------------------------------------- the conversation
 
-function addMessage(card, html) {
+function addMessage(card, html, isReplay = false) {
   $('chat-empty')?.remove()
   const isYou = card.kind === 'you'
   const el = document.createElement('div')
@@ -306,6 +306,7 @@ function addMessage(card, html) {
   messages.insertBefore(el, $('typing'))
   // Waiting for an answer from the moment the person speaks; Claude's next card answers it.
   waiting = isYou ? waiting + 1 : 0
+  if (!isYou && !isReplay) countUnread()
   showTyping()
   if (isAtBottom || isYou) messages.scrollTop = messages.scrollHeight
   return el
@@ -343,7 +344,7 @@ async function add(card, isReplay) {
     return
   }
   if (card.kind === 'you') {
-    addMessage(card, markdown(card.text))
+    addMessage(card, markdown(card.text), isReplay)
     return
   }
   if (card.kind === 'sticky') {
@@ -384,14 +385,17 @@ async function add(card, isReplay) {
   }
   if (card.text || drawn || title) {
     const head = card.title && card.text ? `<p><b>${esc(card.title)}</b></p>` : ''
-    const el = addMessage(card, head + (card.text ? markdown(card.text) : drawn ? '' : `<p><b>${esc(title)}</b></p>`))
+    const el = addMessage(card, head + (card.text ? markdown(card.text) : drawn ? '' : `<p><b>${esc(title)}</b></p>`), isReplay)
     if (drawn) {
       const index = diagrams.length - 1
       const chip = document.createElement('button')
       chip.type = 'button'
       chip.className = 'chip'
       chip.textContent = title
-      chip.onclick = () => select(index)
+      chip.onclick = () => {
+        setView('board')
+        select(index)
+      }
       el.querySelector('.body').append(chip)
     }
   }
@@ -492,25 +496,61 @@ $('copy').onclick = async () => {
   setTimeout(() => ($('copy').textContent = 'Copy'), 1200)
 }
 
-// Drag to pan.
+// One pointer drags to pan; two (a pinch) zoom around their midpoint.
+const pointers = new Map()
 let drag = null
+let pinch = null
+const pinchOf = () => {
+  const [a, b] = [...pointers.values()]
+  const r = stage.getBoundingClientRect()
+  return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top }
+}
 stage.addEventListener('pointerdown', e => {
-  if (isCode || e.button !== 0 || !diagrams.length || e.target.closest('.sticky')) return
-  drag = { x: e.clientX, y: e.clientY }
-  stage.setPointerCapture(e.pointerId)
-  stage.classList.add('dragging')
+  if (isCode || (e.pointerType === 'mouse' && e.button !== 0) || !diagrams.length || e.target.closest('.sticky')) return
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  try {
+    stage.setPointerCapture(e.pointerId)
+  } catch {
+    // A pointer the browser cannot capture still pans and pinches inside the stage.
+  }
+  if (pointers.size === 2) {
+    drag = null
+    pinch = pinchOf()
+  } else if (pointers.size === 1) {
+    drag = { x: e.clientX, y: e.clientY }
+    stage.classList.add('dragging')
+  }
 })
 stage.addEventListener('pointermove', e => {
-  if (!drag) return
-  panBy(e.clientX - drag.x, e.clientY - drag.y)
-  drag = { x: e.clientX, y: e.clientY }
+  if (!pointers.has(e.pointerId)) return
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  if (pinch && pointers.size === 2) {
+    const now = pinchOf()
+    if (pinch.d > 0) zoomBy(now.d / pinch.d, now.x, now.y)
+    panBy(now.x - pinch.x, now.y - pinch.y)
+    pinch = now
+  } else if (drag) {
+    panBy(e.clientX - drag.x, e.clientY - drag.y)
+    drag = { x: e.clientX, y: e.clientY }
+  }
 })
-const endDrag = () => {
-  drag = null
-  stage.classList.remove('dragging')
+const endPointer = e => {
+  pointers.delete(e.pointerId)
+  pinch = null
+  if (pointers.size === 1) {
+    const [p] = pointers.values()
+    drag = { ...p }
+  } else {
+    drag = null
+    stage.classList.remove('dragging')
+  }
 }
-stage.addEventListener('pointerup', endDrag)
-stage.addEventListener('pointercancel', endDrag)
+stage.addEventListener('pointerup', endPointer)
+stage.addEventListener('pointercancel', endPointer)
+// A double-click or double-tap fits the diagram.
+stage.addEventListener('dblclick', e => {
+  if (!isCode && !e.target.closest('.sticky')) fit()
+})
 
 // A pinch (or Ctrl/Cmd + scroll) zooms around the pointer; plain scroll pans.
 stage.addEventListener(
@@ -690,8 +730,10 @@ function renderStickies() {
   const d = diagrams[current]
   if (!d) return
   const perBox = new Map()
-  // Notes on no box line up in a column beside the diagram, each below the last.
-  let column = 8
+  // Notes on no box line up in a column beside the diagram, each below the
+  // last; on a tall, narrow board (a phone held upright), under the diagram.
+  const isUpright = stage.clientHeight > stage.clientWidth * 1.2
+  let column = isUpright ? d.h + 16 : 8
   for (const note of stickies.get(d.id) ?? []) {
     const el = document.createElement('div')
     el.className = 'sticky'
@@ -708,7 +750,7 @@ function renderStickies() {
     } else if (Number.isFinite(note.x)) {
       at = { x: note.x, y: note.y }
     } else {
-      at = { x: d.w + 14, y: column }
+      at = isUpright ? { x: Math.max(0, (d.w - NOTE_W) / 2), y: column } : { x: d.w + 14, y: column }
       column += h + 12
     }
     el.style.left = `${at.x}px`
@@ -716,3 +758,30 @@ function renderStickies() {
     el.style.visibility = ''
   }
 }
+
+
+// ---------------------------------------------------------------- phones: two views
+//
+// On a narrow screen the board and the conversation take turns at full size,
+// switched in the header. Claude's messages that arrive while the board is in
+// front are counted on the Chat button.
+
+const isNarrow = () => matchMedia('(max-width: 900px)').matches
+let unread = 0
+function setView(view) {
+  document.body.classList.toggle('view-chat', view === 'chat')
+  document.querySelectorAll('.views [data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === view)))
+  if (view === 'chat') {
+    unread = 0
+    $('unread').hidden = true
+    const messages = $('messages')
+    messages.scrollTop = messages.scrollHeight
+  }
+}
+function countUnread() {
+  if (!isNarrow() || document.body.classList.contains('view-chat')) return
+  unread++
+  $('unread').textContent = String(unread)
+  $('unread').hidden = false
+}
+document.querySelectorAll('.views [data-view]').forEach(b => (b.onclick = () => setView(b.dataset.view)))
