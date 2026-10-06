@@ -90,9 +90,9 @@ the board opened, and the follow-up arriving in the session.
 ## The edit
 
 ```bash
-WINDOW=1 SPEED=1.4 GIF_W=1000 python3 media/board-demo/edit.py "$REC" out/ "$REC/terminal"
+FIRST=2.4 WINDOW=1 SPEED=1.4 GIF_W=1000 python3 media/board-demo/edit.py "$REC" out/ "$REC/terminal"
 ```
 
 It adds the title card, speeds up the waits (and everything by `SPEED`), puts a caption under each step,
 adds the Terminal slides, and writes the MP4s and `out/whiteboard.gif`
-(about 34 s, about 5 MB). Copy the GIF to `media/whiteboard.gif`.
+(about 32 s, about 5 MB); `FIRST` keeps only that many seconds of the first diagram. Copy the GIF to `media/whiteboard.gif`.

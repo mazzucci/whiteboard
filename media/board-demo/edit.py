@@ -78,8 +78,15 @@ subprocess.run([FF, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-
 # (from, to, speed) in session seconds: waits fast, what matters at 1x.
 # With the Terminal before it, the board starts at its first diagram; on its own, as it opens.
 START = at('first diagram') + 0.2 if TERM else 0.0
+# FIRST: seconds of the first diagram to keep before the trace arrives (all of it unless said).
+FIRST = float(os.environ.get('FIRST', 0)) or None
 SEGMENTS = [
     (START, at('sticky note'), 1.4),            # step 1, then the trace arrives
+] if not FIRST else [
+    (START, START + FIRST, 1.4),
+    (at('sticky note') - 0.5, at('sticky note'), 1.4),
+]
+SEGMENTS += [
     (at('sticky note'), at('said yes'), 1.0),   # the note, the question, the answer typed
     (at('said yes'), at('proposal drawn'), 3.0),  # Claude works on it
     (at('proposal drawn'), at('settled'), 1.3),
