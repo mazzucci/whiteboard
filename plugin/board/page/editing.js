@@ -167,7 +167,7 @@ function changesBetween(before, after) {
 // ---------------------------------------------------------------- the canvas on screen
 
 /** Turns a diagram into a canvas: Mermaid's layout, colours and ids, and its sticky notes as notes on it. */
-async function toCanvas(d) {
+async function makeCanvas(d) {
   const W = await loadEditor()
   let elements = await W.fromMermaid(d.source)
   const notes = (stickies.get(d.id) ?? []).map((n, i) => ({ op: 'note', id: `note-${i + 1}`, on: n.on, text: n.text }))
@@ -202,7 +202,7 @@ function setMode(mode, isTheirs = false, isReplay = false) {
 async function showEditor(d) {
   // On a canvas board, a diagram drawn since the switch, or picked, becomes editable when it is shown.
   if (boardMode === 'canvas' && d && !d.scene && EDITABLE.test(d.kind) && (d.id > canvasFrom || toEdit.has(d.id))) {
-    d.converting ??= toCanvas(d).finally(() => (d.converting = null))
+    d.converting ??= makeCanvas(d).finally(() => (d.converting = null))
     await d.converting
     if (diagrams[current] !== d) return
   }
@@ -323,7 +323,7 @@ async function opsArrived(event) {
   const d = diagrams.find(x => x.id === event.diagram)
   if (!d) return post('/applied', { page: pageId, id: event.id, error: 'that diagram is not on this page' })
   try {
-    if (!d.scene) await toCanvas(d)
+    if (!d.scene) await makeCanvas(d)
     const W = await loadEditor()
     // On the canvas as the person has it, unsent changes included: Claude's go on top.
     const current_ = editor && diagrams[current] === d ? editor.api.getSceneElementsIncludingDeleted() : d.scene

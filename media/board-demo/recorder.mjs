@@ -152,22 +152,46 @@ try {
   await settled('Claude to finish')
   mark('settled')
   await sleep(1500)
-  // The controls: zoom into the change, pan, back to the trace and forward again.
-  await clickOn('#zoom-in', 700)
-  await clickOn('#zoom-in', 900)
-  await moveTo(W / 2 - 150, H / 2 + 60)
-  for (const key of ['ArrowLeft', 'ArrowLeft', 'ArrowUp']) {
-    await page.keyboard.press(key)
-    await sleep(350)
+  // Edit together: the board becomes a canvas; the person moves the proposed
+  // box aside, selects it, and asks for a cache beside it; Claude amends it.
+  await clickOn('.modes [data-mode="canvas"]', 300)
+  await page.waitForSelector('.excalidraw', { timeout: 30_000 })
+  await sleep(1500)
+  mark('canvas')
+  // Where a box of the canvas is on screen: the proposed one (lavender) by default.
+  const boxOnScreen = fill =>
+    page.evaluate(fill => {
+      const { api } = window.boardCanvas()
+      const s = api.getAppState()
+      const e = api.getSceneElements().find(x => x.backgroundColor === fill && ['rectangle', 'ellipse', 'diamond'].includes(x.type))
+      if (!e) return null
+      const host = document.querySelector('.excalidraw').getBoundingClientRect()
+      const z = s.zoom.value
+      return { x: host.left + (e.x + e.width / 2 + s.scrollX) * z, y: host.top + (e.y + e.height / 2 + s.scrollY) * z, h: e.height * z }
+    }, fill)
+  const shapes = () => page.evaluate(() => window.boardCanvas().api.getSceneElements().filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type)).length)
+  const box = await boxOnScreen('#f1ebfc')
+  if (box) {
+    // Drag it down a little, as a person tidying the board would.
+    await moveTo(box.x, box.y, 18)
+    await page.mouse.down()
+    await moveTo(box.x + 10, box.y + box.h * 1.6, 22)
+    await page.mouse.up()
+    await sleep(700)
+    mark('moved')
+    // The drag leaves it selected: the question is about it.
   }
-  mark('zoomed')
-  await sleep(1200)
-  await clickOn('#fit', 1200)
-  const tabs = (await state()).tabs
-  await clickOn(`.tab:nth-child(${tabs - 1})`, 1800)
-  mark('back to the trace')
-  await clickOn(`.tab:nth-child(${tabs})`, 1800)
-  mark('forward to the proposal')
+  const boxesBefore = await shapes()
+  await clickOn('#text', 300)
+  await page.type('#text', 'Add a stock cache next to this, in teal', { delay: 60 })
+  await sleep(400)
+  await page.keyboard.press('Enter')
+  mark('asked to amend')
+  for (let i = 0; i < 400 && (await shapes()) <= boxesBefore; i++) await sleep(400)
+  mark('amended')
+  await settled('Claude to finish the amendment')
+  await sleep(1800)
+  mark('settled again')
   // Wrap up: Claude summarises in the terminal and closes the board.
   await clickOn('#wrap', 300)
   mark('wrap up')

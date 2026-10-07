@@ -88,6 +88,8 @@ function mount(el, { elements, onChange }) {
         excalidrawAPI={a => {
           api = a
           resolve(a)
+          // The whole diagram in view when the canvas opens.
+          setTimeout(() => a.scrollToContent(undefined, { fitToContent: true }), 50)
         }}
         onChange={(els, appState) => onChange?.(els, appState)}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false } }}

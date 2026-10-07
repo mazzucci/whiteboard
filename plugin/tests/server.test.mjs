@@ -6,6 +6,7 @@ import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { request } from 'node:http'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const serverPath = fileURLToPath(new URL('../board/server.mjs', import.meta.url))
@@ -186,4 +187,13 @@ test('the mode: set by Claude or a page, kept, read back and replayed last', asy
   await reader.cancel()
   assert.match(text, /"kind":"mode","mode":"canvas"/)
   assert.ok(text.lastIndexOf('"kind":"mode"') > text.lastIndexOf('"kind":"diagram"'), 'after the cards')
+})
+
+test("the page's scripts share no top-level names (a later one would replace the earlier one's)", () => {
+  const names = file => {
+    const s = readFileSync(new URL(`../board/page/${file}`, import.meta.url), 'utf8')
+    return new Set([...s.matchAll(/^(?:async\s+)?function\s+(\w+)|^(?:const|let|var)\s+(\w+)/gm)].map(m => m[1] ?? m[2]))
+  }
+  const app = names('app.js')
+  assert.deepEqual([...names('editing.js')].filter(n => app.has(n)), [])
 })

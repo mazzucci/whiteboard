@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: a sticky note pinned to a box broke the board** (the zoom read
+  "NaN%" and the page reported errors). 0.4.0's canvas code replaced a function
+  the board uses to place notes; a test now guards against it.
+- A canvas opens with the whole diagram in view.
+- The README and the demo show editing together.
+
 ## 0.4.0
 
 - **Two modes.** Diagrams (Claude's, as drawn, each new one a tab) or canvas

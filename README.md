@@ -1,6 +1,6 @@
 # Whiteboard
 
-**A whiteboard beside your Claude Code session: Claude draws as it explains, and you answer on the board.**
+**A whiteboard beside your Claude Code session: Claude draws as it explains, you answer on the board, and you can edit a diagram together.**
 
 - **Diagrams as Claude explains.** Real [Mermaid](https://mermaid.js.org), every
   diagram type, on a page in your browser. One tab per diagram, with zoom, pan,
@@ -8,6 +8,9 @@
 - **A two-way board.** Type on the page and your words go into the same Claude
   Code session. Claude answers on the board, with another drawing when one
   helps.
+- **Edit together.** Switch a diagram to a canvas: drag, write and connect
+  boxes. Claude reads what you changed and what you selected, and amends the
+  diagram in place.
 - **Nothing to set up.** Node.js 18 and the plugin. The board runs on
   127.0.0.1, downloads nothing, and ends with the session.
 
