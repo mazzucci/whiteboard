@@ -53,13 +53,18 @@ test('a pie: each slice by its label (its colour in the legend)', async () => {
   assert.match(all.find(m => m.label === 'Dogs').say, /slice "Dogs" \(386, 79%\)/)
 })
 
-test('a click selects a slice and the next message says so; a second click lets go', async () => {
+test('a click selects a slice and the next message says so, then the selection is gone; a second click lets go', async () => {
   await click('Dogs')
   assert.deepEqual(await picked(), ['Dogs'])
   assert.match(await page.$eval('#stage-hint .chart-keys', el => el.textContent), /^Selected: Dogs · goes with your next message/)
   await send(page, 'why so many?')
   const msg = await b.until(() => b.said.find(s => s.endsWith('why so many?')), 'the message')
   assert.match(msg, /^Selected on the board, in "Pets": the slice "Dogs" \(386, 79%\)\n\nwhy so many\?$/)
+  // Sent with that message: a click on it now selects it again, as one would expect.
+  assert.deepEqual(await picked(), [])
+  assert.doesNotMatch(await page.$eval('#stage-hint .chart-keys', el => el.textContent), /^Selected/)
+  await click('Dogs')
+  assert.deepEqual(await picked(), ['Dogs'])
   await click('Dogs')
   assert.deepEqual(await picked(), [])
 })
@@ -137,6 +142,19 @@ for (const [name, count] of [['pie.mmd', 4], ['xychart.mmd', 8], ['quadrant.mmd'
     assert.equal((await marks()).length, count)
   })
 }
+
+test('a note sits on a bar named by a label with spaces and punctuation, and one that names nothing is told to Claude', async () => {
+  const out = await b.call('/post', {
+    title: 'Spans',
+    mermaid: 'xychart-beta\n  x-axis ["inventory.check (x1,240)", "pricing.quote (own)"]\n  bar [3100, 100]',
+    notes: [{ on: 'inventory.check (x1,240)', text: 'N+1' }, { on: 'inventory.check', text: 'Nowhere' }],
+  })
+  assert.deepEqual(out.noteErrors, ['no box or chart label "inventory.check" on the diagram, so that note sits beside it'])
+  await b.until(async () => (await page.$$('.sticky')).length === 2 && (await look(page)).tab === 'Spans', 'the notes')
+  const [onBar] = await page.$$eval('.sticky', els => els.filter(el => el.textContent.includes('N+1')).map(el => el.getBoundingClientRect().toJSON()))
+  const bar = await (await page.$('#canvas [data-mark]')).boundingBox()
+  assert.ok(Math.abs(onBar.x + onBar.width / 2 - (bar.x + bar.width / 2)) < 120, 'the note is by its bar')
+})
 
 test('diagrams that are not charts are not clickable, and nothing failed', async () => {
   await b.call('/post', { title: 'Flow', mermaid: 'flowchart LR\n  a --> b' })

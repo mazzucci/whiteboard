@@ -233,7 +233,7 @@ real numbers: measured, or from the code, a log or the user; never invent them
 to make a chart. Put the unit in the title or the axis.
 
 ```mermaid
-xychart-beta
+xychart-beta horizontal
   title "p95 checkout latency by step (ms)"
   x-axis ["pricing.quote", "inventory.check", payments, rendering]
   y-axis "ms" 0 --> 3500
@@ -249,7 +249,9 @@ and say where it came from. A sticky note can sit on a slice, a bar or a point:
 
 Syntax: quote labels that have spaces or punctuation (`"pricing.quote"`); pie
 values are positive numbers; `xychart-beta`, with the `-beta`; a quadrant
-point is `Name: [x, y]` with x and y between 0 and 1.
+point is `Name: [x, y]` with x and y between 0 and 1. Upright bars have room
+for a word under each: with longer labels (span names, file paths), use
+`xychart-beta horizontal`, where they read in a column.
 
 ## Diagrams or canvas
 

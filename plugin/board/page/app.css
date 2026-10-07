@@ -160,7 +160,8 @@ svg.chart [data-mark] { cursor: pointer; transition: opacity .15s; }
 svg.chart [data-mark]:hover { filter: brightness(.93); }
 svg.chart .line-dot { fill: transparent; stroke: none; }
 svg.chart .line-dot:hover { fill: rgba(37, 99, 235, .25); }
-svg.chart.has-picks [data-mark]:not(.picked) { opacity: .3 !important; }
+/* Only points fade: Mermaid's bars and slices are pale already. */
+svg.chart.has-picks g[data-mark]:not(.picked), svg.chart.has-picks .line-dot:not(.picked) { opacity: .45 !important; }
 svg.chart [data-mark].picked:not(g), svg.chart g.picked circle { stroke: #2563eb !important; stroke-width: 3px !important; opacity: 1 !important; }
 svg.chart g.picked text { fill: #1d4ed8 !important; font-weight: 600; }
 svg.chart .line-dot.picked { fill: #2563eb; }

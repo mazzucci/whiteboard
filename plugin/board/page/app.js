@@ -424,11 +424,16 @@ async function add(card, isReplay) {
     try {
       const { svg } = await mermaid.render(`d${++seq}`, card.mermaid)
       drawn = natural(svg)
-      // A chart's slices, bars and points can be clicked: see charts.js.
-      const marks = await marksOf(card.mermaid)
-      const marked = marks && withMarks(drawn.svg, marks)
-      if (marked) Object.assign(drawn, { svg: marked, marks, picks: new Set() })
-      post('/rendered', { id: card.id })
+      // A chart's slices, bars and points can be clicked: see charts.js. A
+      // chart this page cannot read is still drawn, just not clickable.
+      try {
+        const marks = await marksOf(card.mermaid)
+        const marked = marks && withMarks(drawn.svg, marks)
+        if (marked) Object.assign(drawn, { svg: marked, marks, picks: new Set() })
+      } catch {
+        // Not clickable.
+      }
+      post('/rendered', { id: card.id, unpinned: unpinnedOf(drawn.svg, card.notes) })
     } catch (err) {
       // Off the board: the server withdraws the card and Claude gets the error.
       post('/rendered', { id: card.id, error: String(err?.message ?? err) })
@@ -780,12 +785,20 @@ function wrappedUp(card) {
 const stickies = new Map()
 const pinned = id => (stickies.has(id) ? stickies.get(id) : stickies.set(id, []).get(id))
 
-/** The box on the canvas with this node id, or a chart's slice, bar or point with this label, if the diagram has one. */
-const boxOf = on =>
+/** In a drawing (the canvas, or a diagram not shown yet), the box with this node id, or a chart's slice, bar or point with this label. */
+const boxIn = (root, on) =>
   on
-    ? [...canvas.querySelectorAll('g.node[id]')].find(g => g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '') === on) ??
-      [...canvas.querySelectorAll('[data-mark]')].find(el => el.dataset.label === on)
+    ? [...root.querySelectorAll('g.node[id]')].find(g => g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '') === on) ??
+      [...root.querySelectorAll('[data-mark]')].find(el => el.dataset.label === on)
     : undefined
+const boxOf = on => boxIn(canvas, on)
+
+/** The `on` of each note that names nothing in the drawing: such a note sits beside the diagram. */
+function unpinnedOf(svgText, notes) {
+  const holder = document.createElement('div')
+  holder.innerHTML = svgText
+  return (notes ?? []).filter(n => n.on && !boxIn(holder, n.on)).map(n => n.on)
+}
 
 const NOTE_W = 214
 const NOTE_H = 82
