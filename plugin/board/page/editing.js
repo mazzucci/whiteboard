@@ -284,6 +284,10 @@ async function showEditor(d) {
         if (version === d.version && !isSelectionNew) return
         d.selected = selected
         if (version !== d.version) {
+          // The elements this page changed: its own edits, told apart from another page's.
+          const was = new Map((d.scene ?? []).map(e => [e.id, e.version]))
+          d.mine ??= new Set()
+          for (const e of els) if (was.get(e.id) !== e.version) d.mine.add(e.id)
           d.version = version
           d.scene = withRefs(els)
         }
@@ -348,7 +352,10 @@ function withChanges(text, withSelection = true) {
     modeSwitched = null
   }
   said.push(...pending.map(({ d, lines }) => `I changed "${d.title}" on the board:\n${lines.map(l => `- ${l}`).join('\n')}`))
-  for (const { d } of pending) d.known = d.scene
+  for (const { d } of pending) {
+    d.known = d.scene
+    d.mine = new Set()
+  }
   if (pending.length) showPending()
   // What they have selected is what "this" means in what they wrote.
   const d = diagrams[current]
@@ -367,11 +374,23 @@ async function sceneArrived(event, isReplay) {
   await loadEditor()
   // Changes this page has not sent yet stay unsent: they are counted against
   // what Claude knew, not against what another page just saved.
-  const isPending = !isReplay && d.known && d.scene && changesBetween(summaryOf(d.known), summaryOf(d.scene)).length > 0
+  const isPending = !isReplay && d.known && d.scene && d.mine?.size > 0 && changesBetween(summaryOf(d.known), summaryOf(d.scene)).length > 0
+  // Known as it arrives (what was there before this page opened, or what
+  // another page sent), but for this page's own unsent edits: those stay
+  // against what Claude knew, so they are still told, and only once.
+  if (isPending) {
+    const known = new Map(d.known.map(e => [e.id, e]))
+    const arrived = new Set(event.elements.map(e => e.id))
+    d.known = [
+      ...event.elements.flatMap(e => (d.mine.has(e.id) ? (known.has(e.id) ? [known.get(e.id)] : []) : [e])),
+      ...[...d.mine].filter(id => !arrived.has(id) && known.has(id)).map(id => known.get(id)),
+    ]
+  } else {
+    d.known = event.elements
+    d.mine = new Set()
+  }
   d.scene = event.elements
   d.version = d.scene.reduce((n, e) => n + e.version, 0)
-  // Known as it arrives: what was there before this page opened, or what another page sent.
-  if (!isPending) d.known = d.scene
   if (diagrams[current] === d) {
     if (editor) editor.show(d.scene)
     else showEditor(d)

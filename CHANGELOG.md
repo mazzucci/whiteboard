@@ -11,8 +11,8 @@
 - **Edit edits that diagram only;** the board's mode is the switch at the top.
   On either mode, Claude amends a diagram you edited instead of drawing it
   again.
-- With two tabs open, a change saved in one no longer drops the other's
-  unsent changes.
+- With two tabs open, each tab tells Claude its own changes, once: a save
+  from the other tab neither drops them nor adds the other's.
 - Sequence diagrams read back cleanly: one box per participant, by its name
   (`App`, not `App-top`), and only the messages as arrows.
 - The editor's fonts load from the board (its own UI font was missing), and

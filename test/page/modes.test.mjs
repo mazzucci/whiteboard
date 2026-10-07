@@ -69,7 +69,17 @@ test("one page's save keeps another page's unsent change", async () => {
   await move(other, 'b')
   await b.until(async () => (await look(other)).send === 'Send 1 change', "the second page's change")
   await move(page, 'a')
-  await sleep(1500)
+  // Wait until the second page has the first page's save (its `a` moved too).
+  const yOf = (p, ref) => p.evaluate(ref => window.boardCanvas().api.getSceneElements().find(e => e.customData?.ref === ref).y, ref)
+  const before = await yOf(page, 'a')
+  await b.until(async () => Math.abs((await yOf(other, 'a')) - before) < 1, "the first page's save on the second")
+  await sleep(600)
   assert.equal((await look(other)).send, 'Send 1 change')
+  // What it sends is its own change only, once.
+  await other.type('#text', 'ok?')
+  await other.click('#form [type=submit]')
+  const said = await b.until(() => b.said.find(s => s.endsWith('ok?')), 'the message')
+  assert.match(said, /moved `b`/)
+  assert.doesNotMatch(said, /moved `a`/)
   assert.deepEqual([...page.errors, ...other.errors], [])
 })
