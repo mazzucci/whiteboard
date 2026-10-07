@@ -465,6 +465,15 @@ test('on a canvas, drawing the same diagram again is refused: Claude amends it, 
   stop()
 })
 
+test('on a drawing board, redrawing a diagram the user edited is refused too', async ($, on) => {
+  const { posts, stop } = host(on, { mode: 'diagrams', cards: [{ id: 1, kind: 'diagram', title: 'Orders', mermaid: SOURCE }], scenes: { 1: { boxes: [{ ref: 'app', text: 'Mobile app', class: 'plain' }, { ref: 'api', text: 'Orders API', class: 'plain' }, { ref: 'db', text: 'Orders DB', class: 'plain' }] } } })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  const again = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  expect(said(again)).toContain('edited on the board')
+  expect(posts.some(p => p.mermaid)).toBe(false)
+  stop()
+})
+
 test('edit_board comes back with a small picture of the result, unless look: false', async ($, on) => {
   const { posts, stop } = host(on, { page: body => (body.ops ? ({ ok: true, diagram: 'Orders', tab: 1, done: ['#1 (text)'], errors: [], ...(body.look === false ? {} : { look: '/9j/4AAQ' }) } as never) : { ok: true, viewers: 1, drawn: true }) })
   await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })

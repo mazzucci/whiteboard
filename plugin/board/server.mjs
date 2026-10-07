@@ -347,7 +347,8 @@ async function handle(req, res) {
     mode = input.mode
     broadcast({ kind: 'mode', mode })
   }
-  if (input.mode && Object.keys(input).every(k => k === 'mode')) return json(200, { ok: MODES.includes(input.mode), mode, viewers: listeners.size })
+  // `waitForPage` rides along with every post from the plugin: a mode alone is still no card.
+  if (input.mode && Object.keys(input).every(k => k === 'mode' || k === 'waitForPage')) return json(200, { ok: MODES.includes(input.mode), mode, viewers: listeners.size })
   if (input.status === 'working' || input.status === 'idle') {
     status = input.status
     broadcast({ kind: 'status', state: status })

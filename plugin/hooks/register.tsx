@@ -520,9 +520,10 @@ function nodeIdsOf(source: string): Set<string> {
 }
 
 /**
- * On a canvas board, the diagram already there that a new one mostly redraws
- * (60% of their boxes in common): Claude amends that one instead, keeping the
- * person's layout. Null when none is, or the board is not a canvas.
+ * The diagram already on the board that a new one mostly redraws (60% of
+ * their boxes in common), when it is editable: any on a canvas board, an
+ * edited one on a drawing board. Claude amends that one instead, keeping the
+ * person's layout. Null when there is none.
  */
 async function redrawnOnCanvas($: EngineInterface, mermaid: string): Promise<string | null> {
   if (!board) return null
@@ -532,17 +533,18 @@ async function redrawnOnCanvas($: EngineInterface, mermaid: string): Promise<str
   } catch {
     return null
   }
-  if (read.mode !== 'canvas') return null
   const fresh = nodeIdsOf(mermaid)
   if (fresh.size < 2) return null
   const diagrams = read.cards.filter(c => c.kind === 'diagram')
   for (const [i, c] of diagrams.entries()) {
     const scene = read.scenes?.[String(c.id)]
+    // On a drawing board only an edited diagram is amended; the rest are a story told in tabs.
+    if (read.mode !== 'canvas' && !scene) continue
     const old = scene?.boxes ? new Set(scene.boxes.map(b => b.ref)) : nodeIdsOf(c.mermaid ?? '')
     const common = [...fresh].filter(id => old.has(id))
     if (old.size >= 2 && common.length >= 0.6 * Math.max(fresh.size, old.size)) {
       return (
-        `The board is a canvas, and diagram ${i + 1}${c.title ? ` "${c.title}"` : ''} already shows these boxes ` +
+        `${read.mode === 'canvas' ? 'The board is a canvas, and d' : 'D'}iagram ${i + 1}${c.title ? ` "${c.title}"` : ''}${scene ? ', edited on the board,' : ''} already shows these boxes ` +
         `(${common.slice(0, 6).map(id => `\`${id}\``).join(', ')}${common.length > 6 ? ', …' : ''}). Amend it with ${EDIT_TOOL} ` +
         '(class or color to recolour as the evidence comes in, text to update a label, add, connect, remove): that keeps ' +
         'the layout the user may have arranged. If you mean a separate diagram, post again with as_new: true.'
@@ -778,7 +780,7 @@ export const register: Register = on => {
     }
     const title = typeof e.title === 'string' && e.title.trim() ? e.title.trim() : undefined
     // On a canvas, the same diagram again is an amendment, not a new tab.
-    if (mermaid && e.as_new !== true && e.mode !== 'diagrams') {
+    if (mermaid && e.as_new !== true) {
       const redrawn = await redrawnOnCanvas($, mermaid)
       if (redrawn) return { deny: redrawn }
     }

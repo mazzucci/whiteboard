@@ -227,11 +227,12 @@ after sit side by side; for explaining, "how does X work", investigations.
 place; for designing, brainstorming, rearranging something together. Pick
 with `mode` on your post when the conversation calls for it ("let's design
 the new flow together": canvas), or leave it; the user switches it on the
-page (Edit, or Diagrams / Canvas at the top) and says so in their message.
+page (Diagrams / Canvas at the top) and says so in their message. Edit on one
+diagram makes just that one editable, without changing the mode.
 
 ## When the user edits a diagram
 
-The user can switch to canvas and change a diagram on the page: drag boxes,
+The user can edit a diagram on the page (on a canvas board, or with Edit): drag boxes,
 write, add boxes, sticky notes and arrows. Their changes reach you with their
 next message, as words: "I changed "Orders" on the board: moved `cache`
 (below `api`); added a box `redis` "Redis?"; connected `api` → `redis`".

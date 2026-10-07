@@ -95,10 +95,11 @@ evidence shows, then a proposed fix.
   there.
 - **Two modes.** **Diagrams**: Claude's diagrams as drawn, each new one a
   tab, for explaining and investigating. **Canvas**: you and Claude edit every
-  diagram together, for designing. Switch at the top of the page (or press
-  **Edit**), with `/whiteboard canvas`, or let Claude pick when it opens the
-  board. Switching makes the diagram on screen editable, and every new one;
-  earlier diagrams stay as they were drawn until you press **Edit** on them.
+  diagram together, for designing. Switch at the top of the page, with
+  `/whiteboard canvas`, or let Claude pick when it opens the board. Switching
+  makes the diagram on screen editable, and every new one; earlier diagrams
+  stay as they were drawn. **Edit** on a diagram makes just that one
+  editable, in either mode.
 - **Edit a diagram yourself.** On a canvas, drag boxes, write, add boxes,
   arrows and sticky notes. Your changes go to
   Claude in words with your next message ("moved `cache` below `api`; added a
@@ -397,6 +398,7 @@ goes into your Claude Code session as your own words. So:
 claude plugin validate --strict plugin
 claude plugin test plugin
 node --test plugin/tests/server.test.mjs
+node editor/test/convert.mjs   # every diagram in fixtures/ on the real page (needs Chrome and puppeteer-core)
 ```
 
 `plugin/` is everything Claude Code loads, and all an install copies: the mod

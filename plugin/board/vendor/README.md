@@ -55,10 +55,11 @@ component missing or misattributed, please open an issue.
 [Mermaid converter](https://github.com/excalidraw/mermaid-to-excalidraw)
 2.2.2 (MIT) and React 19 (MIT), bundled unmodified by `editor/build.mjs` at
 the repository's root (`cd editor && npm install && npm run build`). The
-converter uses the board's own Mermaid, above, not a second copy. The page
-loads it only when a diagram is edited.
-[editor/THIRD_PARTY_LICENSES.md](editor/THIRD_PARTY_LICENSES.md) lists the
-70 packages in the bundle, each with its licence text.
+converter keeps the Mermaid it was built for, 11.12.1 (MIT), apart from the
+board's own: it reads Mermaid's rendered SVG, which changes between
+versions. The page loads the editor only when a diagram is edited.
+[editor/THIRD_PARTY_LICENSES.md](editor/THIRD_PARTY_LICENSES.md) lists every
+package in the bundle and every font, each with its licence text.
 
 The fonts Excalidraw draws text with, unmodified:
 

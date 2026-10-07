@@ -67,8 +67,19 @@ function selectionOf(elements, ids = []) {
 function summaryOf(elements, selectedIds = []) {
   const live = elements.filter(e => !e.isDeleted)
   const byId = new Map(live.map(e => [e.id, e]))
-  const label = e => live.find(t => t.type === 'text' && t.containerId === e.id)?.originalText ?? ''
-  const refOf = e => e?.customData?.ref ?? e?.id
+  // A sequence diagram's participant is drawn twice, `App-top` and `App-bottom`: one box, `App`.
+  const refOf = e => (e ? String(e.customData?.ref ?? e.id).replace(/-(top|bottom)(-\d+)?$/, '') : undefined)
+  const isRepeat = e => /-bottom(-\d+)?$/.test(e?.customData?.ref ?? e?.id ?? '')
+  const free = live.filter(e => e.type === 'text' && !e.containerId)
+  // A label drawn just under its box (an actor's name) is that box's text.
+  const under = new Map()
+  for (const s of live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type))) {
+    if (live.some(t => t.type === 'text' && t.containerId === s.id)) continue
+    const t = free.find(t => !under.has(t) && t.y >= s.y + s.height - 4 && t.y < s.y + s.height + 70 && Math.abs(centreOf(t).x - centreOf(s).x) < Math.max(s.width, t.width))
+    if (t) under.set(t, s.id)
+  }
+  const named = new Map([...under].map(([t, id]) => [id, t.originalText]))
+  const label = e => live.find(t => t.type === 'text' && t.containerId === e.id)?.originalText ?? named.get(e.id) ?? ''
   const classOf = e => {
     const c = Object.entries(window.WhiteboardEditor?.CLASSES ?? {}).find(([, s]) => s.backgroundColor === e.backgroundColor && s.strokeColor === e.strokeColor)
     if (c) return c[0]
@@ -76,15 +87,17 @@ function summaryOf(elements, selectedIds = []) {
     if (named) return named[0]
     return e.backgroundColor && e.backgroundColor !== 'transparent' ? e.backgroundColor : 'plain'
   }
-  const shapes = live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type))
+  const shapes = live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type) && !isRepeat(e))
   const box = e => ({ ref: refOf(e), text: label(e), class: classOf(e), x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.width), h: Math.round(e.height) })
   return {
     boxes: shapes.filter(e => e.customData?.kind !== 'note' && classOf(e) !== 'note').map(box),
     notes: shapes.filter(e => e.customData?.kind === 'note' || classOf(e) === 'note').map(e => ({ ...box(e), on: e.customData?.on ?? nearest(e, shapes)?.customData?.ref })),
     arrows: live
       .filter(e => e.type === 'arrow' || e.type === 'line')
-      .map(e => ({ from: refOf(byId.get(e.startBinding?.elementId)) ?? null, to: refOf(byId.get(e.endBinding?.elementId)) ?? null, text: label(e) })),
-    texts: live.filter(e => e.type === 'text' && !e.containerId).map(e => ({ text: e.originalText, near: refOf(nearest(e, shapes)) ?? null })),
+      .map(e => ({ from: refOf(byId.get(e.startBinding?.elementId)) ?? null, to: refOf(byId.get(e.endBinding?.elementId)) ?? null, text: label(e) }))
+      // A line joined to nothing and saying nothing (a lifeline, a frame) is drawing, not a connection.
+      .filter(a => a.from || a.to || a.text),
+    texts: free.filter(e => !under.has(e)).map(e => ({ text: e.originalText, near: refOf(nearest(e, shapes)) ?? null })),
     drawings: live.filter(e => e.type === 'freedraw').map(e => ({ near: refOf(nearest(e, shapes)) ?? null })),
     images: live.filter(e => e.type === 'image').length,
     selected: selectionOf(elements, selectedIds),
@@ -200,8 +213,8 @@ function setMode(mode, isTheirs = false, isReplay = false) {
 
 /** Shows the diagram on screen as a canvas, or takes the canvas away for a drawn diagram. */
 async function showEditor(d) {
-  // On a canvas board, a diagram drawn since the switch, or picked, becomes editable when it is shown.
-  if (boardMode === 'canvas' && d && !d.scene && EDITABLE.test(d.kind) && (d.id > canvasFrom || toEdit.has(d.id))) {
+  // A diagram picked with Edit, or (on a canvas board) drawn since the switch, becomes editable when it is shown.
+  if (d && !d.scene && EDITABLE.test(d.kind) && (toEdit.has(d.id) || (boardMode === 'canvas' && d.id > canvasFrom))) {
     d.converting ??= makeCanvas(d).finally(() => (d.converting = null))
     await d.converting
     if (diagrams[current] !== d) return
@@ -305,9 +318,13 @@ async function sceneArrived(event, isReplay) {
   const d = diagrams.find(x => x.id === event.diagram)
   if (!d) return
   await loadEditor()
+  // Changes this page has not sent yet stay unsent: they are counted against
+  // what Claude knew, not against what another page just saved.
+  const isPending = !isReplay && d.known && d.scene && changesBetween(summaryOf(d.known), summaryOf(d.scene)).length > 0
   d.scene = event.elements
+  d.version = d.scene.reduce((n, e) => n + e.version, 0)
   // Known as it arrives: what was there before this page opened, or what another page sent.
-  d.known = d.scene
+  if (!isPending) d.known = d.scene
   if (diagrams[current] === d) {
     if (editor) editor.show(d.scene)
     else showEditor(d)
@@ -389,11 +406,11 @@ function svgToPng(d) {
 
 // ---------------------------------------------------------------- controls
 
-// Edit: on a drawing board, the switch to a canvas (this diagram first); on a canvas, this diagram too.
+// Edit: this diagram, and only it; the board's mode is the switch at the top.
 $('edit').onclick = () => {
   const d = diagrams[current]
-  if (boardMode !== 'canvas') return setMode('canvas', true)
-  if (d) toEdit.add(d.id)
+  if (!d) return
+  toEdit.add(d.id)
   showEditor(d)
 }
 document.querySelectorAll('.modes [data-mode]').forEach(b => (b.onclick = () => setMode(b.dataset.mode, true)))

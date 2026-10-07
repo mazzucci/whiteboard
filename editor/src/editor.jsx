@@ -141,7 +141,8 @@ function applyOps(elements, ops) {
   const done = []
   const errors = []
   const live = () => els.filter(e => !e.isDeleted)
-  const find = ref => live().find(e => isShape(e) && refOf(e) === ref)
+  // A sequence diagram's participant answers to its name: `App` is `App-top`.
+  const find = ref => live().find(e => isShape(e) && (refOf(e) === ref || new RegExp(`^${String(ref).replace(/[^\w-]/g, '')}-top(-\\d+)?$`).test(refOf(e))))
   const labelOf = box => live().find(e => e.type === 'text' && e.containerId === box.id)
   const replace = (id, f) => {
     els = els.map(e => (e.id === id ? bump(f(e)) : e))
