@@ -31,7 +31,9 @@ You need Node.js, Google Chrome, and `puppeteer-core` beside the recorder:
    A new folder asks whether you trust it first: answer before the take.
 
 4. The recorder logs each step: the first diagram, the sticky note, Claude's
-   question, "yes", the proposal, the controls, the wrap-up. It stops on its
+   question, "yes", the proposal, the switch to a canvas (it drags the
+   rightmost lavender box aside, which leaves it selected, and asks for a stock
+   cache next to it), Claude's amendment, the wrap-up. It stops on its
    own and writes `$REC/frames.json`.
 
 Check the take before editing: the sticky note should sit by

@@ -163,11 +163,17 @@ try {
     page.evaluate(fill => {
       const { api } = window.boardCanvas()
       const s = api.getAppState()
-      const e = api.getSceneElements().find(x => x.backgroundColor === fill && ['rectangle', 'ellipse', 'diamond'].includes(x.type))
+      // The rightmost of them: the new piece at the end of the flow, with room around it.
+      const e = api
+        .getSceneElements()
+        .filter(x => x.backgroundColor === fill && ['rectangle', 'ellipse', 'diamond'].includes(x.type))
+        .sort((a, b) => b.x - a.x)[0]
       if (!e) return null
       const host = document.querySelector('.excalidraw').getBoundingClientRect()
       const z = s.zoom.value
-      return { x: host.left + (e.x + e.width / 2 + s.scrollX) * z, y: host.top + (e.y + e.height / 2 + s.scrollY) * z, h: e.height * z }
+      const at = { x: host.left + (e.x + e.width / 2 + s.scrollX) * z, y: host.top + (e.y + e.height / 2 + s.scrollY) * z, h: e.height * z }
+      // Only a box in view: a drag elsewhere would land on something else.
+      return at.x > host.left + 20 && at.x < host.right - 20 && at.y > host.top + 60 && at.y < host.bottom - 60 ? at : null
     }, fill)
   const shapes = () => page.evaluate(() => window.boardCanvas().api.getSceneElements().filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type)).length)
   const box = await boxOnScreen('#f1ebfc')

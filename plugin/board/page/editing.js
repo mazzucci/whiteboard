@@ -280,7 +280,7 @@ function showPending() {
 }
 
 /** The person's changes, in words, ahead of what they typed; then they count as seen. */
-function withChanges(text) {
+function withChanges(text, withSelection = true) {
   const pending = pendingChanges()
   const said = []
   if (modeSwitched) {
@@ -292,7 +292,7 @@ function withChanges(text) {
   if (pending.length) showPending()
   // What they have selected is what "this" means in what they wrote.
   const d = diagrams[current]
-  const selected = d?.scene && text ? selectionOf(d.scene, d.selected) : []
+  const selected = d?.scene && text && withSelection ? selectionOf(d.scene, d.selected) : []
   if (selected.length) said.push(`Selected on the board, in "${d.title}": ${selected.join(', ')}`)
   if (!said.length) return text
   return text ? `${said.join('\n\n')}\n\n${text}` : said.join('\n\n')

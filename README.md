@@ -14,7 +14,7 @@
 - **Nothing to set up.** Node.js 18 and the plugin. The board runs on
   127.0.0.1, downloads nothing, and ends with the session.
 
-![Claude walks through a slow checkout investigation on the whiteboard: the request path, the p95 trace with the problem in red and a sticky note proposing a fix; the user answers on the board and Claude draws the proposal in lavender, then the user zooms, pans and wraps up](media/whiteboard.gif)
+![In Claude Code, Claude opens the whiteboard and walks through a slow checkout investigation: the request path, the p95 trace with the problem in red and a sticky note proposing a fix; the user answers on the board and Claude draws the proposal in lavender; the user switches to a canvas, moves a box, selects it and asks for a cache beside it, and Claude adds it in place; after the wrap-up the summary arrives in Claude Code](media/whiteboard.gif)
 
 <sub>A recording of a real Claude Code session, sped up while Claude works. The project is simulated (`demo/checkout-service/`); Claude, the plugin and every diagram are real, and the replies on the board were typed by a script standing in for the user.</sub>
 

@@ -90,7 +90,11 @@ SEGMENTS += [
     (at('sticky note'), at('said yes'), 1.0),   # the note, the question, the answer typed
     (at('said yes'), at('proposal drawn'), 3.0),  # Claude works on it
     (at('proposal drawn'), at('settled'), 1.3),
-    (at('settled'), at('wrap up'), 1.15),       # zoom, pan, back and forth
+    (at('settled'), at('canvas'), 1.2),         # the switch to a canvas
+    (at('canvas'), at('asked to amend'), 1.0),  # a box moved, selected, the request typed
+    (at('asked to amend'), at('amended'), 2.5), # Claude amends it
+    (at('amended'), at('settled again'), 1.3),
+    (at('settled again'), at('wrap up'), 1.0),
     (at('wrap up'), at('wrapped up'), 2.5),     # Claude writes the summary
     (at('wrapped up'), end, 1.0),
 ]
@@ -98,7 +102,8 @@ CAPTIONS = [
     (START, at('sticky note'), 'Claude walks you through it, one diagram per step'),
     (at('sticky note'), at('said yes'), 'The trace shows the problem. The fix waits on a sticky note'),
     (at('said yes'), at('settled'), 'You answer on the board, and Claude draws the proposal'),
-    (at('settled'), at('wrap up'), 'Zoom, pan, and step through the diagrams'),
+    (at('settled'), at('asked to amend'), 'Switch to a canvas: move a box, select it, ask for a change'),
+    (at('asked to amend'), at('wrap up'), 'Claude amends the diagram in place, keeping your layout'),
     (at('wrap up'), end, 'Wrap up: the summary lands in Claude Code, and the page closes'),
 ]
 SEGMENTS = [(a, b, s * SPEED) for a, b, s in SEGMENTS]

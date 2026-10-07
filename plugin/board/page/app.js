@@ -702,9 +702,9 @@ new ResizeObserver(() => {
 // ---------------------------------------------------------------- composer
 
 const box = $('text')
-async function send(text) {
-  // Changes made on a canvas go first, in words.
-  text = withChanges(text.trim())
+async function send(text, isTyped = true) {
+  // Changes made on a canvas go first, in words (and what is selected, for what they typed).
+  text = withChanges(text.trim(), isTyped)
   if (text) await post('/say', { page: pageId, text })
 }
 $('form').onsubmit = e => {
@@ -720,7 +720,7 @@ box.addEventListener('keydown', e => {
   }
 })
 $('wrap').onclick = () =>
-  send('Let us wrap up: summarise what we concluded in the Claude Code conversation, then close the whiteboard.')
+  send('Let us wrap up: summarise what we concluded in the Claude Code conversation, then close the whiteboard.', false)
 
 // ---------------------------------------------------------------- wrapped up
 
