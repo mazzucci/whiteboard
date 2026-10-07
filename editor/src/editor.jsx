@@ -83,9 +83,13 @@ function mount(el, { elements, onChange }) {
   // its API before it has loaded them, and an empty canvas read then would be
   // saved over the diagram.
   let isReady = false
+  let isGone = false
+  const live = elements.filter(e => !e.isDeleted).length
   const ready = new Promise(resolve => {
+    const start = Date.now()
+    // Live elements on both sides (a canvas whose boxes were all deleted is ready at once), and never more than 3 s.
     const loaded = a => {
-      if (!elements.length || a.getSceneElements().length) {
+      if (!live || a.getSceneElements().length || Date.now() - start > 3000) {
         isReady = true
         resolve(a)
         // The whole diagram in view when the canvas opens.
@@ -104,7 +108,7 @@ function mount(el, { elements, onChange }) {
           loaded(a)
         }}
         // Changes before the diagram is loaded are Excalidraw setting up, not the person.
-        onChange={(els, appState) => isReady && onChange?.(els, appState)}
+        onChange={(els, appState) => isReady && !isGone && onChange?.(els, appState)}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false } }}
       />,
     )
@@ -119,7 +123,10 @@ function mount(el, { elements, onChange }) {
       api?.updateScene({ elements: next, captureUpdate: CaptureUpdateAction.IMMEDIATELY })
       if (fit) api?.scrollToContent(undefined, { fitToContent: true, animate: true, duration: 300 })
     },
-    unmount: () => root.unmount(),
+    unmount: () => {
+      isGone = true
+      root.unmount()
+    },
   }
 }
 

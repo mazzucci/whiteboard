@@ -273,6 +273,8 @@ async function showEditor(d) {
     if (turn !== showing || diagrams[current] !== d) return
   }
   if (editor) {
+    // Gone for good: its pending save too.
+    editor.stop()
     editor.unmount()
     editor = null
   }
@@ -290,9 +292,14 @@ async function showEditor(d) {
   editor = Object.assign(W.mount(host, {
     elements: d.scene,
     onChange: (els, appState) => {
+      if (editor !== me) return
       const selected = Object.keys(appState?.selectedElementIds ?? {}).filter(id => appState.selectedElementIds[id])
       clearTimeout(timer)
       timer = setTimeout(() => {
+        if (editor !== me) return
+        // Older than what this page has (a canvas from before Claude's last amendment): not a change.
+        const now = new Map((d.scene ?? []).map(e => [e.id, e.version]))
+        if (els.some(e => now.has(e.id) && e.version < now.get(e.id))) return
         // Only a change the person made: the same elements again (a redraw) are not one.
         const version = els.reduce((n, e) => n + e.version, 0)
         const isSelectionNew = selected.join() !== (d.selected ?? []).join()
@@ -311,7 +318,8 @@ async function showEditor(d) {
         showPending()
       }, 400)
     },
-  }), { d })
+  }), { d, stop: () => clearTimeout(timer) })
+  const me = editor
 }
 
 /** A line in the toolbar when a diagram cannot become a canvas. */
@@ -398,6 +406,7 @@ async function sceneArrived(event, isReplay) {
   }
   const isPending = !isReplay && d.known && live && d.mine?.size > 0 && changesBetween(summaryOf(d.known), summaryOf(live)).length > 0
   let scene = event.elements
+  let isMerged = false
   if (isPending) {
     // Another page saved while this one has unsent edits: keep this page's
     // version of what it changed and take the rest from the other page; then
@@ -406,6 +415,9 @@ async function sceneArrived(event, isReplay) {
     const known = new Map(d.known.map(e => [e.id, e]))
     const arrived = new Set(event.elements.map(e => e.id))
     const own = [...d.mine].filter(id => local.has(id))
+    const arrivedVersion = new Map(event.elements.map(e => [e.id, e.version]))
+    // Saved back only when it adds something: a merge that already holds this page's edits ends the exchange.
+    isMerged = own.some(id => arrivedVersion.get(id) !== local.get(id).version)
     scene = [...event.elements.map(e => (d.mine.has(e.id) && local.has(e.id) ? local.get(e.id) : e)), ...own.filter(id => !arrived.has(id)).map(id => local.get(id))]
     // What Claude knows: the other page's save, without this page's unsent edits, so they are told once.
     d.known = [
@@ -423,7 +435,7 @@ async function sceneArrived(event, isReplay) {
     if (editor?.d === d) editor.show(d.scene)
     else showEditor(d)
   }
-  if (isPending) saveScene(d)
+  if (isMerged) saveScene(d)
   if (!isReplay) showPending()
 }
 
