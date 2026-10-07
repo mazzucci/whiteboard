@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
 
 - **Fixed: a sticky note pinned to a box broke the board** (the zoom read
   "NaN%" and the page reported errors). 0.4.0's canvas code replaced a function
