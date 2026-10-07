@@ -11,8 +11,20 @@
 - **Edit edits that diagram only;** the board's mode is the switch at the top.
   On either mode, Claude amends a diagram you edited instead of drawing it
   again.
-- With two tabs open, each tab tells Claude its own changes, once: a save
-  from the other tab neither drops them nor adds the other's.
+- With two tabs open, each tab tells Claude its own changes, once, and saves
+  from both tabs merge: neither undoes the other's moves.
+- Edit pressed twice (or Edit and the Canvas switch together) no longer leaves
+  a blank canvas.
+- On a canvas board, Claude's amendment right after a new diagram goes to that
+  diagram, not the one before it, and never reads a canvas that is still
+  loading.
+- A sticky note pinned to a box that is not on the canvas is told to Claude as
+  such; the rest of the post still goes on the board.
+- A diagram posted on a canvas board while no page was open is editable when
+  the page opens.
+- Amendments: `text` needs text, `class` takes the evidence classes (or
+  `color`), more than 50 at once are reported, not dropped silently; a sticky
+  note can pin to an id with a dot.
 - Sequence diagrams read back cleanly: one box per participant, by its name
   (`App`, not `App-top`), and only the messages as arrows.
 - The editor's fonts load from the board (its own UI font was missing), and

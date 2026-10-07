@@ -367,7 +367,7 @@ function notesOf(value: unknown): Note[] | undefined {
   return notes.length ? notes : undefined
 }
 /** How the page drew a diagram: drawn, Mermaid's error, or not seen (no page open, or it did not answer). */
-type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; noDiagram?: boolean }
+type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; noDiagram?: boolean; noteError?: string; noteErrors?: string[] }
 
 async function postToBoard($: EngineInterface, card: Card): Promise<{ started: Started; posted: Posted }> {
   const started = await boardOpen($)
@@ -798,10 +798,13 @@ export const register: Register = on => {
       }
     }
     if (out.posted.noDiagram) return { deny: 'No diagram on the board to pin these sticky notes to: post the diagram with them.' }
+    if (out.posted.noteError) return { deny: `The board could not pin these sticky notes: ${out.posted.noteError}.` }
     if (!text && !mermaid && !notes) return { result: `The whiteboard is in ${e.mode} mode now.` }
     if (boardTurn) boardTurn.isPosted = true
+    // Notes whose box is not on the canvas: the rest of the post is on the board.
+    const notPinned = out.posted.noteErrors?.length ? ` Not pinned: ${out.posted.noteErrors.join('; ')}.` : ''
     const unknownNote = unknown.length ? ` The legend names classes with no classDef: ${unknown.join(', ')}.` : ''
-    return { result: `${postedWhere(out, Boolean(mermaid))}${unknownNote}` }
+    return { result: `${postedWhere(out, Boolean(mermaid))}${notPinned}${unknownNote}` }
   })
 
   on('tool.call', { tool: `mcp__whiteboard__${READ_TOOL}` }, async ($, e) => {

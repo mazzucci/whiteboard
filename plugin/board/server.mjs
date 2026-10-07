@@ -114,10 +114,15 @@ async function ask(event, waitMs = 15_000) {
   })
 }
 
-/** A diagram by its tab number (1 is the first), or the latest edited one, else the latest. */
+/**
+ * A diagram by its tab number (1 is the first); else, on a canvas board, the
+ * latest (it is editable, even before the page has converted it); on a
+ * drawing board, the latest edited one, else the latest.
+ */
 function diagramOf(tab) {
   const diagrams = cards.filter(c => c.kind === 'diagram')
   if (Number.isInteger(tab)) return diagrams[tab - 1]
+  if (mode === 'canvas') return diagrams.at(-1)
   return diagrams.findLast(c => scenes.has(c.id)) ?? diagrams.at(-1)
 }
 
@@ -179,7 +184,7 @@ function notesOf(value) {
   if (!Array.isArray(value)) return undefined
   const notes = value
     .filter(n => typeof n?.text === 'string' && n.text.trim())
-    .map(n => ({ text: n.text.slice(0, 600), on: typeof n.on === 'string' && /^[\w-]{1,64}$/.test(n.on) ? n.on : undefined }))
+    .map(n => ({ text: n.text.slice(0, 600), on: typeof n.on === 'string' && /^[\w.-]{1,64}$/.test(n.on) ? n.on : undefined }))
     .slice(0, 8)
   return notes.length ? notes : undefined
 }
@@ -357,9 +362,11 @@ async function handle(req, res) {
   if (Array.isArray(input.ops)) {
     const target = diagramOf(input.diagram)
     if (!target) return json(200, { ok: false, error: 'no diagram on the board' })
-    const ops = input.ops.filter(op => op && typeof op === 'object' && !Array.isArray(op)).slice(0, 50)
+    const all = input.ops.filter(op => op && typeof op === 'object' && !Array.isArray(op))
+    const ops = all.slice(0, 50)
     const answer = await ask({ kind: 'ops', diagram: target.id, ops, ...(input.look === false ? { look: false } : {}) })
-    return json(200, { ok: !answer.error, diagram: target.title ?? '', tab: cards.filter(c => c.kind === 'diagram').indexOf(target) + 1, ...answer })
+    const over = all.length > 50 ? [`#51 to #${all.length}: not applied, at most 50 at a time`] : []
+    return json(200, { ok: !answer.error, diagram: target.title ?? '', tab: cards.filter(c => c.kind === 'diagram').indexOf(target) + 1, ...answer, errors: [...(answer.errors ?? []), ...over] })
   }
   if (input.snapshot === true) {
     const target = diagramOf(input.diagram)
@@ -377,6 +384,8 @@ async function handle(req, res) {
   }
   const mermaid = clip(input.mermaid, 100_000)
   const notes = notesOf(input.notes)
+  /** Notes the canvas could not pin (no such box): told to Claude, the rest still posted. */
+  let noteErrors = []
   // Notes without a diagram go on the latest one, which stays as it is.
   if (notes && !mermaid) {
     const latest = cards.findLast(c => c.kind === 'diagram')
@@ -385,8 +394,9 @@ async function handle(req, res) {
     if (scenes.has(latest.id)) {
       const ops = notes.map((n, i) => ({ op: 'note', id: `note-${Date.now().toString(36)}-${i}`, on: n.on, text: n.text }))
       const answer = await ask({ kind: 'ops', diagram: latest.id, ops })
-      if (answer.error || answer.errors?.length) return json(200, { ok: false, viewers: listeners.size, drawn: false, error: answer.error ?? answer.errors.join('; ') })
-      if (!clip(input.text, 20_000)) return json(200, { ok: true, viewers: listeners.size, drawn: false, pinned: latest.title ?? '' })
+      if (answer.error) return json(200, { ok: false, viewers: listeners.size, drawn: false, noteError: answer.error })
+      noteErrors = answer.errors ?? []
+      if (!clip(input.text, 20_000)) return json(200, { ok: true, viewers: listeners.size, drawn: false, pinned: latest.title ?? '', noteErrors })
     } else for (const note of notes) publish({ kind: 'sticky', by: 'claude', diagram: latest.id, ...note })
     if (!clip(input.text, 20_000)) return json(200, { ok: true, viewers: listeners.size, drawn: false, pinned: latest.title ?? '' })
   }
@@ -402,7 +412,7 @@ async function handle(req, res) {
   // A diagram is answered once a page has drawn it, so Mermaid's errors reach
   // Claude. With no page open, wait only when one is opening (a new board).
   if (!mermaid || (!listeners.size && input.waitForPage !== true)) {
-    return json(200, { ok: true, id: card.id, viewers: listeners.size, drawn: false })
+    return json(200, { ok: true, id: card.id, viewers: listeners.size, drawn: false, ...(noteErrors.length ? { noteErrors } : {}) })
   }
   const outcome = await drawn(card.id)
   if (outcome.error) withdraw(card.id)

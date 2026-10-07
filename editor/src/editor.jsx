@@ -79,7 +79,19 @@ async function fromMermaid(source) {
 function mount(el, { elements, onChange }) {
   const root = createRoot(el)
   let api = null
+  // Ready once the diagram's elements are on the canvas: Excalidraw hands over
+  // its API before it has loaded them, and an empty canvas read then would be
+  // saved over the diagram.
+  let isReady = false
   const ready = new Promise(resolve => {
+    const loaded = a => {
+      if (!elements.length || a.getSceneElements().length) {
+        isReady = true
+        resolve(a)
+        // The whole diagram in view when the canvas opens.
+        a.scrollToContent(undefined, { fitToContent: true })
+      } else setTimeout(() => loaded(a), 30)
+    }
     root.render(
       <Excalidraw
         initialData={{
@@ -89,11 +101,10 @@ function mount(el, { elements, onChange }) {
         }}
         excalidrawAPI={a => {
           api = a
-          resolve(a)
-          // The whole diagram in view when the canvas opens.
-          setTimeout(() => a.scrollToContent(undefined, { fitToContent: true }), 50)
+          loaded(a)
         }}
-        onChange={(els, appState) => onChange?.(els, appState)}
+        // Changes before the diagram is loaded are Excalidraw setting up, not the person.
+        onChange={(els, appState) => isReady && onChange?.(els, appState)}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false } }}
       />,
     )
@@ -143,8 +154,15 @@ function applyOps(elements, ops) {
   const done = []
   const errors = []
   const live = () => els.filter(e => !e.isDeleted)
-  // A sequence diagram's participant answers to its name: `App` is `App-top`.
-  const find = ref => live().find(e => isShape(e) && (refOf(e) === ref || new RegExp(`^${String(ref).replace(/[^\w-]/g, '')}-top(-\\d+)?$`).test(refOf(e))))
+  // A sequence diagram's participant answers to its name: `App` is `App-top`,
+  // when there is no `App` and `App-top` has its `App-bottom` twin.
+  const find = ref => {
+    const shapes = live().filter(isShape)
+    const exact = shapes.find(e => refOf(e) === ref)
+    if (exact) return exact
+    const top = shapes.find(e => new RegExp(`^${String(ref).replace(/[^\w-]/g, '')}-top(-\\d+)?$`).test(refOf(e)))
+    return top && shapes.some(e => refOf(e) === refOf(top).replace('-top', '-bottom')) ? top : undefined
+  }
   const labelOf = box => live().find(e => e.type === 'text' && e.containerId === box.id)
   const replace = (id, f) => {
     els = els.map(e => (e.id === id ? bump(f(e)) : e))
@@ -246,12 +264,13 @@ function applyOps(elements, ops) {
       } else if (op.op === 'text') {
         const box = find(op.id)
         if (!box) throw new Error(`no box \`${op.id}\``)
+        if (!plain(op.text).trim()) throw new Error('needs `text` (remove the box to take it away)')
         setText(box, plain(op.text))
       } else if (op.op === 'class') {
         const box = find(op.id)
         if (!box) throw new Error(`no box \`${op.id}\``)
-        const style = CLASSES[op.class]
-        if (!style) throw new Error(`no class \`${op.class}\`: ${Object.keys(CLASSES).join(', ')}`)
+        const style = op.class === 'note' ? null : CLASSES[op.class]
+        if (!style) throw new Error(`no class \`${op.class}\`: ${Object.keys(CLASSES).filter(c => c !== 'note').join(', ')} (or color)`)
         replace(box.id, e => ({ ...e, ...style }))
         const label = labelOf(box)
         if (label) replace(label.id, t => ({ ...t, strokeColor: INK[op.class] }))

@@ -95,8 +95,9 @@ export const look = page =>
 /** Moves a box on the page's canvas, as a drag would (with its label), by its ref. */
 export const move = (page, ref, dy = 150) =>
   page.evaluate(
-    (ref, dy) => {
-      const { api } = window.boardCanvas()
+    async (ref, dy) => {
+      // As a person would: once the diagram is on the canvas.
+      const { api } = await window.boardCanvas().ready.then(() => window.boardCanvas())
       const els = api.getSceneElementsIncludingDeleted()
       const box = els.find(e => e.customData?.ref === ref)
       api.updateScene({
@@ -109,8 +110,8 @@ export const move = (page, ref, dy = 150) =>
 
 /** Selects a box on the page's canvas, by its ref. */
 export const select = (page, ref) =>
-  page.evaluate(ref => {
-    const { api } = window.boardCanvas()
+  page.evaluate(async ref => {
+    const { api } = await window.boardCanvas().ready.then(() => window.boardCanvas())
     const box = api.getSceneElements().find(e => e.customData?.ref === ref)
     api.updateScene({ appState: { selectedElementIds: { [box.id]: true } } })
   }, ref)

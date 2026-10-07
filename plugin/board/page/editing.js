@@ -7,6 +7,14 @@
 'use strict'
 
 let editor = null // { ready, api, show, unmount } for the diagram on screen, when it is a canvas
+/** Which call of showEditor is the latest. */
+let showing = 0
+/** A diagram as a canvas: converted once, however many ask at the same time. */
+function converted(d) {
+  if (d.scene) return Promise.resolve()
+  d.converting ??= makeCanvas(d).finally(() => (d.converting = null))
+  return d.converting
+}
 /** The board's mode: `diagrams` (Claude's, as drawn) or `canvas` (every diagram editable, amended in place). */
 let boardMode = 'diagrams'
 /** The mode the person switched to, said to Claude with their next message. */
@@ -237,7 +245,10 @@ async function makeCanvas(d) {
 function setMode(mode, isTheirs = false, isReplay = false) {
   if (mode !== 'diagrams' && mode !== 'canvas') return
   if (mode === 'canvas' && boardMode !== 'canvas') {
-    canvasFrom = Math.max(0, ...diagrams.map(d => d.id))
+    // Live, the switch happens now: what is drawn from here on is editable.
+    // Replayed, what came after the last canvas was drawn while no page was
+    // open, on a canvas board: editable too.
+    canvasFrom = isReplay ? Math.max(0, ...diagrams.filter(d => d.scene).map(d => d.id)) : Math.max(0, ...diagrams.map(d => d.id))
     if (!isReplay && diagrams[current]) toEdit.add(diagrams[current].id)
   }
   if (mode === 'diagrams') canvasFrom = Infinity
@@ -252,11 +263,14 @@ function setMode(mode, isTheirs = false, isReplay = false) {
 
 /** Shows the diagram on screen as a canvas, or takes the canvas away for a drawn diagram. */
 async function showEditor(d) {
+  // Only the latest call shows anything: a second click on Edit, or Edit and
+  // the Canvas switch together, must not mount a second editor on the same spot.
+  const turn = ++showing
   // A diagram picked with Edit, or (on a canvas board) drawn since the switch, becomes editable when it is shown.
   if (d && !d.scene && !d.noEdit && EDITABLE.test(d.kind) && (toEdit.has(d.id) || (boardMode === 'canvas' && d.id > canvasFrom))) {
-    d.converting ??= makeCanvas(d).finally(() => (d.converting = null))
-    await d.converting.catch(() => {})
-    if (diagrams[current] !== d) return
+    $('edit').hidden = true
+    await converted(d).catch(() => {})
+    if (turn !== showing || diagrams[current] !== d) return
   }
   if (editor) {
     editor.unmount()
@@ -270,9 +284,10 @@ async function showEditor(d) {
   showEditNote(d)
   if (!isCanvas) return
   const W = await loadEditor()
-  if (diagrams[current] !== d) return
+  if (turn !== showing || diagrams[current] !== d) return
   let timer = null
-  editor = W.mount(host, {
+  // The editor knows its diagram: another one may be on screen while this one converts.
+  editor = Object.assign(W.mount(host, {
     elements: d.scene,
     onChange: (els, appState) => {
       const selected = Object.keys(appState?.selectedElementIds ?? {}).filter(id => appState.selectedElementIds[id])
@@ -296,7 +311,7 @@ async function showEditor(d) {
         showPending()
       }, 400)
     },
-  })
+  }), { d })
 }
 
 /** A line in the toolbar when a diagram cannot become a canvas. */
@@ -372,29 +387,43 @@ async function sceneArrived(event, isReplay) {
   const d = diagrams.find(x => x.id === event.diagram)
   if (!d) return
   await loadEditor()
-  // Changes this page has not sent yet stay unsent: they are counted against
-  // what Claude knew, not against what another page just saved.
-  const isPending = !isReplay && d.known && d.scene && d.mine?.size > 0 && changesBetween(summaryOf(d.known), summaryOf(d.scene)).length > 0
-  // Known as it arrives (what was there before this page opened, or what
-  // another page sent), but for this page's own unsent edits: those stay
-  // against what Claude knew, so they are still told, and only once.
+  // This page's own edits, sent to Claude or not: the ones its saves already
+  // carried (`mine`), and any made in the moment before the next save (the
+  // canvas on screen ahead of `scene`).
+  const live = editor?.d === d && editor.api ? editor.api.getSceneElementsIncludingDeleted() : d.scene
+  if (!isReplay && live && d.scene) {
+    const saved = new Map(d.scene.map(e => [e.id, e.version]))
+    d.mine ??= new Set()
+    for (const e of live) if (saved.get(e.id) !== e.version) d.mine.add(e.id)
+  }
+  const isPending = !isReplay && d.known && live && d.mine?.size > 0 && changesBetween(summaryOf(d.known), summaryOf(live)).length > 0
+  let scene = event.elements
   if (isPending) {
+    // Another page saved while this one has unsent edits: keep this page's
+    // version of what it changed and take the rest from the other page; then
+    // save the merge, so every page ends up with both.
+    const local = new Map(live.map(e => [e.id, e]))
     const known = new Map(d.known.map(e => [e.id, e]))
     const arrived = new Set(event.elements.map(e => e.id))
+    const own = [...d.mine].filter(id => local.has(id))
+    scene = [...event.elements.map(e => (d.mine.has(e.id) && local.has(e.id) ? local.get(e.id) : e)), ...own.filter(id => !arrived.has(id)).map(id => local.get(id))]
+    // What Claude knows: the other page's save, without this page's unsent edits, so they are told once.
     d.known = [
       ...event.elements.flatMap(e => (d.mine.has(e.id) ? (known.has(e.id) ? [known.get(e.id)] : []) : [e])),
       ...[...d.mine].filter(id => !arrived.has(id) && known.has(id)).map(id => known.get(id)),
     ]
   } else {
+    // Known as it arrives: what was there before this page opened, or what another page sent.
     d.known = event.elements
     d.mine = new Set()
   }
-  d.scene = event.elements
+  d.scene = scene
   d.version = d.scene.reduce((n, e) => n + e.version, 0)
   if (diagrams[current] === d) {
-    if (editor) editor.show(d.scene)
+    if (editor?.d === d) editor.show(d.scene)
     else showEditor(d)
   }
+  if (isPending) saveScene(d)
   if (!isReplay) showPending()
 }
 
@@ -406,10 +435,12 @@ async function opsArrived(event) {
   const d = diagrams.find(x => x.id === event.diagram)
   if (!d) return post('/applied', { page: pageId, id: event.id, error: 'that diagram is not on this page' })
   try {
-    if (!d.scene) await makeCanvas(d)
+    await converted(d)
     const W = await loadEditor()
-    // On the canvas as the person has it, unsent changes included: Claude's go on top.
-    const current_ = editor && diagrams[current] === d ? editor.api.getSceneElementsIncludingDeleted() : d.scene
+    // On the canvas as the person has it, unsent changes included: Claude's go on top
+    // (once the editor on screen is ready: it mounts after the conversion).
+    if (editor?.d === d) await editor.ready
+    const current_ = editor?.d === d && editor.api ? editor.api.getSceneElementsIncludingDeleted() : d.scene
     const out = W.applyOps(current_, event.ops)
     d.scene = out.elements
     // What Claude did is not the person's change: their unsent ones stay unsent.
@@ -417,7 +448,7 @@ async function opsArrived(event) {
     d.version = d.scene.reduce((n, e) => n + e.version, 0)
     saveScene(d)
     if (diagrams[current] !== d) select(diagrams.indexOf(d))
-    else if (editor) editor.show(d.scene, true)
+    else if (editor?.d === d) editor.show(d.scene, true)
     else showEditor(d)
     showPending()
     // A small picture of the result, so Claude sees what it did (a crowded label, an arrow across a box).
@@ -435,7 +466,7 @@ async function snapshotAsked(event) {
     let blob
     if (d.scene) {
       const W = await loadEditor()
-      blob = await W.png(editor && diagrams[current] === d ? editor.api.getSceneElements() : d.scene)
+      blob = await W.png(editor?.d === d && editor.api ? editor.api.getSceneElements() : d.scene)
     } else blob = await svgToPng(d)
     post('/snapshot', { page: pageId, id: event.id, png: await dataUrl(blob) })
   } catch (err) {

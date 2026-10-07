@@ -75,6 +75,8 @@ test("one page's save keeps another page's unsent change", async () => {
   await b.until(async () => Math.abs((await yOf(other, 'a')) - before) < 1, "the first page's save on the second")
   await sleep(600)
   assert.equal((await look(other)).send, 'Send 1 change')
+  // Both pages end up with both moves.
+  await b.until(async () => Math.abs((await yOf(page, 'b')) - (await yOf(other, 'b'))) < 1 && Math.abs((await yOf(page, 'a')) - (await yOf(other, 'a'))) < 1, 'both pages agree')
   // What it sends is its own change only, once.
   await other.type('#text', 'ok?')
   await other.click('#form [type=submit]')
