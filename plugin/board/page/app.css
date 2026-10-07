@@ -155,6 +155,19 @@ body.editing .canvas, body.editing .stage .hint, body.editing #zoom-in, body.edi
 .ended code { font: 12px var(--mono); background: var(--soft); padding: 1px 4px; border-radius: 4px; }
 .top h1 .label { font-weight: 400; color: var(--muted); }
 
+/* charts: a slice, bar or point is clicked to select it; the rest fade (the board is white in both themes) */
+svg.chart [data-mark] { cursor: pointer; transition: opacity .15s; }
+svg.chart [data-mark]:hover { filter: brightness(.93); }
+svg.chart .line-dot { fill: transparent; stroke: none; }
+svg.chart .line-dot:hover { fill: rgba(37, 99, 235, .25); }
+/* A line's points are clicked at their spots: the line and its dots let the click through. */
+svg.chart .line-point, svg.chart [class^="line-plot"] path { pointer-events: none; }
+/* Only points fade: Mermaid's bars and slices are pale already. */
+svg.chart.has-picks g[data-mark]:not(.picked), svg.chart.has-picks .line-dot:not(.picked) { opacity: .45 !important; }
+svg.chart [data-mark].picked:not(g), svg.chart g.picked circle { stroke: #2563eb !important; stroke-width: 3px !important; opacity: 1 !important; }
+svg.chart g.picked text { fill: #1d4ed8 !important; font-weight: 600; }
+svg.chart .line-dot.picked { fill: #2563eb; }
+
 /* sticky notes: Claude's in yellow, yours in pink, pinned beside a box */
 .sticky {
   position: absolute; width: 210px; padding: 8px 10px 10px; z-index: 2; cursor: auto;
@@ -179,6 +192,14 @@ html, body { height: 100dvh; }
   .hint .keys { display: none; }
   .hint .touch { display: inline; }
 }
+/* On a chart, the hint is how to select. */
+.hint .chart-keys, .hint .chart-touch, body.on-chart .hint .keys, body.on-chart .hint .touch { display: none; }
+body.on-chart .hint .chart-keys { display: inline; }
+@media (hover: none) {
+  body.on-chart .hint .chart-keys { display: none; }
+  body.on-chart .hint .chart-touch { display: inline; }
+}
+.hint .chart-keys.picked, .hint .chart-touch.picked { color: #1d4ed8; font-weight: 600; }
 /* Phones and upright tablets: the board and the conversation are two full-screen views, switched in the header. */
 @media (max-width: 900px) {
   .top { padding: 8px 12px; gap: 8px; }

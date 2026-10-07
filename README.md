@@ -79,8 +79,13 @@ evidence shows, then a proposed fix.
 - **Colours that each answer one question,** with a legend above the diagram:
   grey, not measured yet; green, no problem; red, a problem; lavender, a
   proposed change.
+- **Charts you can click.** When the numbers are the point, Claude draws a pie,
+  a bar or line chart, or a quadrant chart. Click a slice, a bar or a point
+  (Shift+click for more) and it goes with your next message: "why is this one
+  so big?" means that slice. Claude can drill into it with the next chart.
 - **Sticky notes.** Claude pins a proposal, a question or a gotcha beside the
-  box it is about (in a flowchart; beside the diagram in other types), without
+  box it is about (in a flowchart, or on a chart's slice, bar or point; beside
+  the diagram in other types), without
   changing the diagram. It proposes, asks whether you
   want to see the change, and draws it in lavender when you say yes.
 - **Mermaid errors go back to Claude.** The page draws each diagram and reports

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+- **Charts you can click.** Pie, bar and line (`xychart-beta`) and quadrant
+  charts: click a slice, a bar or a line's point to select it (Shift+click for
+  more, Escape or a click beside it clears), and the next message says what is
+  selected, with its value: "Selected on the board, in "Pets": the slice "Dogs"
+  (386, 79%)". The selection goes with that one message, then clears. Each
+  chart keeps its own until then; the hint under the board names it (on a
+  touch screen: tap to select, tap beside it to clear). Hovering a mark shows
+  its value; a line's points show as dots. A pie with `showData`, or with a
+  slice under 1% (which Mermaid does not draw), is clickable too.
+- Sticky notes can sit on a chart's slice, bar or point, named by its label
+  (any text: `on` is no longer limited to an id).
+- A sticky note whose `on` names nothing on the diagram is told to Claude
+  ("Not pinned: …") instead of quietly going beside the diagram.
+- The drawing skill says when to draw a chart, and to use real numbers only.
+- `fixtures/` has a pie, an xychart and a quadrant chart.
+
 ## 0.4.1
 
 - **Fixed: a sticky note pinned to a box broke the board** (the zoom read

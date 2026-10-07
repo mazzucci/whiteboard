@@ -578,8 +578,10 @@ export const register: Register = on => {
         'skill. The first post opens the page in the browser. If Mermaid rejects the source, the call fails with ' +
         'its error and the card is taken off the page: fix the source and post again. ' +
         'Sticky notes (`sticky_notes`) add a short note without changing the diagram: a proposal, a question or ' +
-        'an aside. With `on` (a node id in the Mermaid source) a note sits beside that flowchart box; in other ' +
-        'diagram types, or without `on`, notes line up beside the diagram. Whenever you have a fix or a ' +
+        'an aside. With `on` (a node id in the Mermaid source) a note sits beside that flowchart box, or on a ' +
+        "chart's slice, bar or point named by its label; in other diagram types, or without `on`, notes line up " +
+        'beside the diagram. Charts (pie, xychart-beta, quadrantChart) are clickable: what the user selects comes ' +
+        'with their message ("Selected on the board, in …: the slice …"). Whenever you have a fix or a ' +
         'change to propose, pin it as a sticky note on the box it changes and ask on the board (in `text`) whether ' +
         'the user wants to see it; redraw the diagram with the change only once they say so. With a `mermaid` notes ' +
         'go on that diagram; without one, on the latest diagram. ' +
@@ -612,7 +614,7 @@ export const register: Register = on => {
             items: {
               type: 'object',
               properties: {
-                on: { type: 'string', description: 'The node id of the flowchart box it is about, as written in the Mermaid source' },
+                on: { type: 'string', description: "The node id of the flowchart box it is about, or the label of a chart's slice, bar or point, as written in the Mermaid source" },
                 text: { type: 'string', description: 'The note: a line or two of inline Markdown' },
               },
               required: ['text'],

@@ -32,7 +32,7 @@
 //                     answers once a page has applied them
 //                     { snapshot: true, diagram? }: a PNG of a diagram, as base64
 //                     { mode: 'diagrams' | 'canvas' }: how the board works (with a post or alone)
-//   POST /rendered    { id, error? } from the page: how a card's diagram drew
+//   POST /rendered    { id, error?, unpinned? } from the page: how a card's diagram drew, and notes it could not pin
 //   POST /say         { text } from the page
 //   POST /scene       { diagram, elements, summary } from the page: a diagram's canvas
 //                     as it now is; kept, and sent to the board's other pages
@@ -51,6 +51,7 @@ const pageFile = name => readFileSync(new URL(`./page/${name}`, import.meta.url)
 const STATIC = {
   '/app.js': ['text/javascript', pageFile('app.js')],
   '/editing.js': ['text/javascript', pageFile('editing.js')],
+  '/charts.js': ['text/javascript', pageFile('charts.js')],
   '/app.css': ['text/css', pageFile('app.css')],
 }
 // The canvas editor, read when first asked for: most boards never edit.
@@ -180,11 +181,14 @@ function legendOf(value) {
 }
 
 /** Sticky notes from Claude: at most eight, each pinned to a node id or the diagram. */
+/** What a sticky note is pinned to: a node id, or a chart's label (any text on one line). */
+const onOf = on => (typeof on === 'string' && /^[^\u0000-\u001f\u007f]{1,100}$/.test(on.trim()) ? on.trim() : undefined)
+
 function notesOf(value) {
   if (!Array.isArray(value)) return undefined
   const notes = value
     .filter(n => typeof n?.text === 'string' && n.text.trim())
-    .map(n => ({ text: n.text.slice(0, 600), on: typeof n.on === 'string' && /^[\w.-]{1,64}$/.test(n.on) ? n.on : undefined }))
+    .map(n => ({ text: n.text.slice(0, 600), on: onOf(n.on) }))
     .slice(0, 8)
   return notes.length ? notes : undefined
 }
@@ -344,7 +348,10 @@ async function handle(req, res) {
   }
   if (url.pathname === '/rendered') {
     const settle = drawing.get(Number(input.id))
-    if (settle) settle(typeof input.error === 'string' ? { error: input.error.slice(0, 2000) } : { drawn: true })
+    // Sticky notes whose `on` names nothing on the diagram sit beside it: Claude is told.
+    const unpinned = Array.isArray(input.unpinned) ? input.unpinned.map(onOf).filter(Boolean).slice(0, 8) : []
+    const noteErrors = unpinned.map(on => `no box or chart label "${on}" on the diagram, so that note sits beside it`)
+    if (settle) settle(typeof input.error === 'string' ? { error: input.error.slice(0, 2000) } : { drawn: true, ...(noteErrors.length ? { noteErrors } : {}) })
     return json(200, { ok: true })
   }
   // Claude sets the mode with a post, or on its own.

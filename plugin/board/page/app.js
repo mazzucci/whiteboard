@@ -161,6 +161,7 @@ function select(i) {
   $('legend').innerHTML = legendHtml(d.legend)
   $('source-code').textContent = d.source
   canvas.innerHTML = d.svg
+  showPicks(d)
   // A redraw of the diagram on screen keeps its zoom, and a box both share
   // stays where it was: only what changed moves. Anything else is fitted.
   const held = shown && shown.d !== d ? holdView(shown, nodesOnCanvas()) : null
@@ -423,7 +424,16 @@ async function add(card, isReplay) {
     try {
       const { svg } = await mermaid.render(`d${++seq}`, card.mermaid)
       drawn = natural(svg)
-      post('/rendered', { id: card.id })
+      // A chart's slices, bars and points can be clicked: see charts.js. A
+      // chart this page cannot read is still drawn, just not clickable.
+      try {
+        const marks = await marksOf(card.mermaid)
+        const marked = marks && withMarks(drawn.svg, marks)
+        if (marked) Object.assign(drawn, { svg: marked, marks, picks: new Set() })
+      } catch {
+        // Not clickable.
+      }
+      post('/rendered', { id: card.id, unpinned: unpinnedOf(drawn.svg, card.notes) })
     } catch (err) {
       // Off the board: the server withdraws the card and Claude gets the error.
       post('/rendered', { id: card.id, error: String(err?.message ?? err) })
@@ -775,9 +785,21 @@ function wrappedUp(card) {
 const stickies = new Map()
 const pinned = id => (stickies.has(id) ? stickies.get(id) : stickies.set(id, []).get(id))
 
-/** The box on the canvas with this node id, if the diagram has one. */
-const boxOf = on =>
-  on ? [...canvas.querySelectorAll('g.node[id]')].find(g => g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '') === on) : undefined
+/** In a drawing (the canvas, or a diagram not shown yet), the box with this node id, or a chart's slice, bar or point with this label. */
+const boxIn = (root, on) =>
+  on
+    ? [...root.querySelectorAll('g.node[id]')].find(g => g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '') === on) ??
+      // A bar before a line's point with the same label.
+      [...root.querySelectorAll('[data-mark]')].filter(el => el.dataset.label === on).sort((a, b) => a.classList.contains('line-dot') - b.classList.contains('line-dot'))[0]
+    : undefined
+const boxOf = on => boxIn(canvas, on)
+
+/** The `on` of each note that names nothing in the drawing: such a note sits beside the diagram. */
+function unpinnedOf(svgText, notes) {
+  const holder = document.createElement('div')
+  holder.innerHTML = svgText
+  return (notes ?? []).filter(n => n.on && !boxIn(holder, n.on)).map(n => n.on)
+}
 
 const NOTE_W = 214
 const NOTE_H = 82
@@ -785,7 +807,7 @@ const NOTE_H = 82
 /** The boxes and the notes already placed, as rectangles on the canvas. */
 function obstacles(except) {
   const rects = []
-  for (const g of canvas.querySelectorAll('g.node, .sticky')) {
+  for (const g of canvas.querySelectorAll('g.node, [data-mark], .sticky')) {
     // Itself (a note still being measured) is no obstacle.
     if (g === except || g.style.visibility === 'hidden') continue
     const r = g.getBoundingClientRect()
