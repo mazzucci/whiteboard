@@ -1,7 +1,7 @@
 {
   "name": "whiteboard",
-  "version": "0.3.1",
-  "description": "A whiteboard for your Claude Code session: Claude draws Mermaid diagrams and sticky notes on a page in your browser, and you can answer there. Open source, unofficial. Needs Node.js 18+",
+  "version": "0.4.0",
+  "description": "A whiteboard for your Claude Code session: Claude draws Mermaid diagrams and sticky notes on a page in your browser, you answer there, and you can edit a diagram together on a canvas. Open source, unofficial. Needs Node.js 18+",
   "author": {
     "name": "Stelian Matei",
     "url": "https://github.com/mazzucci"

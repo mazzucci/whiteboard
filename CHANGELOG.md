@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - **Two modes.** Diagrams (Claude's, as drawn, each new one a tab) or canvas
   (every diagram editable by both, amended in place). Switch at the top of the
@@ -8,8 +8,9 @@
   makes the diagram on screen editable, and every new one; earlier ones stay
   drawings until you edit them.
 - **Edit a diagram yourself.** On a canvas (Excalidraw, bundled) you drag
-  boxes, write, add boxes, arrows and sticky notes. Your changes reach Claude in words with your next message, and so does what you
-  have selected, so "make this red" means the box you picked.
+  boxes, write, add boxes, arrows and sticky notes. Your changes reach Claude
+  in words with your next message, and so does what you have selected, so
+  "make this red" means the box you picked.
 - **Claude amends instead of redrawing.** A new tool, `edit_board`, adds,
   connects, renames, recolours (the evidence colours, or any colour by name or
   hex) and removes boxes on a diagram, keeping your layout. Each amendment
