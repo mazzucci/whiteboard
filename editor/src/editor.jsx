@@ -71,13 +71,31 @@ async function fromMermaid(source) {
     // Mermaid's id is how Claude names a box: kept as its ref.
     ...(isShape(e) && e.id ? { customData: { ref: e.id } } : {}),
   }))
+  // The converter falls back to a picture of the diagram when it cannot read it: that is not a canvas.
+  if (!skeleton.some(e => e.type !== 'image')) throw new Error('this diagram cannot be turned into boxes and arrows')
   return convertToExcalidrawElements(skeleton, { regenerateIds: false })
 }
 
 function mount(el, { elements, onChange }) {
   const root = createRoot(el)
   let api = null
+  // Ready once the diagram's elements are on the canvas: Excalidraw hands over
+  // its API before it has loaded them, and an empty canvas read then would be
+  // saved over the diagram.
+  let isReady = false
+  let isGone = false
+  const live = elements.filter(e => !e.isDeleted).length
   const ready = new Promise(resolve => {
+    const start = Date.now()
+    // Live elements on both sides (a canvas whose boxes were all deleted is ready at once), and never more than 3 s.
+    const loaded = a => {
+      if (!live || a.getSceneElements().length || Date.now() - start > 3000) {
+        isReady = true
+        resolve(a)
+        // The whole diagram in view when the canvas opens.
+        a.scrollToContent(undefined, { fitToContent: true })
+      } else setTimeout(() => loaded(a), 30)
+    }
     root.render(
       <Excalidraw
         initialData={{
@@ -87,11 +105,10 @@ function mount(el, { elements, onChange }) {
         }}
         excalidrawAPI={a => {
           api = a
-          resolve(a)
-          // The whole diagram in view when the canvas opens.
-          setTimeout(() => a.scrollToContent(undefined, { fitToContent: true }), 50)
+          loaded(a)
         }}
-        onChange={(els, appState) => onChange?.(els, appState)}
+        // Changes before the diagram is loaded are Excalidraw setting up, not the person.
+        onChange={(els, appState) => isReady && !isGone && onChange?.(els, appState)}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false } }}
       />,
     )
@@ -106,7 +123,10 @@ function mount(el, { elements, onChange }) {
       api?.updateScene({ elements: next, captureUpdate: CaptureUpdateAction.IMMEDIATELY })
       if (fit) api?.scrollToContent(undefined, { fitToContent: true, animate: true, duration: 300 })
     },
-    unmount: () => root.unmount(),
+    unmount: () => {
+      isGone = true
+      root.unmount()
+    },
   }
 }
 
@@ -141,7 +161,15 @@ function applyOps(elements, ops) {
   const done = []
   const errors = []
   const live = () => els.filter(e => !e.isDeleted)
-  const find = ref => live().find(e => isShape(e) && refOf(e) === ref)
+  // A sequence diagram's participant answers to its name: `App` is `App-top`,
+  // when there is no `App` and `App-top` has its `App-bottom` twin.
+  const find = ref => {
+    const shapes = live().filter(isShape)
+    const exact = shapes.find(e => refOf(e) === ref)
+    if (exact) return exact
+    const top = shapes.find(e => new RegExp(`^${String(ref).replace(/[^\w-]/g, '')}-top(-\\d+)?$`).test(refOf(e)))
+    return top && shapes.some(e => refOf(e) === refOf(top).replace('-top', '-bottom')) ? top : undefined
+  }
   const labelOf = box => live().find(e => e.type === 'text' && e.containerId === box.id)
   const replace = (id, f) => {
     els = els.map(e => (e.id === id ? bump(f(e)) : e))
@@ -243,12 +271,13 @@ function applyOps(elements, ops) {
       } else if (op.op === 'text') {
         const box = find(op.id)
         if (!box) throw new Error(`no box \`${op.id}\``)
+        if (!plain(op.text).trim()) throw new Error('needs `text` (remove the box to take it away)')
         setText(box, plain(op.text))
       } else if (op.op === 'class') {
         const box = find(op.id)
         if (!box) throw new Error(`no box \`${op.id}\``)
-        const style = CLASSES[op.class]
-        if (!style) throw new Error(`no class \`${op.class}\`: ${Object.keys(CLASSES).join(', ')}`)
+        const style = op.class === 'note' ? null : CLASSES[op.class]
+        if (!style) throw new Error(`no class \`${op.class}\`: ${Object.keys(CLASSES).filter(c => c !== 'note').join(', ')} (or color)`)
         replace(box.id, e => ({ ...e, ...style }))
         const label = labelOf(box)
         if (label) replace(label.id, t => ({ ...t, strokeColor: INK[op.class] }))

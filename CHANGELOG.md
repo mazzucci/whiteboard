@@ -1,20 +1,53 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
 
 - **Fixed: a sticky note pinned to a box broke the board** (the zoom read
   "NaN%" and the page reported errors). 0.4.0's canvas code replaced a function
   the board uses to place notes; a test now guards against it.
+- **Fixed: class, state and ER diagrams, and flowcharts with subgraphs, became
+  an empty canvas.** The converter now keeps the Mermaid it was built for; a
+  test converts every diagram in `fixtures/` on the real page.
+- **Edit edits that diagram only;** the board's mode is the switch at the top.
+  On either mode, Claude amends a diagram you edited instead of drawing it
+  again.
+- With two tabs open, each tab tells Claude its own changes, once, and saves
+  from both tabs merge: neither undoes the other's moves.
+- Edit pressed twice (or Edit and the Canvas switch together) no longer leaves
+  a blank canvas.
+- On a canvas board, Claude's amendment right after a new diagram goes to that
+  diagram, not the one before it, and never reads a canvas that is still
+  loading.
+- A sticky note pinned to a box that is not on the canvas is told to Claude as
+  such; the rest of the post still goes on the board.
+- A diagram posted on a canvas board while no page was open is editable when
+  the page opens.
+- Amendments: `text` needs text, `class` takes the evidence classes (or
+  `color`), more than 50 at once are reported, not dropped silently; a sticky
+  note can pin to an id with a dot.
+- Sequence diagrams read back cleanly: one box per participant, by its name
+  (`App`, not `App-top`), and only the messages as arrows.
+- The editor's fonts load from the board (its own UI font was missing), and
+  the bundle no longer names a CDN; the fonts' licence texts ship with them.
+- A diagram the canvas cannot read (a pie chart, say) stays as drawn, with a
+  line saying so on the page, and Claude is told when it tries to amend it:
+  never an empty canvas.
+- A mode switch from Claude no longer leaves an empty card.
+- Wrap up does not send what is selected.
 - A canvas opens with the whole diagram in view.
+- Counting your changes no longer finds ones you did not make (boxes named
+  after the canvas opened; two arrows between the same boxes).
+- Development: CI on every pull request, with the board's page tested in
+  headless Chrome (`test/page/`).
 - The README and the demo show editing together.
 
 ## 0.4.0
 
 - **Two modes.** Diagrams (Claude's, as drawn, each new one a tab) or canvas
   (every diagram editable by both, amended in place). Switch at the top of the
-  page, press Edit, run `/whiteboard canvas`, or let Claude pick. Switching
-  makes the diagram on screen editable, and every new one; earlier ones stay
-  drawings until you edit them.
+  page, run `/whiteboard canvas`, or let Claude pick. Switching makes the
+  diagram on screen editable, and every new one; earlier ones stay drawings.
+  Edit on a diagram makes just that one editable.
 - **Edit a diagram yourself.** On a canvas (Excalidraw, bundled) you drag
   boxes, write, add boxes, arrows and sticky notes. Your changes reach Claude
   in words with your next message, and so does what you have selected, so

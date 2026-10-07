@@ -7,6 +7,14 @@
 'use strict'
 
 let editor = null // { ready, api, show, unmount } for the diagram on screen, when it is a canvas
+/** Which call of showEditor is the latest. */
+let showing = 0
+/** A diagram as a canvas: converted once, however many ask at the same time. */
+function converted(d) {
+  if (d.scene) return Promise.resolve()
+  d.converting ??= makeCanvas(d).finally(() => (d.converting = null))
+  return d.converting
+}
 /** The board's mode: `diagrams` (Claude's, as drawn) or `canvas` (every diagram editable, amended in place). */
 let boardMode = 'diagrams'
 /** The mode the person switched to, said to Claude with their next message. */
@@ -67,8 +75,32 @@ function selectionOf(elements, ids = []) {
 function summaryOf(elements, selectedIds = []) {
   const live = elements.filter(e => !e.isDeleted)
   const byId = new Map(live.map(e => [e.id, e]))
-  const label = e => live.find(t => t.type === 'text' && t.containerId === e.id)?.originalText ?? ''
-  const refOf = e => e?.customData?.ref ?? e?.id
+  // A sequence diagram's participant is drawn twice, `App-top` and `App-bottom`: one box, `App`.
+  const free = live.filter(e => e.type === 'text' && !e.containerId)
+  // A label drawn just under its box (an actor's name) is that box's text.
+  const under = new Map()
+  for (const s of live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type))) {
+    if (live.some(t => t.type === 'text' && t.containerId === s.id)) continue
+    const t = free.find(t => !under.has(t) && t.y >= s.y + s.height - 4 && t.y < s.y + s.height + 70 && Math.abs(centreOf(t).x - centreOf(s).x) < Math.max(s.width, t.width))
+    if (t) under.set(t, s.id)
+  }
+  const named = new Map([...under].map(([t, id]) => [id, t.originalText]))
+  const label = e => live.find(t => t.type === 'text' && t.containerId === e.id)?.originalText ?? named.get(e.id) ?? ''
+  // A sequence diagram draws each participant twice, `App-top` and `App-bottom`,
+  // with the same name: one box, `App`. Only then: a flowchart may have
+  // `nav-top` and `nav-bottom` boxes of its own.
+  const byRef = new Map(live.map(e => [String(e.customData?.ref ?? e.id), e]))
+  const pair = r => {
+    const m = /^(.+)-(top|bottom)(-\d+)?$/.exec(r)
+    const other = m && byRef.get(`${m[1]}-${m[2] === 'top' ? 'bottom' : 'top'}${m[3] ?? ''}`)
+    return other && label(other) === label(byRef.get(r)) ? m : null
+  }
+  const refOf = e => {
+    if (!e) return undefined
+    const r = String(e.customData?.ref ?? e.id)
+    return pair(r)?.[1] ?? r
+  }
+  const isRepeat = e => pair(String(e?.customData?.ref ?? e?.id ?? ''))?.[2] === 'bottom'
   const classOf = e => {
     const c = Object.entries(window.WhiteboardEditor?.CLASSES ?? {}).find(([, s]) => s.backgroundColor === e.backgroundColor && s.strokeColor === e.strokeColor)
     if (c) return c[0]
@@ -76,15 +108,17 @@ function summaryOf(elements, selectedIds = []) {
     if (named) return named[0]
     return e.backgroundColor && e.backgroundColor !== 'transparent' ? e.backgroundColor : 'plain'
   }
-  const shapes = live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type))
+  const shapes = live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type) && !isRepeat(e))
   const box = e => ({ ref: refOf(e), text: label(e), class: classOf(e), x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.width), h: Math.round(e.height) })
   return {
     boxes: shapes.filter(e => e.customData?.kind !== 'note' && classOf(e) !== 'note').map(box),
-    notes: shapes.filter(e => e.customData?.kind === 'note' || classOf(e) === 'note').map(e => ({ ...box(e), on: e.customData?.on ?? nearest(e, shapes)?.customData?.ref })),
+    notes: shapes.filter(e => e.customData?.kind === 'note' || classOf(e) === 'note').map(e => ({ ...box(e), on: e.customData?.on ? (pair(e.customData.on)?.[1] ?? e.customData.on) : refOf(nearest(e, shapes)) })),
     arrows: live
       .filter(e => e.type === 'arrow' || e.type === 'line')
-      .map(e => ({ from: refOf(byId.get(e.startBinding?.elementId)) ?? null, to: refOf(byId.get(e.endBinding?.elementId)) ?? null, text: label(e) })),
-    texts: live.filter(e => e.type === 'text' && !e.containerId).map(e => ({ text: e.originalText, near: refOf(nearest(e, shapes)) ?? null })),
+      .map(e => ({ from: refOf(byId.get(e.startBinding?.elementId)) ?? null, to: refOf(byId.get(e.endBinding?.elementId)) ?? null, text: label(e) }))
+      // A line joined to nothing and saying nothing (a lifeline, a frame) is drawing, not a connection.
+      .filter(a => a.from || a.to || a.text),
+    texts: free.filter(e => !under.has(e)).map(e => ({ text: e.originalText, near: refOf(nearest(e, shapes)) ?? null })),
     drawings: live.filter(e => e.type === 'freedraw').map(e => ({ near: refOf(nearest(e, shapes)) ?? null })),
     images: live.filter(e => e.type === 'image').length,
     selected: selectionOf(elements, selectedIds),
@@ -138,15 +172,31 @@ function changesBetween(before, after) {
     if (Math.hypot(o.x - b.x, o.y - b.y) > 40) lines.push(`moved \`${b.ref}\`${whereIs(b, after.boxes)}`)
   }
   for (const o of before.boxes) if (!now.has(o.ref)) lines.push(`removed \`${o.ref}\` ${quote(o.text)}`)
-  const key = a => `${a.from}→${a.to}`
-  const arrowsWere = new Map(before.arrows.map(a => [key(a), a]))
-  const arrowsNow = new Map(after.arrows.map(a => [key(a), a]))
-  for (const a of after.arrows) {
-    const o = arrowsWere.get(key(a))
-    if (!o) lines.push(a.from && a.to ? `connected \`${a.from}\` → \`${a.to}\`${a.text ? ` ${quote(a.text)}` : ''}` : `drew an arrow${a.from ? ` from \`${a.from}\`` : ''}${a.to ? ` to \`${a.to}\`` : ''} not joined at both ends`)
-    else if (o.text !== a.text) lines.push(`labelled \`${a.from}\` → \`${a.to}\` ${quote(a.text)}`)
+  // Arrows as a multiset: two arrows may join the same boxes (a request, then its answer),
+  // so an arrow is the same one only with the same ends and the same label.
+  const ends = a => `${a.from}→${a.to}`
+  const unmatched = (xs, ys) => {
+    const left = [...ys]
+    return xs.filter(a => {
+      const i = left.findIndex(b => ends(b) === ends(a) && b.text === a.text)
+      if (i < 0) return true
+      left.splice(i, 1)
+      return false
+    })
   }
-  for (const a of before.arrows) if (!arrowsNow.has(key(a))) lines.push(`removed the arrow \`${a.from}\` → \`${a.to}\``)
+  const added = unmatched(after.arrows, before.arrows)
+  const gone = unmatched(before.arrows, after.arrows)
+  for (const a of added) {
+    // The same ends, another label: relabelled, not a new arrow.
+    const i = gone.findIndex(o => ends(o) === ends(a))
+    if (i >= 0 && a.from && a.to) {
+      gone.splice(i, 1)
+      lines.push(`labelled \`${a.from}\` → \`${a.to}\` ${quote(a.text)}`)
+    } else {
+      lines.push(a.from && a.to ? `connected \`${a.from}\` → \`${a.to}\`${a.text ? ` ${quote(a.text)}` : ''}` : `drew an arrow${a.from ? ` from \`${a.from}\`` : ''}${a.to ? ` to \`${a.to}\`` : ''} not joined at both ends`)
+    }
+  }
+  for (const a of gone) lines.push(`removed the arrow \`${a.from}\` → \`${a.to}\`${a.text ? ` ${quote(a.text)}` : ''}`)
   const notesWere = new Map(before.notes.map(n => [n.ref, n]))
   for (const n of after.notes) {
     const o = notesWere.get(n.ref)
@@ -169,9 +219,19 @@ function changesBetween(before, after) {
 /** Turns a diagram into a canvas: Mermaid's layout, colours and ids, and its sticky notes as notes on it. */
 async function makeCanvas(d) {
   const W = await loadEditor()
-  let elements = await W.fromMermaid(d.source)
+  let elements
+  try {
+    elements = await W.fromMermaid(d.source)
+  } catch (err) {
+    // Said on the page, and to Claude when it asked: never an empty canvas.
+    d.noEdit = String(err?.message ?? err)
+    showEditNote(d)
+    throw err
+  }
   const notes = (stickies.get(d.id) ?? []).map((n, i) => ({ op: 'note', id: `note-${i + 1}`, on: n.on, text: n.text }))
   if (notes.length) elements = W.applyOps(elements, notes).elements
+  // Every box named before the canvas counts as what Claude knows: naming one later would read as a change.
+  elements = withRefs(elements)
   d.scene = elements
   d.known = elements
   saveScene(d)
@@ -185,7 +245,10 @@ async function makeCanvas(d) {
 function setMode(mode, isTheirs = false, isReplay = false) {
   if (mode !== 'diagrams' && mode !== 'canvas') return
   if (mode === 'canvas' && boardMode !== 'canvas') {
-    canvasFrom = Math.max(0, ...diagrams.map(d => d.id))
+    // Live, the switch happens now: what is drawn from here on is editable.
+    // Replayed, what came after the last canvas was drawn while no page was
+    // open, on a canvas board: editable too.
+    canvasFrom = isReplay ? Math.max(0, ...diagrams.filter(d => d.scene).map(d => d.id)) : Math.max(0, ...diagrams.map(d => d.id))
     if (!isReplay && diagrams[current]) toEdit.add(diagrams[current].id)
   }
   if (mode === 'diagrams') canvasFrom = Infinity
@@ -200,13 +263,18 @@ function setMode(mode, isTheirs = false, isReplay = false) {
 
 /** Shows the diagram on screen as a canvas, or takes the canvas away for a drawn diagram. */
 async function showEditor(d) {
-  // On a canvas board, a diagram drawn since the switch, or picked, becomes editable when it is shown.
-  if (boardMode === 'canvas' && d && !d.scene && EDITABLE.test(d.kind) && (d.id > canvasFrom || toEdit.has(d.id))) {
-    d.converting ??= makeCanvas(d).finally(() => (d.converting = null))
-    await d.converting
-    if (diagrams[current] !== d) return
+  // Only the latest call shows anything: a second click on Edit, or Edit and
+  // the Canvas switch together, must not mount a second editor on the same spot.
+  const turn = ++showing
+  // A diagram picked with Edit, or (on a canvas board) drawn since the switch, becomes editable when it is shown.
+  if (d && !d.scene && !d.noEdit && EDITABLE.test(d.kind) && (toEdit.has(d.id) || (boardMode === 'canvas' && d.id > canvasFrom))) {
+    $('edit').hidden = true
+    await converted(d).catch(() => {})
+    if (turn !== showing || diagrams[current] !== d) return
   }
   if (editor) {
+    // Gone for good: its pending save too.
+    editor.stop()
     editor.unmount()
     editor = null
   }
@@ -214,23 +282,34 @@ async function showEditor(d) {
   const isCanvas = !!d?.scene
   document.body.classList.toggle('editing', isCanvas)
   host.hidden = !isCanvas
-  $('edit').hidden = !d || !!d.scene || !EDITABLE.test(d.kind)
+  $('edit').hidden = !d || !!d.scene || !!d.noEdit || !EDITABLE.test(d.kind)
+  showEditNote(d)
   if (!isCanvas) return
   const W = await loadEditor()
-  if (diagrams[current] !== d) return
+  if (turn !== showing || diagrams[current] !== d) return
   let timer = null
-  editor = W.mount(host, {
+  // The editor knows its diagram: another one may be on screen while this one converts.
+  editor = Object.assign(W.mount(host, {
     elements: d.scene,
     onChange: (els, appState) => {
+      if (editor !== me) return
       const selected = Object.keys(appState?.selectedElementIds ?? {}).filter(id => appState.selectedElementIds[id])
       clearTimeout(timer)
       timer = setTimeout(() => {
+        if (editor !== me) return
+        // Older than what this page has (a canvas from before Claude's last amendment): not a change.
+        const now = new Map((d.scene ?? []).map(e => [e.id, e.version]))
+        if (els.some(e => now.has(e.id) && e.version < now.get(e.id))) return
         // Only a change the person made: the same elements again (a redraw) are not one.
         const version = els.reduce((n, e) => n + e.version, 0)
         const isSelectionNew = selected.join() !== (d.selected ?? []).join()
         if (version === d.version && !isSelectionNew) return
         d.selected = selected
         if (version !== d.version) {
+          // The elements this page changed: its own edits, told apart from another page's.
+          const was = new Map((d.scene ?? []).map(e => [e.id, e.version]))
+          d.mine ??= new Set()
+          for (const e of els) if (was.get(e.id) !== e.version) d.mine.add(e.id)
           d.version = version
           d.scene = withRefs(els)
         }
@@ -239,7 +318,15 @@ async function showEditor(d) {
         showPending()
       }, 400)
     },
-  })
+  }), { d, stop: () => clearTimeout(timer) })
+  const me = editor
+}
+
+/** A line in the toolbar when a diagram cannot become a canvas. */
+function showEditNote(d) {
+  const note = $('edit-note')
+  note.hidden = !d?.noEdit || diagrams[current] !== d
+  note.textContent = d?.noEdit ? 'This diagram cannot be edited on a canvas; it stays as drawn.' : ''
 }
 
 const EDITABLE = /^(flowchart|graph|sequenceDiagram|classDiagram|erDiagram|stateDiagram)/
@@ -288,7 +375,10 @@ function withChanges(text, withSelection = true) {
     modeSwitched = null
   }
   said.push(...pending.map(({ d, lines }) => `I changed "${d.title}" on the board:\n${lines.map(l => `- ${l}`).join('\n')}`))
-  for (const { d } of pending) d.known = d.scene
+  for (const { d } of pending) {
+    d.known = d.scene
+    d.mine = new Set()
+  }
   if (pending.length) showPending()
   // What they have selected is what "this" means in what they wrote.
   const d = diagrams[current]
@@ -305,13 +395,59 @@ async function sceneArrived(event, isReplay) {
   const d = diagrams.find(x => x.id === event.diagram)
   if (!d) return
   await loadEditor()
-  d.scene = event.elements
-  // Known as it arrives: what was there before this page opened, or what another page sent.
-  d.known = d.scene
+  // This page's own edits, sent to Claude or not: the ones its saves already
+  // carried (`mine`), and any made in the moment before the next save (the
+  // canvas on screen ahead of `scene`).
+  const live = editor?.d === d && editor.api ? editor.api.getSceneElementsIncludingDeleted() : d.scene
+  if (!isReplay && live && d.scene) {
+    const saved = new Map(d.scene.map(e => [e.id, e.version]))
+    d.mine ??= new Set()
+    for (const e of live) if (saved.get(e.id) !== e.version) d.mine.add(e.id)
+  }
+  const isPending = !isReplay && d.known && live && d.mine?.size > 0 && changesBetween(summaryOf(d.known), summaryOf(live)).length > 0
+  let scene = event.elements
+  let isMerged = false
+  if (isPending) {
+    // Another page saved while this one has unsent edits: keep this page's
+    // version of what it changed and take the rest from the other page; then
+    // save the merge, so every page ends up with both.
+    const local = new Map(live.map(e => [e.id, e]))
+    const known = new Map(d.known.map(e => [e.id, e]))
+    const arrived = new Set(event.elements.map(e => e.id))
+    const arrivedById = new Map(event.elements.map(e => [e.id, e]))
+    // An element both pages changed: the same winner on both, as Excalidraw
+    // reconciles (the higher version, then the lower nonce), so the exchange
+    // ends: the losing page takes the other's and stops telling it.
+    const isTheirs = e => {
+      const other = arrivedById.get(e.id)
+      // The very same element (this page's edit, back in the other's save) is this page's still.
+      return other && (other.version > e.version || (other.version === e.version && other.versionNonce < e.versionNonce))
+    }
+    for (const id of [...d.mine]) if (local.has(id) && isTheirs(local.get(id))) d.mine.delete(id)
+    const own = [...d.mine].filter(id => local.has(id))
+    // Saved back only when it adds something: a merge that already holds this page's edits ends the exchange.
+    isMerged = own.some(id => {
+      const other = arrivedById.get(id)
+      return !other || other.version !== local.get(id).version || other.versionNonce !== local.get(id).versionNonce
+    })
+    scene = [...event.elements.map(e => (d.mine.has(e.id) && local.has(e.id) ? local.get(e.id) : e)), ...own.filter(id => !arrived.has(id)).map(id => local.get(id))]
+    // What Claude knows: the other page's save, without this page's unsent edits, so they are told once.
+    d.known = [
+      ...event.elements.flatMap(e => (d.mine.has(e.id) ? (known.has(e.id) ? [known.get(e.id)] : []) : [e])),
+      ...[...d.mine].filter(id => !arrived.has(id) && known.has(id)).map(id => known.get(id)),
+    ]
+  } else {
+    // Known as it arrives: what was there before this page opened, or what another page sent.
+    d.known = event.elements
+    d.mine = new Set()
+  }
+  d.scene = scene
+  d.version = d.scene.reduce((n, e) => n + e.version, 0)
   if (diagrams[current] === d) {
-    if (editor) editor.show(d.scene)
+    if (editor?.d === d) editor.show(d.scene)
     else showEditor(d)
   }
+  if (isMerged) saveScene(d)
   if (!isReplay) showPending()
 }
 
@@ -323,10 +459,12 @@ async function opsArrived(event) {
   const d = diagrams.find(x => x.id === event.diagram)
   if (!d) return post('/applied', { page: pageId, id: event.id, error: 'that diagram is not on this page' })
   try {
-    if (!d.scene) await makeCanvas(d)
+    await converted(d)
     const W = await loadEditor()
-    // On the canvas as the person has it, unsent changes included: Claude's go on top.
-    const current_ = editor && diagrams[current] === d ? editor.api.getSceneElementsIncludingDeleted() : d.scene
+    // On the canvas as the person has it, unsent changes included: Claude's go on top
+    // (once the editor on screen is ready: it mounts after the conversion).
+    if (editor?.d === d) await editor.ready
+    const current_ = editor?.d === d && editor.api ? editor.api.getSceneElementsIncludingDeleted() : d.scene
     const out = W.applyOps(current_, event.ops)
     d.scene = out.elements
     // What Claude did is not the person's change: their unsent ones stay unsent.
@@ -334,7 +472,7 @@ async function opsArrived(event) {
     d.version = d.scene.reduce((n, e) => n + e.version, 0)
     saveScene(d)
     if (diagrams[current] !== d) select(diagrams.indexOf(d))
-    else if (editor) editor.show(d.scene, true)
+    else if (editor?.d === d) editor.show(d.scene, true)
     else showEditor(d)
     showPending()
     // A small picture of the result, so Claude sees what it did (a crowded label, an arrow across a box).
@@ -352,7 +490,7 @@ async function snapshotAsked(event) {
     let blob
     if (d.scene) {
       const W = await loadEditor()
-      blob = await W.png(editor && diagrams[current] === d ? editor.api.getSceneElements() : d.scene)
+      blob = await W.png(editor?.d === d && editor.api ? editor.api.getSceneElements() : d.scene)
     } else blob = await svgToPng(d)
     post('/snapshot', { page: pageId, id: event.id, png: await dataUrl(blob) })
   } catch (err) {
@@ -389,11 +527,11 @@ function svgToPng(d) {
 
 // ---------------------------------------------------------------- controls
 
-// Edit: on a drawing board, the switch to a canvas (this diagram first); on a canvas, this diagram too.
+// Edit: this diagram, and only it; the board's mode is the switch at the top.
 $('edit').onclick = () => {
   const d = diagrams[current]
-  if (boardMode !== 'canvas') return setMode('canvas', true)
-  if (d) toEdit.add(d.id)
+  if (!d) return
+  toEdit.add(d.id)
   showEditor(d)
 }
 document.querySelectorAll('.modes [data-mode]').forEach(b => (b.onclick = () => setMode(b.dataset.mode, true)))

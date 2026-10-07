@@ -14,5 +14,8 @@
   },
   "devDependencies": {
     "esbuild": "0.28.2"
+  },
+  "overrides": {
+    "mermaid": "11.12.1"
   }
 }

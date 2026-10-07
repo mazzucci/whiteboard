@@ -1,0 +1,75 @@
+# Checks every pull request (and main): the plugin as Claude Code loads it,
+# the board server on each Node it supports, the board's page in a real
+# browser, and that the vendored canvas editor is what its source builds.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin:
+    name: Plugin (validate, unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # The version the plugin is tested with; mods are new and change between releases.
+      - run: npm install --global @anthropic-ai/claude-code@2.1.292
+      - run: claude plugin validate --strict plugin
+      - run: claude plugin test plugin
+
+  server:
+    name: Board server (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node --test plugin/tests/server.test.mjs
+
+  page:
+    name: Board page (headless Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: test/package-lock.json
+      - run: npm ci
+        working-directory: test
+      - run: npm test
+        working-directory: test
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+
+  editor:
+    name: Editor bundle matches its source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: editor/package-lock.json
+      - run: npm ci
+        working-directory: editor
+      - run: node check-build.mjs
+        working-directory: editor

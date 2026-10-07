@@ -1,7 +1,8 @@
 // Builds the board's canvas editor (src/editor.jsx: Excalidraw and the
 // Mermaid converter) into plugin/board/vendor/: editor.js.gz, editor.css.gz
-// and the fonts it draws with. Mermaid is not bundled a second time: the
-// converter uses the page's own (window.mermaid).
+// and the fonts it draws with. The converter keeps the Mermaid it was built
+// for (11), apart from the page's own (12): it reads Mermaid's rendered SVG,
+// which changes between versions.
 //
 //   cd editor && npm install && npm run build
 import { build } from 'esbuild'
@@ -24,14 +25,20 @@ const { metafile } = await build({
   jsx: 'automatic',
   conditions: ['production'],
   define: { 'process.env.NODE_ENV': '"production"', 'process.env.IS_PREACT': '"false"' },
-  loader: { '.woff2': 'empty', '.png': 'empty', '.svg': 'empty' },
+  loader: { '.png': 'empty', '.svg': 'empty' },
   plugins: [
     {
-      // The page's Mermaid, already loaded, instead of a second copy.
-      name: 'page-mermaid',
+      // Fonts from the board itself: the stylesheet's urls point at its font
+      // route, and Excalidraw's fallback (a CDN) is the board too, so nothing
+      // is ever asked of another host.
+      name: 'board-fonts',
       setup(b) {
-        b.onResolve({ filter: /^mermaid$/ }, () => ({ path: 'mermaid', namespace: 'page-mermaid' }))
-        b.onLoad({ filter: /.*/, namespace: 'page-mermaid' }, () => ({ contents: 'export default window.mermaid', loader: 'js' }))
+        b.onResolve({ filter: /\.woff2$/ }, args => ({ path: `/editor/fonts/${args.path.replace(/^\.\/fonts\//, '')}`, external: true }))
+        b.onLoad({ filter: /@excalidraw[\\/]excalidraw[\\/]dist[\\/]prod[\\/].*\.js$/ }, async args => {
+          const code = readFileSync(args.path, 'utf8')
+          const cdn = /`https:\/\/esm\.sh\/[\s\S]*?\/dist\/prod\/`/g
+          return { contents: code.replace(cdn, '`${window.location.origin}/editor/`'), loader: 'js' }
+        })
       },
     },
   ],
@@ -58,9 +65,10 @@ const MIT = holder => `MIT License\n\nCopyright (c) ${holder}\n\nPermission is h
 // Every package in the bundle, with its licence text, beside it.
 const packages = new Map()
 for (const input of Object.keys(metafile.inputs)) {
-  const m = /node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(input)
+  // The innermost package: a dependency nested in another's node_modules counts as itself.
+  const m = [...input.matchAll(/node_modules\/((?:@[^/]+\/)?[^/]+)\//g)].at(-1)
   if (!m) continue
-  const dir = input.slice(0, input.lastIndexOf(`node_modules/${m[1]}/`)) + `node_modules/${m[1]}`
+  const dir = input.slice(0, m.index) + `node_modules/${m[1]}`
   if (packages.has(dir)) continue
   const pkg = JSON.parse(readFileSync(`${dir}/package.json`, 'utf8'))
   const file = readdirSync(dir).find(f => /^(licen[cs]e|copying)(\.|$)/i.test(f))
@@ -73,7 +81,10 @@ const list = [...packages.values()].sort((a, b) => a.name.localeCompare(b.name))
 writeFileSync(
   new URL('THIRD_PARTY_LICENSES.md', out),
   `# Third-party licences: the canvas editor\n\n\`editor.js.gz\` and \`editor.css.gz\` bundle these packages, unmodified, built by \`editor/build.mjs\`.\n\n` +
-    list.map(p => `## ${p.name} ${p.version}\n\nLicence: ${p.license}\n\n${p.text ? '```\n' + p.text + '\n```' : '(no licence file in the package)'}\n`).join('\n'),
+    list.map(p => `## ${p.name} ${p.version}\n\nLicence: ${p.license}\n\n${p.text ? '```\n' + p.text + '\n```' : '(no licence file in the package)'}\n`).join('\n') +
+    `\n${readFileSync('licenses/FONTS.md', 'utf8')}`,
 )
+const js = readFileSync('dist/editor.js', 'utf8')
+if (js.includes('esm.sh')) throw new Error('the bundle still names esm.sh')
 console.log('built', out.pathname, `${list.length} packages:`, [...new Set(list.map(p => p.license))].join(', '))
 for (const p of list.filter(p => !p.text)) console.log('  no licence text:', p.name, p.license)

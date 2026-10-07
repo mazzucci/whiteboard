@@ -81,6 +81,8 @@ button { font: inherit; color: inherit; }
 /* A diagram being edited: the canvas editor fills the stage and has the pointer and keys. */
 .editor { position: absolute; inset: 0; background: #fff; cursor: auto; }
 .editor[hidden] { display: none; }
+.edit-note { font-size: 12.5px; color: var(--muted); }
+.edit-note[hidden] { display: none; }
 body.editing .canvas, body.editing .stage .hint, body.editing #zoom-in, body.editing #zoom-out, body.editing #pct, body.editing #fit, body.editing #code { display: none; }
 .source { position: absolute; inset: 0; overflow: auto; background: var(--panel); cursor: auto; padding: 14px 16px; user-select: text; }
 .source[hidden] { display: none; }

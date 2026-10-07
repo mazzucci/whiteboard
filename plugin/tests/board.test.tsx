@@ -465,6 +465,15 @@ test('on a canvas, drawing the same diagram again is refused: Claude amends it, 
   stop()
 })
 
+test('on a drawing board, redrawing a diagram the user edited is refused too', async ($, on) => {
+  const { posts, stop } = host(on, { mode: 'diagrams', cards: [{ id: 1, kind: 'diagram', title: 'Orders', mermaid: SOURCE }], scenes: { 1: { boxes: [{ ref: 'app', text: 'Mobile app', class: 'plain' }, { ref: 'api', text: 'Orders API', class: 'plain' }, { ref: 'db', text: 'Orders DB', class: 'plain' }] } } })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  const again = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  expect(said(again)).toContain('edited on the board')
+  expect(posts.some(p => p.mermaid)).toBe(false)
+  stop()
+})
+
 test('edit_board comes back with a small picture of the result, unless look: false', async ($, on) => {
   const { posts, stop } = host(on, { page: body => (body.ops ? ({ ok: true, diagram: 'Orders', tab: 1, done: ['#1 (text)'], errors: [], ...(body.look === false ? {} : { look: '/9j/4AAQ' }) } as never) : { ok: true, viewers: 1, drawn: true }) })
   await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
@@ -473,5 +482,26 @@ test('edit_board comes back with a small picture of the result, unless look: fal
   const quiet = await $.tool.call({ tool: 'mcp__whiteboard__edit_board', look: false, ops: [{ op: 'text', id: 'api', text: 'API' }] })
   expect(posts.at(-1)).toMatchObject({ look: false })
   expect(said(quiet)).toContain('1 of 1 applied')
+  stop()
+})
+
+test('notes the canvas cannot pin are told to Claude; the rest of the post stands', async ($, on) => {
+  const { stop } = host(on, {
+    page: body => (body.notes && !body.mermaid ? ({ ok: true, viewers: 1, drawn: false, noteErrors: ['#2 (note): no box `nothere`'] } as never) : { ok: true, viewers: 1, drawn: true }),
+  })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  const out = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'two notes', sticky_notes: [{ on: 'api', text: 'ok' }, { on: 'nothere', text: 'lost' }] })
+  expect(said(out)).toContain('Not pinned: #2 (note): no box `nothere`')
+  expect(said(out)).not.toContain('Mermaid could not draw')
+  stop()
+})
+
+test('when no page could pin the notes, Claude hears that, not a Mermaid error', async ($, on) => {
+  const { stop } = host(on, {
+    page: body => (body.notes && !body.mermaid ? ({ ok: false, viewers: 0, drawn: false, noteError: 'no page is open' } as never) : { ok: true, viewers: 1, drawn: true }),
+  })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  const out = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', sticky_notes: [{ on: 'api', text: 'ok' }] })
+  expect(said(out)).toContain('could not pin these sticky notes: no page is open')
   stop()
 })

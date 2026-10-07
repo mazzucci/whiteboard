@@ -95,10 +95,11 @@ evidence shows, then a proposed fix.
   there.
 - **Two modes.** **Diagrams**: Claude's diagrams as drawn, each new one a
   tab, for explaining and investigating. **Canvas**: you and Claude edit every
-  diagram together, for designing. Switch at the top of the page (or press
-  **Edit**), with `/whiteboard canvas`, or let Claude pick when it opens the
-  board. Switching makes the diagram on screen editable, and every new one;
-  earlier diagrams stay as they were drawn until you press **Edit** on them.
+  diagram together, for designing. Switch at the top of the page, with
+  `/whiteboard canvas`, or let Claude pick when it opens the board. Switching
+  makes the diagram on screen editable, and every new one; earlier diagrams
+  stay as they were drawn. **Edit** on a diagram makes just that one
+  editable, in either mode.
 - **Edit a diagram yourself.** On a canvas, drag boxes, write, add boxes,
   arrows and sticky notes. Your changes go to
   Claude in words with your next message ("moved `cache` below `api`; added a
@@ -397,7 +398,12 @@ goes into your Claude Code session as your own words. So:
 claude plugin validate --strict plugin
 claude plugin test plugin
 node --test plugin/tests/server.test.mjs
+cd test && npm ci && npm test            # the board's page in headless Chrome (CHROME_PATH if not found)
+cd editor && npm ci && node check-build.mjs   # the vendored editor is what its source builds
 ```
+
+CI runs all four on every pull request (`.github/workflows/ci.yml`); changes
+reach `main` through pull requests.
 
 `plugin/` is everything Claude Code loads, and all an install copies: the mod
 (`hooks/`), the board server and its page (`board/`, with Mermaid and the
@@ -415,7 +421,9 @@ Questions, bugs and ideas: [GitHub Issues](https://github.com/mazzucci/whiteboar
 ## License
 
 MIT. The bundled Mermaid is MIT licensed; the libraries inside its bundle keep
-their own licences, including the Eclipse Layout Kernel under EPL-2.0. See
+their own licences, including the Eclipse Layout Kernel under EPL-2.0. The
+canvas editor bundles Excalidraw, its Mermaid converter and React (MIT) and
+fonts under the SIL Open Font License or MIT. See
 [`plugin/board/vendor/README.md`](plugin/board/vendor/README.md).
 
 This is an independent, unofficial project. It is not affiliated with, endorsed

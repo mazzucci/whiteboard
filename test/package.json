@@ -1,0 +1,12 @@
+{
+  "name": "whiteboard-page-tests",
+  "private": true,
+  "description": "The board's page in a real browser (headless Chrome): npm test (in test/)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 page/*.test.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "25.12.0"
+  }
+}
