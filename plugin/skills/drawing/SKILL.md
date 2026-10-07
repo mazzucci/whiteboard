@@ -233,8 +233,9 @@ What they have selected comes with it ("Selected on the board: `inv`
   the user drew (`read_board` lists them all).
 - Amendments are small: `add` a box `near` another (joined by an arrow unless
   `connect: false`), `connect` / `disconnect` two, `text` to rename, `class` to
-  recolour (the colours above), `remove`, `note` for a sticky note. Canvas text
-  is plain: no Markdown.
+  recolour with the colours above, `color` for any other colour the user asks
+  for (a name such as blue, or #hex), `remove`, `note` for a sticky note. Canvas
+  text is plain: no Markdown.
 - Say what you changed in a line, and ask before reshaping their work.
 - When their words are not enough (they drew freehand, or "this bit here"),
   `read_board` with `image: true` gives you a picture of the diagram.

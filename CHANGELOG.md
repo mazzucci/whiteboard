@@ -7,8 +7,8 @@
   changes reach Claude in words with your next message, and so does what you
   have selected, so "make this red" means the box you picked.
 - **Claude amends instead of redrawing.** A new tool, `edit_board`, adds,
-  connects, renames, recolours and removes boxes on a diagram, keeping your
-  layout.
+  connects, renames, recolours (the evidence colours, or any colour by name or
+  hex) and removes boxes on a diagram, keeping your layout.
 - **Claude can look.** `read_board` describes an edited diagram as it now is,
   and with `image: true` gives Claude a picture of it.
 

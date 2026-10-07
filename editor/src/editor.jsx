@@ -23,6 +23,33 @@ const CLASSES = {
   plain: { backgroundColor: '#ffffff', strokeColor: '#1e1e1e', strokeStyle: 'solid' },
   note: { backgroundColor: '#fff3b0', strokeColor: '#d4a72c', strokeStyle: 'solid' },
 }
+/** Colours by name, for anything that is not one of the classes: fill, border, text. */
+const COLORS = {
+  blue: ['#e7f5ff', '#1971c2', '#0b3d6b'],
+  green: ['#ebfbee', '#2f9e44', '#1b4d24'],
+  red: ['#fff5f5', '#e03131', '#7a1717'],
+  orange: ['#fff4e6', '#e8590c', '#6b2a05'],
+  yellow: ['#fff9db', '#f08c00', '#5c3a00'],
+  purple: ['#f3f0ff', '#7048e8', '#2f1a6b'],
+  pink: ['#fff0f6', '#c2255c', '#5c1030'],
+  teal: ['#e6fcf5', '#0c8599', '#04404a'],
+  grey: ['#f1f3f5', '#868e96', '#343a40'],
+  gray: ['#f1f3f5', '#868e96', '#343a40'],
+  white: ['#ffffff', '#1e1e1e', '#1e1e1e'],
+  black: ['#343a40', '#000000', '#ffffff'],
+}
+const HEX = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/
+
+/** A colour as Claude gives it (a name, or fill, stroke and text in hex) as Excalidraw styles: the box's and its text's. */
+function colorOf(op) {
+  const named = op.color ? COLORS[String(op.color).toLowerCase()] : null
+  if (op.color && !named && !HEX.test(op.color)) throw new Error(`no colour \`${op.color}\`: ${Object.keys(COLORS).join(', ')}, or #hex`)
+  for (const k of ['fill', 'stroke', 'ink']) if (op[k] && !HEX.test(op[k])) throw new Error(`${k} must be #hex`)
+  const [fill, stroke, ink] = named ?? (op.color ? [op.color, op.color, '#1e1e1e'] : [])
+  const box = { ...(op.fill ?? fill ? { backgroundColor: op.fill ?? fill, fillStyle: 'solid' } : {}), ...(op.stroke ?? stroke ? { strokeColor: op.stroke ?? stroke } : {}) }
+  return { box, ink: op.ink ?? ink }
+}
+
 /** Each class's text colour, as the skill's classDefs set it. */
 const INK = { unverified: '#444444', fine: '#0d3b1a', problem: '#8a1f11', proposed: '#3b1f6e', suspect: '#4d3800', plain: '#1e1e1e', note: '#3d3200' }
 /** Plain lines and a clear font: a board, not a sketch. */
@@ -195,10 +222,11 @@ function applyOps(elements, ops) {
         const width = op.op === 'note' ? 170 : Math.max(150, Math.min(320, text.length * 8 + 40))
         const height = op.op === 'note' ? Math.max(64, Math.ceil(text.length / 19) * 20 + 28) : 64
         const r = spot(near, op.side ?? (op.op === 'note' ? 'below' : 'right'), width, height)
-        const style = CLASSES[op.op === 'note' ? 'note' : op.class ?? 'plain'] ?? CLASSES.plain
+        const colored = op.op === 'add' && (op.color || op.fill || op.stroke) ? colorOf(op) : null
+        const style = { ...(CLASSES[op.op === 'note' ? 'note' : op.class ?? 'plain'] ?? CLASSES.plain), ...colored?.box }
         const customData = op.op === 'note' ? { ref, kind: 'note', on: near ? refOf(near) : undefined, by: 'claude' } : { ref }
         const cls = op.op === 'note' ? 'note' : op.class ?? 'plain'
-        els.push(...shapeWithLabel({ id: ref, type: op.op === 'note' ? 'rectangle' : op.shape ?? 'rectangle', ...r, text, style, ink: INK[cls], customData }))
+        els.push(...shapeWithLabel({ id: ref, type: op.op === 'note' ? 'rectangle' : op.shape ?? 'rectangle', ...r, text, style, ink: colored?.ink ?? INK[cls], customData }))
         if (op.op === 'add' && near && op.connect !== false) connect(near, find(ref), op.label && plain(op.label))
       } else if (op.op === 'connect' || op.op === 'disconnect') {
         const from = find(op.from)
@@ -222,6 +250,14 @@ function applyOps(elements, ops) {
         replace(box.id, e => ({ ...e, ...style }))
         const label = labelOf(box)
         if (label) replace(label.id, t => ({ ...t, strokeColor: INK[op.class] }))
+      } else if (op.op === 'color') {
+        const box = find(op.id)
+        if (!box) throw new Error(`no box \`${op.id}\``)
+        const { box: style, ink } = colorOf(op)
+        if (!Object.keys(style).length && !ink) throw new Error('give `color` (a name or #hex), or `fill`, `stroke`, `ink`')
+        replace(box.id, e => ({ ...e, ...style }))
+        const label = labelOf(box)
+        if (label && ink) replace(label.id, t => ({ ...t, strokeColor: ink }))
       } else if (op.op === 'remove') {
         const box = find(op.id)
         if (!box) throw new Error(`no box \`${op.id}\``)
@@ -229,7 +265,7 @@ function applyOps(elements, ops) {
         for (const t of live().filter(e => e.containerId === box.id)) remove(t.id)
         remove(box.id)
       } else {
-        throw new Error('unknown op: add, note, connect, disconnect, text, class, remove')
+        throw new Error('unknown op: add, note, connect, disconnect, text, class, color, remove')
       }
       done.push(at)
     } catch (err) {
@@ -251,4 +287,4 @@ async function png(elements) {
   })
 }
 
-window.WhiteboardEditor = { fromMermaid, mount, applyOps, png, CLASSES }
+window.WhiteboardEditor = { fromMermaid, mount, applyOps, png, CLASSES, COLORS }

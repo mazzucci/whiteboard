@@ -60,7 +60,10 @@ function summaryOf(elements, selectedIds = []) {
   const refOf = e => e?.customData?.ref ?? e?.id
   const classOf = e => {
     const c = Object.entries(window.WhiteboardEditor?.CLASSES ?? {}).find(([, s]) => s.backgroundColor === e.backgroundColor && s.strokeColor === e.strokeColor)
-    return c ? c[0] : e.backgroundColor && e.backgroundColor !== 'transparent' ? e.backgroundColor : 'plain'
+    if (c) return c[0]
+    const named = Object.entries(window.WhiteboardEditor?.COLORS ?? {}).find(([, [fill, stroke]]) => fill === e.backgroundColor && stroke === e.strokeColor)
+    if (named) return named[0]
+    return e.backgroundColor && e.backgroundColor !== 'transparent' ? e.backgroundColor : 'plain'
   }
   const shapes = live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type))
   const box = e => ({ ref: refOf(e), text: label(e), class: classOf(e), x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.width), h: Math.round(e.height) })

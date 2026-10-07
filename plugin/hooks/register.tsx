@@ -623,9 +623,9 @@ export const register: Register = on => {
               properties: {
                 op: {
                   type: 'string',
-                  enum: ['add', 'connect', 'disconnect', 'text', 'class', 'remove', 'note'],
+                  enum: ['add', 'connect', 'disconnect', 'text', 'class', 'color', 'remove', 'note'],
                   description:
-                    'add: a box `id` with `text` (near: a box to put it beside, joined to it by an arrow unless connect: false; side: right, below, left or above; class; shape: rectangle, ellipse or diamond). connect / disconnect: an arrow `from` → `to` (label). text: new `text` for box `id`. class: recolour box `id` (unverified, fine, problem, proposed, suspect, plain). remove: box `id` and its arrows. note: a sticky note `id` with `text`, `on` a box.',
+                    'add: a box `id` with `text` (near: a box to put it beside, joined to it by an arrow unless connect: false; side: right, below, left or above; class; shape: rectangle, ellipse or diamond). connect / disconnect: an arrow `from` → `to` (label). text: new `text` for box `id`. class: recolour box `id` with an evidence class (unverified, fine, problem, proposed, suspect, plain). color: any other colour for box `id`: `color` a name (blue, green, red, orange, yellow, purple, pink, teal, grey, white, black) or #hex, or `fill`, `stroke`, `ink` (text) in #hex; add takes these too. remove: box `id` and its arrows. note: a sticky note `id` with `text`, `on` a box.',
                 },
                 id: { type: 'string', description: "The box's ref (for add and note: a new, short ref)" },
                 text: { type: 'string' },
@@ -634,6 +634,10 @@ export const register: Register = on => {
                 connect: { type: 'boolean', description: 'add: false for no arrow from `near`' },
                 shape: { type: 'string', enum: ['rectangle', 'ellipse', 'diamond'] },
                 class: { type: 'string', enum: ['unverified', 'fine', 'problem', 'proposed', 'suspect', 'plain'] },
+                color: { type: 'string', description: 'color (or add): a colour name or #hex' },
+                fill: { type: 'string', description: 'color (or add): the fill, #hex' },
+                stroke: { type: 'string', description: 'color (or add): the border, #hex' },
+                ink: { type: 'string', description: 'color (or add): the text, #hex' },
                 from: { type: 'string' },
                 to: { type: 'string' },
                 label: { type: 'string', description: 'connect (or add with near): text on the arrow' },
