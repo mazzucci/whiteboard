@@ -510,6 +510,48 @@ function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scene
   return parts.length ? `The whiteboard page (${seen}), oldest first:\n\n${parts.join('\n\n')}` : `The whiteboard page (${seen}) is empty.`
 }
 
+const KEYWORDS = new Set(['flowchart', 'graph', 'subgraph', 'end', 'classDef', 'class', 'style', 'linkStyle', 'click', 'direction'])
+/** The node ids a diagram's Mermaid names with a shape (`api[...]`, `db[(...)]`, `x{...}`), or its participants. */
+function nodeIdsOf(source: string): Set<string> {
+  const ids = new Set<string>()
+  for (const m of source.matchAll(/(?:^|[\s;&|>-])([A-Za-z_][\w.-]*?)\s*(?:\[|\(|\{|>(?![>-]))/gm)) if (!KEYWORDS.has(m[1] ?? '')) ids.add(m[1] ?? '')
+  for (const m of source.matchAll(/^\s*(?:participant|actor)\s+([\w.-]+)/gm)) ids.add(m[1] ?? '')
+  return ids
+}
+
+/**
+ * On a canvas board, the diagram already there that a new one mostly redraws
+ * (60% of their boxes in common): Claude amends that one instead, keeping the
+ * person's layout. Null when none is, or the board is not a canvas.
+ */
+async function redrawnOnCanvas($: EngineInterface, mermaid: string): Promise<string | null> {
+  if (!board) return null
+  let read: { mode?: Mode; cards: BoardCard[]; scenes?: Record<string, Scene> }
+  try {
+    read = await boardGet($, await board, '/cards')
+  } catch {
+    return null
+  }
+  if (read.mode !== 'canvas') return null
+  const fresh = nodeIdsOf(mermaid)
+  if (fresh.size < 2) return null
+  const diagrams = read.cards.filter(c => c.kind === 'diagram')
+  for (const [i, c] of diagrams.entries()) {
+    const scene = read.scenes?.[String(c.id)]
+    const old = scene?.boxes ? new Set(scene.boxes.map(b => b.ref)) : nodeIdsOf(c.mermaid ?? '')
+    const common = [...fresh].filter(id => old.has(id))
+    if (old.size >= 2 && common.length >= 0.6 * Math.max(fresh.size, old.size)) {
+      return (
+        `The board is a canvas, and diagram ${i + 1}${c.title ? ` "${c.title}"` : ''} already shows these boxes ` +
+        `(${common.slice(0, 6).map(id => `\`${id}\``).join(', ')}${common.length > 6 ? ', …' : ''}). Amend it with ${EDIT_TOOL} ` +
+        '(class or color to recolour as the evidence comes in, text to update a label, add, connect, remove): that keeps ' +
+        'the layout the user may have arranged. If you mean a separate diagram, post again with as_new: true.'
+      )
+    }
+  }
+  return null
+}
+
 const failed = (error: unknown) => `The whiteboard page could not start: ${error instanceof Error ? error.message : String(error)}`
 
 // ---------------------------------------------------------------- register
@@ -548,6 +590,10 @@ export const register: Register = on => {
           title: { type: 'string', description: 'A short heading for the card' },
           text: { type: 'string', description: 'A note, in simple Markdown, above the diagram if there is one' },
           mermaid: { type: 'string', description: 'A Mermaid diagram, starting with the diagram type' },
+          as_new: {
+            type: 'boolean',
+            description: `On a canvas board: true to post a diagram as a new one even though it shares most boxes with one already there (otherwise amend that one with ${EDIT_TOOL})`,
+          },
           mode: {
             type: 'string',
             enum: ['diagrams', 'canvas'],
@@ -631,6 +677,7 @@ export const register: Register = on => {
         type: 'object',
         properties: {
           diagram: { type: 'integer', description: 'Which diagram, by its number on the board (1 is the first); default: the latest edited one, else the latest' },
+          look: { type: 'boolean', description: 'false: no picture of the result (one comes back by default, small)' },
           ops: {
             type: 'array',
             minItems: 1,
@@ -730,6 +777,11 @@ export const register: Register = on => {
       return { deny: 'Nobody can see the whiteboard from this session (it has no screen attached). Explain in prose instead.' }
     }
     const title = typeof e.title === 'string' && e.title.trim() ? e.title.trim() : undefined
+    // On a canvas, the same diagram again is an amendment, not a new tab.
+    if (mermaid && e.as_new !== true && e.mode !== 'diagrams') {
+      const redrawn = await redrawnOnCanvas($, mermaid)
+      if (redrawn) return { deny: redrawn }
+    }
     const { legend, unknown } = legendOf(e.legend, mermaid)
     let out: Awaited<ReturnType<typeof postToBoard>>
     try {
@@ -780,18 +832,26 @@ export const register: Register = on => {
     const ops = Array.isArray(e.ops) ? e.ops.filter((op): op is Record<string, unknown> => !!op && typeof op === 'object') : []
     if (!ops.length) return { deny: 'Nothing to amend: give `ops`.' }
     if (!board) return { deny: `There is no whiteboard page in this session yet: draw the diagram with ${TOOL} first.` }
-    let out: { ok: boolean; diagram?: string; tab?: number; done?: string[]; errors?: string[]; error?: string }
+    let out: { ok: boolean; diagram?: string; tab?: number; done?: string[]; errors?: string[]; error?: string; look?: string }
     try {
       // A closed tab opens again, so the amendment is seen.
       const started = await boardOpen($)
-      out = await boardPost($, started.open, { ops, ...(Number.isInteger(e.diagram) ? { diagram: e.diagram } : {}) })
+      out = await boardPost($, started.open, { ops, ...(Number.isInteger(e.diagram) ? { diagram: e.diagram } : {}), ...(e.look === false ? { look: false } : {}) })
     } catch (error) {
       return { deny: failed(error) }
     }
     if (out.error) return { deny: `The board could not apply it: ${out.error}.` }
     // Not counted as an answer on the board: what Claude then writes still goes there.
     const errors = out.errors?.length ? ` Not applied: ${out.errors.join('; ')}.` : ''
-    return { result: `Amended diagram ${out.tab ?? ''} "${out.diagram ?? ''}" on the board: ${out.done?.length ?? 0} of ${ops.length} applied.${errors}` }
+    const said = `Amended diagram ${out.tab ?? ''} "${out.diagram ?? ''}" on the board: ${out.done?.length ?? 0} of ${ops.length} applied.${errors}`
+    if (!out.look) return { result: said }
+    // A small picture of the result: worth a glance for crowded labels or arrows across boxes.
+    return {
+      result: [
+        { type: 'text', text: `${said} Below, how it looks now; fix anything crowded or overlapping with another amendment.` },
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: out.look } },
+      ],
+    }
   })
 
   on('command.run', { command: 'whiteboard' }, async ($, e) => {

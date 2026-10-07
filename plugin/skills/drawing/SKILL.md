@@ -247,6 +247,12 @@ What they have selected comes with it ("Selected on the board: `inv`
   recolour with the colours above, `color` for any other colour the user asks
   for (a name such as blue, or #hex), `remove`, `note` for a sticky note. Canvas
   text is plain: no Markdown.
+- Each amendment comes back with a small picture of the result: glance at it
+  and fix what reads badly (a label crowding an arrow, a box over another)
+  with another amendment.
+- On a canvas, new evidence about a diagram already there is an amendment
+  (recolour, update a label), not a new diagram: posting one that mostly
+  repeats it is refused, unless you say `as_new: true`.
 - Say what you changed in a line, and ask before reshaping their work.
 - When their words are not enough (they drew freehand, or "this bit here"),
   `read_board` with `image: true` gives you a picture of the diagram.

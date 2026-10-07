@@ -42,6 +42,8 @@ function host(
     cards?: Record<string, unknown>[]
     /** Edited diagrams' summaries, by card id. */
     scenes?: Record<string, unknown>
+    /** The board's mode, as /cards reads it. */
+    mode?: string
   } = {},
 ) {
   const spawned: string[][] = []
@@ -93,7 +95,7 @@ function host(
     expect(e.init?.headers).toMatchObject({ 'x-board-token': 'tok' })
     if (e.init?.method === 'GET') {
       const path = new URL(e.url).pathname
-      const value = path === '/viewers' ? { viewers: options.viewers?.() ?? 1 } : { viewers: 1, cards: options.cards ?? [], scenes: options.scenes ?? {} }
+      const value = path === '/viewers' ? { viewers: options.viewers?.() ?? 1 } : { viewers: 1, cards: options.cards ?? [], scenes: options.scenes ?? {}, mode: options.mode ?? 'diagrams' }
       return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(value) } }
     }
     const body = JSON.parse(String(e.init?.body)) as Record<string, unknown>
@@ -440,5 +442,36 @@ test('Claude picks the mode with a post, alone or with a diagram; /whiteboard ca
   expect(said(out)).toContain('canvas mode')
   expect(said(out)).toContain('edit_board')
   expect(posts.at(-1)).toMatchObject({ mode: 'canvas' })
+  stop()
+})
+
+test('on a canvas, drawing the same diagram again is refused: Claude amends it, unless it says it is new', async ($, on) => {
+  let mode = 'canvas'
+  const { posts, stop } = host(on, { cards: [{ id: 1, kind: 'diagram', title: 'Orders', mermaid: SOURCE }], get mode() { return mode } } as never)
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  const again = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE.replace('Orders API', 'Orders API · 3,400 ms') })
+  expect(said(again)).toContain('Amend it with edit_board')
+  expect(said(again)).toContain('`api`')
+  const n = posts.length
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE, as_new: true })
+  expect(posts.length).toBe(n + 1)
+  // A different diagram is fine.
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: 'flowchart LR\n  x[X] --> y[Y]' })
+  expect(posts.length).toBe(n + 2)
+  // In diagrams mode a redraw is a new tab, as before.
+  mode = 'diagrams'
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  expect(posts.length).toBe(n + 3)
+  stop()
+})
+
+test('edit_board comes back with a small picture of the result, unless look: false', async ($, on) => {
+  const { posts, stop } = host(on, { page: body => (body.ops ? ({ ok: true, diagram: 'Orders', tab: 1, done: ['#1 (text)'], errors: [], ...(body.look === false ? {} : { look: '/9j/4AAQ' }) } as never) : { ok: true, viewers: 1, drawn: true }) })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  const out = (await $.tool.call({ tool: 'mcp__whiteboard__edit_board', ops: [{ op: 'text', id: 'api', text: 'API' }] })) as { result: { type: string }[] }
+  expect(out.result[1]).toMatchObject({ type: 'image', source: { media_type: 'image/jpeg', data: '/9j/4AAQ' } })
+  const quiet = await $.tool.call({ tool: 'mcp__whiteboard__edit_board', look: false, ops: [{ op: 'text', id: 'api', text: 'API' }] })
+  expect(posts.at(-1)).toMatchObject({ look: false })
+  expect(said(quiet)).toContain('1 of 1 applied')
   stop()
 })

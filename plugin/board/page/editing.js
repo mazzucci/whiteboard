@@ -324,7 +324,9 @@ async function opsArrived(event) {
     else if (editor) editor.show(d.scene, true)
     else showEditor(d)
     showPending()
-    post('/applied', { page: pageId, id: event.id, done: out.done, errors: out.errors })
+    // A small picture of the result, so Claude sees what it did (a crowded label, an arrow across a box).
+    const look = event.look === false ? null : await dataUrl(await W.glance(d.scene)).catch(() => null)
+    post('/applied', { page: pageId, id: event.id, done: out.done, errors: out.errors, look })
   } catch (err) {
     post('/applied', { page: pageId, id: event.id, error: String(err?.message ?? err) })
   }
@@ -339,16 +341,19 @@ async function snapshotAsked(event) {
       const W = await loadEditor()
       blob = await W.png(editor && diagrams[current] === d ? editor.api.getSceneElements() : d.scene)
     } else blob = await svgToPng(d)
-    const png = await new Promise(resolve => {
-      const r = new FileReader()
-      r.onload = () => resolve(r.result)
-      r.readAsDataURL(blob)
-    })
-    post('/snapshot', { page: pageId, id: event.id, png })
+    post('/snapshot', { page: pageId, id: event.id, png: await dataUrl(blob) })
   } catch (err) {
     post('/snapshot', { page: pageId, id: event.id, error: String(err?.message ?? err) })
   }
 }
+
+const dataUrl = blob =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result)
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(blob)
+  })
 
 /** A drawn (Mermaid) diagram as a PNG, at twice its size, on white. */
 function svgToPng(d) {

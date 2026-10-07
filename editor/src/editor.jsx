@@ -287,4 +287,20 @@ async function png(elements) {
   })
 }
 
-window.WhiteboardEditor = { fromMermaid, mount, applyOps, png, CLASSES, COLORS }
+/** A small, cheap picture of the canvas (a JPEG at most 800 pixels a side), for Claude to check its amendments. */
+async function glance(elements) {
+  return exportToBlob({
+    elements: elements.filter(e => !e.isDeleted),
+    appState: { exportBackground: true, viewBackgroundColor: '#ffffff' },
+    files: null,
+    mimeType: 'image/jpeg',
+    quality: 0.7,
+    exportPadding: 16,
+    getDimensions: (width, height) => {
+      const scale = Math.min(1, 800 / Math.max(width, height))
+      return { width: Math.round(width * scale), height: Math.round(height * scale), scale }
+    },
+  })
+}
+
+window.WhiteboardEditor = { fromMermaid, mount, applyOps, png, glance, CLASSES, COLORS }

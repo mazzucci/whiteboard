@@ -36,7 +36,8 @@
 //   POST /say         { text } from the page
 //   POST /scene       { diagram, elements, summary } from the page: a diagram's canvas
 //                     as it now is; kept, and sent to the board's other pages
-//   POST /applied     { id, done, errors } from the page: how Claude's amendments went
+//   POST /applied     { id, done, errors, look? } from the page: how Claude's amendments
+//                     went, with a small JPEG of the result
 //   POST /snapshot    { id, png } from the page: the image Claude asked for
 //   POST /mode        { mode } from the page: the person switched the board's mode
 
@@ -316,7 +317,13 @@ async function handle(req, res) {
     const settle = asked.get(Number(input.id))
     if (!settle) return json(200, { ok: false })
     if (url.pathname === '/applied') {
-      settle({ done: Array.isArray(input.done) ? input.done.map(String) : [], errors: Array.isArray(input.errors) ? input.errors.map(String) : [], error: clip(input.error, 2000) })
+      const look = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(input.look ?? ''))
+      settle({
+        done: Array.isArray(input.done) ? input.done.map(String) : [],
+        errors: Array.isArray(input.errors) ? input.errors.map(String) : [],
+        error: clip(input.error, 2000),
+        ...(look ? { look: look[1] } : {}),
+      })
     } else {
       const png = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(input.png ?? ''))
       settle(png ? { png: png[1] } : { error: clip(input.error, 2000) ?? 'no image' })
@@ -350,7 +357,7 @@ async function handle(req, res) {
     const target = diagramOf(input.diagram)
     if (!target) return json(200, { ok: false, error: 'no diagram on the board' })
     const ops = input.ops.filter(op => op && typeof op === 'object' && !Array.isArray(op)).slice(0, 50)
-    const answer = await ask({ kind: 'ops', diagram: target.id, ops })
+    const answer = await ask({ kind: 'ops', diagram: target.id, ops, ...(input.look === false ? { look: false } : {}) })
     return json(200, { ok: !answer.error, diagram: target.title ?? '', tab: cards.filter(c => c.kind === 'diagram').indexOf(target) + 1, ...answer })
   }
   if (input.snapshot === true) {

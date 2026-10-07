@@ -10,7 +10,10 @@
   have selected, so "make this red" means the box you picked.
 - **Claude amends instead of redrawing.** A new tool, `edit_board`, adds,
   connects, renames, recolours (the evidence colours, or any colour by name or
-  hex) and removes boxes on a diagram, keeping your layout.
+  hex) and removes boxes on a diagram, keeping your layout. Each amendment
+  comes back to Claude with a small picture of the result, so it sees a
+  crowded label and fixes it. On a canvas, Claude amends a diagram instead of
+  drawing it again in a new tab.
 - **Claude can look.** `read_board` describes an edited diagram as it now is,
   and with `image: true` gives Claude a picture of it.
 
