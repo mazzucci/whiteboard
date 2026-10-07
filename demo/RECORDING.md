@@ -89,6 +89,21 @@ Terminal window, without the plugin) before the board recording, with three
 snapshots of the board session's own Terminal: Claude calling the whiteboard,
 the board opened, and the follow-up arriving in the session.
 
+## The charts GIF
+
+`media/board-demo/recorder-charts.mjs` stands in for the person on a chart:
+it runs the pointer over the bars, clicks the biggest and asks about it,
+Shift+clicks two and asks which to fix first, and wraps up, logging any page
+error. Start it as above, then Claude Code in the copy of
+`checkout-service/` with this prompt:
+
+```
+This is our investigation of the slow checkout endpoint (investigation.md). On the whiteboard, show me where the 3,400 ms of the slow p95 request go, as a chart. Keep your answers short.
+```
+
+`python3 media/board-demo/edit-charts.py "$REC" out/` writes
+`out/whiteboard-charts.gif`; copy it to `media/`.
+
 ## The edit
 
 ```bash

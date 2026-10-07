@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.0
 
 - **Charts you can click.** Pie, bar and line (`xychart-beta`) and quadrant
   charts: click a slice, a bar or a line's point to select it (Shift+click for
