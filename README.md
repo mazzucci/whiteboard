@@ -398,8 +398,12 @@ goes into your Claude Code session as your own words. So:
 claude plugin validate --strict plugin
 claude plugin test plugin
 node --test plugin/tests/server.test.mjs
-node editor/test/convert.mjs   # every diagram in fixtures/ on the real page (needs Chrome and puppeteer-core)
+cd test && npm ci && npm test            # the board's page in headless Chrome (CHROME_PATH if not found)
+cd editor && npm ci && node check-build.mjs   # the vendored editor is what its source builds
 ```
+
+CI runs all four on every pull request (`.github/workflows/ci.yml`); changes
+reach `main` through pull requests.
 
 `plugin/` is everything Claude Code loads, and all an install copies: the mod
 (`hooks/`), the board server and its page (`board/`, with Mermaid and the

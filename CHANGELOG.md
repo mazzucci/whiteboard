@@ -23,6 +23,10 @@
 - A mode switch from Claude no longer leaves an empty card.
 - Wrap up does not send what is selected.
 - A canvas opens with the whole diagram in view.
+- Counting your changes no longer finds ones you did not make (boxes named
+  after the canvas opened; two arrows between the same boxes).
+- Development: CI on every pull request, with the board's page tested in
+  headless Chrome (`test/page/`).
 - The README and the demo show editing together.
 
 ## 0.4.0

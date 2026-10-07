@@ -164,15 +164,31 @@ function changesBetween(before, after) {
     if (Math.hypot(o.x - b.x, o.y - b.y) > 40) lines.push(`moved \`${b.ref}\`${whereIs(b, after.boxes)}`)
   }
   for (const o of before.boxes) if (!now.has(o.ref)) lines.push(`removed \`${o.ref}\` ${quote(o.text)}`)
-  const key = a => `${a.from}→${a.to}`
-  const arrowsWere = new Map(before.arrows.map(a => [key(a), a]))
-  const arrowsNow = new Map(after.arrows.map(a => [key(a), a]))
-  for (const a of after.arrows) {
-    const o = arrowsWere.get(key(a))
-    if (!o) lines.push(a.from && a.to ? `connected \`${a.from}\` → \`${a.to}\`${a.text ? ` ${quote(a.text)}` : ''}` : `drew an arrow${a.from ? ` from \`${a.from}\`` : ''}${a.to ? ` to \`${a.to}\`` : ''} not joined at both ends`)
-    else if (o.text !== a.text) lines.push(`labelled \`${a.from}\` → \`${a.to}\` ${quote(a.text)}`)
+  // Arrows as a multiset: two arrows may join the same boxes (a request, then its answer),
+  // so an arrow is the same one only with the same ends and the same label.
+  const ends = a => `${a.from}→${a.to}`
+  const unmatched = (xs, ys) => {
+    const left = [...ys]
+    return xs.filter(a => {
+      const i = left.findIndex(b => ends(b) === ends(a) && b.text === a.text)
+      if (i < 0) return true
+      left.splice(i, 1)
+      return false
+    })
   }
-  for (const a of before.arrows) if (!arrowsNow.has(key(a))) lines.push(`removed the arrow \`${a.from}\` → \`${a.to}\``)
+  const added = unmatched(after.arrows, before.arrows)
+  const gone = unmatched(before.arrows, after.arrows)
+  for (const a of added) {
+    // The same ends, another label: relabelled, not a new arrow.
+    const i = gone.findIndex(o => ends(o) === ends(a))
+    if (i >= 0 && a.from && a.to) {
+      gone.splice(i, 1)
+      lines.push(`labelled \`${a.from}\` → \`${a.to}\` ${quote(a.text)}`)
+    } else {
+      lines.push(a.from && a.to ? `connected \`${a.from}\` → \`${a.to}\`${a.text ? ` ${quote(a.text)}` : ''}` : `drew an arrow${a.from ? ` from \`${a.from}\`` : ''}${a.to ? ` to \`${a.to}\`` : ''} not joined at both ends`)
+    }
+  }
+  for (const a of gone) lines.push(`removed the arrow \`${a.from}\` → \`${a.to}\`${a.text ? ` ${quote(a.text)}` : ''}`)
   const notesWere = new Map(before.notes.map(n => [n.ref, n]))
   for (const n of after.notes) {
     const o = notesWere.get(n.ref)
@@ -206,6 +222,8 @@ async function makeCanvas(d) {
   }
   const notes = (stickies.get(d.id) ?? []).map((n, i) => ({ op: 'note', id: `note-${i + 1}`, on: n.on, text: n.text }))
   if (notes.length) elements = W.applyOps(elements, notes).elements
+  // Every box named before the canvas counts as what Claude knows: naming one later would read as a change.
+  elements = withRefs(elements)
   d.scene = elements
   d.known = elements
   saveScene(d)
