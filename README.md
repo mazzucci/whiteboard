@@ -417,7 +417,9 @@ Questions, bugs and ideas: [GitHub Issues](https://github.com/mazzucci/whiteboar
 ## License
 
 MIT. The bundled Mermaid is MIT licensed; the libraries inside its bundle keep
-their own licences, including the Eclipse Layout Kernel under EPL-2.0. See
+their own licences, including the Eclipse Layout Kernel under EPL-2.0. The
+canvas editor bundles Excalidraw, its Mermaid converter and React (MIT) and
+fonts under the SIL Open Font License or MIT. See
 [`plugin/board/vendor/README.md`](plugin/board/vendor/README.md).
 
 This is an independent, unofficial project. It is not affiliated with, endorsed

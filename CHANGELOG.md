@@ -17,6 +17,9 @@
   (`App`, not `App-top`), and only the messages as arrows.
 - The editor's fonts load from the board (its own UI font was missing), and
   the bundle no longer names a CDN; the fonts' licence texts ship with them.
+- A diagram the canvas cannot read (a pie chart, say) stays as drawn, with a
+  line saying so on the page, and Claude is told when it tries to amend it:
+  never an empty canvas.
 - A mode switch from Claude no longer leaves an empty card.
 - Wrap up does not send what is selected.
 - A canvas opens with the whole diagram in view.

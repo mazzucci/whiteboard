@@ -71,6 +71,8 @@ async function fromMermaid(source) {
     // Mermaid's id is how Claude names a box: kept as its ref.
     ...(isShape(e) && e.id ? { customData: { ref: e.id } } : {}),
   }))
+  // The converter falls back to a picture of the diagram when it cannot read it: that is not a canvas.
+  if (!skeleton.some(e => e.type !== 'image')) throw new Error('this diagram cannot be turned into boxes and arrows')
   return convertToExcalidrawElements(skeleton, { regenerateIds: false })
 }
 

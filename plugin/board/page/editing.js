@@ -68,8 +68,6 @@ function summaryOf(elements, selectedIds = []) {
   const live = elements.filter(e => !e.isDeleted)
   const byId = new Map(live.map(e => [e.id, e]))
   // A sequence diagram's participant is drawn twice, `App-top` and `App-bottom`: one box, `App`.
-  const refOf = e => (e ? String(e.customData?.ref ?? e.id).replace(/-(top|bottom)(-\d+)?$/, '') : undefined)
-  const isRepeat = e => /-bottom(-\d+)?$/.test(e?.customData?.ref ?? e?.id ?? '')
   const free = live.filter(e => e.type === 'text' && !e.containerId)
   // A label drawn just under its box (an actor's name) is that box's text.
   const under = new Map()
@@ -80,6 +78,21 @@ function summaryOf(elements, selectedIds = []) {
   }
   const named = new Map([...under].map(([t, id]) => [id, t.originalText]))
   const label = e => live.find(t => t.type === 'text' && t.containerId === e.id)?.originalText ?? named.get(e.id) ?? ''
+  // A sequence diagram draws each participant twice, `App-top` and `App-bottom`,
+  // with the same name: one box, `App`. Only then: a flowchart may have
+  // `nav-top` and `nav-bottom` boxes of its own.
+  const byRef = new Map(live.map(e => [String(e.customData?.ref ?? e.id), e]))
+  const pair = r => {
+    const m = /^(.+)-(top|bottom)(-\d+)?$/.exec(r)
+    const other = m && byRef.get(`${m[1]}-${m[2] === 'top' ? 'bottom' : 'top'}${m[3] ?? ''}`)
+    return other && label(other) === label(byRef.get(r)) ? m : null
+  }
+  const refOf = e => {
+    if (!e) return undefined
+    const r = String(e.customData?.ref ?? e.id)
+    return pair(r)?.[1] ?? r
+  }
+  const isRepeat = e => pair(String(e?.customData?.ref ?? e?.id ?? ''))?.[2] === 'bottom'
   const classOf = e => {
     const c = Object.entries(window.WhiteboardEditor?.CLASSES ?? {}).find(([, s]) => s.backgroundColor === e.backgroundColor && s.strokeColor === e.strokeColor)
     if (c) return c[0]
@@ -91,7 +104,7 @@ function summaryOf(elements, selectedIds = []) {
   const box = e => ({ ref: refOf(e), text: label(e), class: classOf(e), x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.width), h: Math.round(e.height) })
   return {
     boxes: shapes.filter(e => e.customData?.kind !== 'note' && classOf(e) !== 'note').map(box),
-    notes: shapes.filter(e => e.customData?.kind === 'note' || classOf(e) === 'note').map(e => ({ ...box(e), on: e.customData?.on ?? nearest(e, shapes)?.customData?.ref })),
+    notes: shapes.filter(e => e.customData?.kind === 'note' || classOf(e) === 'note').map(e => ({ ...box(e), on: e.customData?.on ? (pair(e.customData.on)?.[1] ?? e.customData.on) : refOf(nearest(e, shapes)) })),
     arrows: live
       .filter(e => e.type === 'arrow' || e.type === 'line')
       .map(e => ({ from: refOf(byId.get(e.startBinding?.elementId)) ?? null, to: refOf(byId.get(e.endBinding?.elementId)) ?? null, text: label(e) }))
@@ -182,7 +195,15 @@ function changesBetween(before, after) {
 /** Turns a diagram into a canvas: Mermaid's layout, colours and ids, and its sticky notes as notes on it. */
 async function makeCanvas(d) {
   const W = await loadEditor()
-  let elements = await W.fromMermaid(d.source)
+  let elements
+  try {
+    elements = await W.fromMermaid(d.source)
+  } catch (err) {
+    // Said on the page, and to Claude when it asked: never an empty canvas.
+    d.noEdit = String(err?.message ?? err)
+    showEditNote(d)
+    throw err
+  }
   const notes = (stickies.get(d.id) ?? []).map((n, i) => ({ op: 'note', id: `note-${i + 1}`, on: n.on, text: n.text }))
   if (notes.length) elements = W.applyOps(elements, notes).elements
   d.scene = elements
@@ -214,9 +235,9 @@ function setMode(mode, isTheirs = false, isReplay = false) {
 /** Shows the diagram on screen as a canvas, or takes the canvas away for a drawn diagram. */
 async function showEditor(d) {
   // A diagram picked with Edit, or (on a canvas board) drawn since the switch, becomes editable when it is shown.
-  if (d && !d.scene && EDITABLE.test(d.kind) && (toEdit.has(d.id) || (boardMode === 'canvas' && d.id > canvasFrom))) {
+  if (d && !d.scene && !d.noEdit && EDITABLE.test(d.kind) && (toEdit.has(d.id) || (boardMode === 'canvas' && d.id > canvasFrom))) {
     d.converting ??= makeCanvas(d).finally(() => (d.converting = null))
-    await d.converting
+    await d.converting.catch(() => {})
     if (diagrams[current] !== d) return
   }
   if (editor) {
@@ -227,7 +248,8 @@ async function showEditor(d) {
   const isCanvas = !!d?.scene
   document.body.classList.toggle('editing', isCanvas)
   host.hidden = !isCanvas
-  $('edit').hidden = !d || !!d.scene || !EDITABLE.test(d.kind)
+  $('edit').hidden = !d || !!d.scene || !!d.noEdit || !EDITABLE.test(d.kind)
+  showEditNote(d)
   if (!isCanvas) return
   const W = await loadEditor()
   if (diagrams[current] !== d) return
@@ -253,6 +275,13 @@ async function showEditor(d) {
       }, 400)
     },
   })
+}
+
+/** A line in the toolbar when a diagram cannot become a canvas. */
+function showEditNote(d) {
+  const note = $('edit-note')
+  note.hidden = !d?.noEdit || diagrams[current] !== d
+  note.textContent = d?.noEdit ? 'This diagram cannot be edited on a canvas; it stays as drawn.' : ''
 }
 
 const EDITABLE = /^(flowchart|graph|sequenceDiagram|classDiagram|erDiagram|stateDiagram)/

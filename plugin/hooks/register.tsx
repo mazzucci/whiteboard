@@ -456,7 +456,7 @@ function sceneText(s: Scene): string[] {
   const drawn = s.drawings?.length ?? 0
   if (drawn) lines.push(`- ${drawn} freehand mark${drawn === 1 ? '' : 's'} (only a picture shows them: ${READ_TOOL} with image: true)`)
   if (s.selected?.length) lines.push(`- selected on the page now: ${s.selected.join(', ')}`)
-  if (s.images) lines.push(`- ${s.images} pasted image${s.images === 1 ? '' : 's'} (${READ_TOOL} with image: true shows them)`)
+  if (s.images) lines.push(`- ${s.images} pasted image${s.images === 1 ? '' : 's'} (not in pictures yet: ask the user what they show)`)
   return lines
 }
 
