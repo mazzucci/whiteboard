@@ -36,9 +36,17 @@ const INTRO =
   'schemas, an investigation. Draw first, then keep your written answer short and point at the board. Read the ' +
   `whiteboard:drawing skill before the first diagram. ${READ_TOOL} reads back what is on the page, Mermaid source ` +
   'and sticky notes included, when the user talks about something there you did not draw in this conversation. ' +
-  `The user can edit a diagram on the page; ${EDIT_TOOL} amends one in place (add, connect, recolour, rename, remove ` +
-  'boxes) instead of drawing it again.'
+  `The board has two modes: diagrams (yours, as drawn; each new one a tab) for explaining and investigating, and ` +
+  'canvas (every diagram editable by both of you) for designing or brainstorming together; pick one with `mode` ' +
+  `when you post, or the user switches. On a canvas, ${EDIT_TOOL} amends a diagram in place (add, connect, ` +
+  'recolour, rename, remove boxes) instead of drawing it again.'
 let isIntroduced = false
+
+/** What Claude is told when the person switches the board to a canvas from the conversation. */
+const CANVAS_NOTE =
+  'The user switched the whiteboard to canvas mode: every diagram on it is editable by both of you. Their edits reach ' +
+  `you in words with their messages; amend diagrams with ${EDIT_TOOL} instead of drawing them again, and draw a new ` +
+  `one with ${TOOL} only when the picture changes as a whole.`
 
 /** What Claude is told when the person asks to discuss on the board. */
 const FOCUS_NOTE =
@@ -347,7 +355,8 @@ async function boardOpen($: EngineInterface, isAsked = false): Promise<Started> 
 
 type Legend = { label: string; stroke?: string; isDashed: boolean }
 type Note = { on?: string; text: string }
-type Card = { title?: string; text?: string; mermaid?: string; legend?: Legend[]; notes?: Note[] }
+type Card = { title?: string; text?: string; mermaid?: string; legend?: Legend[]; notes?: Note[]; mode?: Mode }
+type Mode = 'diagrams' | 'canvas'
 
 /** Claude's sticky notes (`sticky_notes`), as the page takes them: text, and the node id each is pinned to. */
 function notesOf(value: unknown): Note[] | undefined {
@@ -466,7 +475,7 @@ type BoardCard = {
 const noteLine = (n: Note) => `- sticky note${n.on ? ` on ${n.on}` : ''}: ${n.text}`
 
 /** The board as Claude reads it back: every card in order, diagrams with their source and sticky notes. */
-function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scenes: Record<string, Scene> = {}): string {
+function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scenes: Record<string, Scene> = {}, mode: Mode = 'diagrams'): string {
   const diagrams = cards.filter(c => c.kind === 'diagram')
   const stickiesOf = (id: number) => cards.filter(c => c.kind === 'sticky' && c.diagram === id).map(c => noteLine({ on: c.on, text: c.text ?? '' }))
   const diagramText = (c: BoardCard) => {
@@ -484,7 +493,7 @@ function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scene
       ...(scene ? sceneText(scene) : []),
     ].join('\n')
   }
-  const seen = viewers ? `open in ${viewers === 1 ? 'one tab' : `${viewers} tabs`}` : 'not open in any tab'
+  const seen = `${viewers ? `open in ${viewers === 1 ? 'one tab' : `${viewers} tabs`}` : 'not open in any tab'}; ${mode === 'canvas' ? `canvas mode: every diagram is editable, amend with ${EDIT_TOOL}` : 'diagrams mode'}`
   if (isLatest) {
     const last = diagrams.at(-1)
     return last ? `The whiteboard page (${seen}); its latest diagram:\n\n${diagramText(last)}` : `The whiteboard page (${seen}) has no diagram yet.`
@@ -509,7 +518,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'whiteboard',
-      description: 'A whiteboard page in your browser, beside the conversation: /whiteboard [focus|sample|file.mmd|file.md]',
+      description: 'A whiteboard page in your browser, beside the conversation: /whiteboard [focus|canvas|sample|file.mmd|file.md]',
     })
     await $.tool.register({
       name: TOOL,
@@ -539,6 +548,15 @@ export const register: Register = on => {
           title: { type: 'string', description: 'A short heading for the card' },
           text: { type: 'string', description: 'A note, in simple Markdown, above the diagram if there is one' },
           mermaid: { type: 'string', description: 'A Mermaid diagram, starting with the diagram type' },
+          mode: {
+            type: 'string',
+            enum: ['diagrams', 'canvas'],
+            description:
+              'How the board works from now on: diagrams (yours, as drawn; each new one a tab: for explaining and ' +
+              'investigating) or canvas (every diagram editable by both of you, amended in place: for designing or ' +
+              'brainstorming together). Set it with your first post when the conversation calls for one; the user ' +
+              'can switch it on the page.',
+          },
           sticky_notes: {
             type: 'array',
             maxItems: 8,
@@ -707,7 +725,7 @@ export const register: Register = on => {
       }
     }
     const notes = notesOf(e.sticky_notes)
-    if (!text && !mermaid && !notes) return { deny: 'Nothing posted: give `text`, `mermaid`, `sticky_notes`, or a mix.' }
+    if (!text && !mermaid && !notes && !e.mode) return { deny: 'Nothing posted: give `text`, `mermaid`, `sticky_notes`, or a mix.' }
     if (!(await $.session.surfaces()).length) {
       return { deny: 'Nobody can see the whiteboard from this session (it has no screen attached). Explain in prose instead.' }
     }
@@ -715,7 +733,8 @@ export const register: Register = on => {
     const { legend, unknown } = legendOf(e.legend, mermaid)
     let out: Awaited<ReturnType<typeof postToBoard>>
     try {
-      out = await postToBoard($, { title, text: text || undefined, mermaid: mermaid || undefined, legend, notes })
+      const mode = e.mode === 'canvas' || e.mode === 'diagrams' ? e.mode : undefined
+      out = await postToBoard($, { title, text: text || undefined, mermaid: mermaid || undefined, legend, notes, mode })
     } catch (error) {
       return { deny: failed(error) }
     }
@@ -725,6 +744,7 @@ export const register: Register = on => {
       }
     }
     if (out.posted.noDiagram) return { deny: 'No diagram on the board to pin these sticky notes to: post the diagram with them.' }
+    if (!text && !mermaid && !notes) return { result: `The whiteboard is in ${e.mode} mode now.` }
     if (boardTurn) boardTurn.isPosted = true
     const unknownNote = unknown.length ? ` The legend names classes with no classDef: ${unknown.join(', ')}.` : ''
     return { result: `${postedWhere(out, Boolean(mermaid))}${unknownNote}` }
@@ -736,8 +756,8 @@ export const register: Register = on => {
     let open: Board
     try {
       open = await board
-      const { viewers, cards, scenes } = await boardGet<{ viewers: number; cards: BoardCard[]; scenes?: Record<string, Scene> }>($, open, '/cards')
-      text = boardText(viewers, cards, e.latest === true, scenes)
+      const { viewers, cards, scenes, mode } = await boardGet<{ viewers: number; cards: BoardCard[]; scenes?: Record<string, Scene>; mode?: Mode }>($, open, '/cards')
+      text = boardText(viewers, cards, e.latest === true, scenes, mode)
     } catch (error) {
       return { result: `The whiteboard page has stopped (${error instanceof Error ? error.message : String(error)}): nothing to read.` }
     }
@@ -786,10 +806,15 @@ export const register: Register = on => {
         return { text: failed(error) }
       }
     }
-    if (!arg || arg === 'focus') {
+    if (!arg || arg === 'focus' || arg === 'canvas') {
       try {
         // Asked for: it opens again even with a tab showing it, which may be out of sight.
         const started = await boardOpen($, true)
+        if (arg === 'canvas') {
+          await boardPost($, started.open, { mode: 'canvas' })
+          const where = started.isOpened ? 'opened in your browser' : `open it in your browser: ${started.open.url}`
+          return { text: `Whiteboard ${where}, in canvas mode: edit the diagrams together.`, context: [CANVAS_NOTE] }
+        }
         const where = started.isOpened ? 'opened in your browser' : `open it in your browser: ${started.open.url}`
         if (arg === 'focus') isOnBoard = true
         if (arg === 'focus') return { text: `Whiteboard ${where}. Discuss there; Claude answers on the board.`, context: [FOCUS_NOTE] }

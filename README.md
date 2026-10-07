@@ -90,8 +90,13 @@ evidence shows, then a proposed fix.
   **Claude is working** while Claude answers. What you ask on the board is
   answered on the board; when you type in the terminal again, Claude answers
   there.
-- **Edit a diagram yourself.** Press **Edit** and the diagram becomes a canvas:
-  drag boxes, write, add boxes, arrows and sticky notes. Your changes go to
+- **Two modes.** **Diagrams**: Claude's diagrams as drawn, each new one a
+  tab, for explaining and investigating. **Canvas**: you and Claude edit every
+  diagram together, for designing. Switch at the top of the page (or press
+  **Edit**), with `/whiteboard canvas`, or let Claude pick when it opens the
+  board.
+- **Edit a diagram yourself.** On a canvas, drag boxes, write, add boxes,
+  arrows and sticky notes. Your changes go to
   Claude in words with your next message ("moved `cache` below `api`; added a
   box "Redis?""), and Claude amends the diagram in place, keeping your layout,
   instead of drawing it again. Flowcharts, sequence, class, state and ER
@@ -293,6 +298,7 @@ the board, and you discuss there until you press **Wrap up**.
 |---|---|
 | `/whiteboard` | Open the board (again, if you closed its tab) |
 | `/whiteboard focus` | Discuss on the board until you wrap up |
+| `/whiteboard canvas` | Open the board in canvas mode: edit the diagrams together |
 | `/whiteboard path/to/file.mmd` | Show a Mermaid file (or the first `mermaid` block of a Markdown file) |
 | `/whiteboard sample` | Draw a sample |
 

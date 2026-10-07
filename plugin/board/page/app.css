@@ -23,6 +23,10 @@ button { font: inherit; color: inherit; }
 .conn { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .conn .dot { width: 7px; height: 7px; border-radius: 50%; background: #9aa1ad; }
 .conn.on .dot { background: #22a35a; }
+/* The board's mode: Claude's diagrams as drawn, or a canvas both edit. */
+.modes { display: inline-flex; margin-left: auto; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; flex: none; }
+.modes button { padding: 5px 12px; border: 0; background: var(--panel); color: var(--muted); font-size: 13px; cursor: pointer; }
+.modes button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
 /* layout: the board, the conversation beside it */
 .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; }
@@ -179,7 +183,7 @@ html, body { height: 100dvh; }
   .top h1 { font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .top h1 .label { display: none; }
   #conn-text { display: none; }
-  .views { display: inline-flex; margin-left: auto; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; flex: none; }
+  .views { display: inline-flex; margin-left: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; flex: none; }
   .views button { padding: 6px 14px; border: 0; background: var(--panel); color: var(--muted); font-size: 13.5px; cursor: pointer; }
   .views button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
   .views .unread { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: #e5484d; color: #fff; font-size: 11px; line-height: 18px; text-align: center; }

@@ -429,3 +429,16 @@ test('read_board shows an edited diagram as it now is, and a picture when asked'
   expect(pictured.result[1]).toMatchObject({ type: 'image', source: { media_type: 'image/png', data: 'iVBORw0KGgo=' } })
   stop()
 })
+
+test('Claude picks the mode with a post, alone or with a diagram; /whiteboard canvas switches it and says so', async ($, on) => {
+  const { posts, stop } = host(on)
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE, mode: 'canvas' })
+  expect(posts[0]).toMatchObject({ mermaid: SOURCE, mode: 'canvas' })
+  const alone = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mode: 'diagrams' })
+  expect(said(alone)).toContain('diagrams mode now')
+  const out = await $.command.run({ command: 'whiteboard', args: 'canvas' })
+  expect(said(out)).toContain('canvas mode')
+  expect(said(out)).toContain('edit_board')
+  expect(posts.at(-1)).toMatchObject({ mode: 'canvas' })
+  stop()
+})

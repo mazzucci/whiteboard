@@ -168,3 +168,22 @@ test("a canvas is kept and replayed; Claude's amendments go to a page and come b
   reader.cancel().catch(() => {})
   assert.ok(first.includes('"kind":"diagram"'))
 })
+
+test('the mode: set by Claude or a page, kept, read back and replayed last', async () => {
+  const auth = { headers: { 'x-board-token': ready.token } }
+  assert.equal((await (await call('/cards', auth)).json()).mode, 'diagrams')
+  assert.equal((await postJson('/mode', { mode: 'sideways' })).status, 400)
+  assert.equal((await postJson('/mode', { mode: 'canvas' }, { 'x-board-token': 'wrong' })).status, 403)
+  assert.equal((await postJson('/mode', { mode: 'canvas' })).status, 200)
+  assert.equal((await (await call('/cards', auth)).json()).mode, 'canvas')
+  const alone = await (await postJson('/post', { mode: 'diagrams' })).json()
+  assert.equal(alone.mode, 'diagrams')
+  await postJson('/post', { mode: 'canvas' })
+  const res = await fetch(`${base()}/events?t=${ready.token}`)
+  const reader = res.body.getReader()
+  let text = ''
+  for (let i = 0; i < 20 && !text.includes('"kind":"mode"'); i++) text += new TextDecoder().decode((await reader.read()).value)
+  await reader.cancel()
+  assert.match(text, /"kind":"mode","mode":"canvas"/)
+  assert.ok(text.lastIndexOf('"kind":"mode"') > text.lastIndexOf('"kind":"diagram"'), 'after the cards')
+})

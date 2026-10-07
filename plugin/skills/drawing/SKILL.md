@@ -218,9 +218,20 @@ Proposing a fix:
 3. Until someone measures it, say it is a proposal, in the note, the legend
    ("Proposed") and your answer.
 
+## Diagrams or canvas
+
+The board has two modes. **Diagrams** (the default): your diagrams as you
+draw them, each new one a tab, so a story reads step by step and before and
+after sit side by side; for explaining, "how does X work", investigations.
+**Canvas**: every diagram is editable by both of you and changes are made in
+place; for designing, brainstorming, rearranging something together. Pick
+with `mode` on your post when the conversation calls for it ("let's design
+the new flow together": canvas), or leave it; the user switches it on the
+page (Edit, or Diagrams / Canvas at the top) and says so in their message.
+
 ## When the user edits a diagram
 
-The user can press Edit on a diagram and change it on the page: drag boxes,
+The user can switch to canvas and change a diagram on the page: drag boxes,
 write, add boxes, sticky notes and arrows. Their changes reach you with their
 next message, as words: "I changed "Orders" on the board: moved `cache`
 (below `api`); added a box `redis` "Redis?"; connected `api` → `redis`".

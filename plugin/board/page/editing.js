@@ -7,6 +7,10 @@
 'use strict'
 
 let editor = null // { ready, api, show, unmount } for the diagram on screen, when it is a canvas
+/** The board's mode: `diagrams` (Claude's, as drawn) or `canvas` (every diagram editable, amended in place). */
+let boardMode = 'diagrams'
+/** The mode the person switched to, said to Claude with their next message. */
+let modeSwitched = null
 let editorLoad = null
 /** The canvas on screen, for the board's own tests. */
 window.boardCanvas = () => editor
@@ -166,8 +170,29 @@ async function toCanvas(d) {
   saveScene(d)
 }
 
+/**
+ * The board's mode, from Claude, another page, or the person (`isTheirs`):
+ * on a canvas board, the diagram on screen becomes editable.
+ */
+function setMode(mode, isTheirs = false) {
+  if (mode !== 'diagrams' && mode !== 'canvas') return
+  boardMode = mode
+  document.querySelectorAll('.modes [data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)))
+  if (isTheirs) {
+    post('/mode', { page: pageId, mode })
+    modeSwitched = mode
+  }
+  showEditor(diagrams[current])
+}
+
 /** Shows the diagram on screen as a canvas, or takes the canvas away for a drawn diagram. */
 async function showEditor(d) {
+  // On a canvas board, a diagram becomes editable when it is shown.
+  if (boardMode === 'canvas' && d && !d.scene && EDITABLE.test(d.kind)) {
+    d.converting ??= toCanvas(d).finally(() => (d.converting = null))
+    await d.converting
+    if (diagrams[current] !== d) return
+  }
   if (editor) {
     editor.unmount()
     editor = null
@@ -176,7 +201,7 @@ async function showEditor(d) {
   const isCanvas = !!d?.scene
   document.body.classList.toggle('editing', isCanvas)
   host.hidden = !isCanvas
-  $('edit').hidden = !d || !!d.scene || !EDITABLE.test(d.kind)
+  $('edit').hidden = boardMode === 'canvas' || !d || !!d.scene || !EDITABLE.test(d.kind)
   if (!isCanvas) return
   const W = await loadEditor()
   if (diagrams[current] !== d) return
@@ -244,7 +269,12 @@ function showPending() {
 /** The person's changes, in words, ahead of what they typed; then they count as seen. */
 function withChanges(text) {
   const pending = pendingChanges()
-  const said = pending.map(({ d, lines }) => `I changed "${d.title}" on the board:\n${lines.map(l => `- ${l}`).join('\n')}`)
+  const said = []
+  if (modeSwitched) {
+    said.push(modeSwitched === 'canvas' ? 'I switched the board to canvas mode: we edit the diagrams together.' : 'I switched the board back to diagrams mode.')
+    modeSwitched = null
+  }
+  said.push(...pending.map(({ d, lines }) => `I changed "${d.title}" on the board:\n${lines.map(l => `- ${l}`).join('\n')}`))
   for (const { d } of pending) d.known = d.scene
   if (pending.length) showPending()
   // What they have selected is what "this" means in what they wrote.
@@ -341,16 +371,6 @@ function svgToPng(d) {
 
 // ---------------------------------------------------------------- controls
 
-$('edit').onclick = async () => {
-  const d = diagrams[current]
-  if (!d || d.scene) return
-  $('edit').disabled = true
-  try {
-    await toCanvas(d)
-    await showEditor(d)
-  } catch (err) {
-    console.error(err)
-  } finally {
-    $('edit').disabled = false
-  }
-}
+// Edit, or the Canvas switch: the whole board becomes a canvas both edit.
+$('edit').onclick = () => setMode('canvas', true)
+document.querySelectorAll('.modes [data-mode]').forEach(b => (b.onclick = () => setMode(b.dataset.mode, true)))

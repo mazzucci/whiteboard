@@ -31,12 +31,14 @@
 //                     (the latest edited one unless `diagram`, its tab number, says);
 //                     answers once a page has applied them
 //                     { snapshot: true, diagram? }: a PNG of a diagram, as base64
+//                     { mode: 'diagrams' | 'canvas' }: how the board works (with a post or alone)
 //   POST /rendered    { id, error? } from the page: how a card's diagram drew
 //   POST /say         { text } from the page
 //   POST /scene       { diagram, elements, summary } from the page: a diagram's canvas
 //                     as it now is; kept, and sent to the board's other pages
 //   POST /applied     { id, done, errors } from the page: how Claude's amendments went
 //   POST /snapshot    { id, png } from the page: the image Claude asked for
+//   POST /mode        { mode } from the page: the person switched the board's mode
 
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
@@ -67,6 +69,12 @@ const cards = []
 const scenes = new Map()
 /** Whether Claude is in a turn: sent to each page as it connects, never stored as a card. */
 let status = 'idle'
+/**
+ * How the board works: `diagrams`, Claude's diagrams as they are drawn (each
+ * new one a tab); or `canvas`, every diagram editable by both, amended in place.
+ */
+let mode = 'diagrams'
+const MODES = ['diagrams', 'canvas']
 const listeners = new Set()
 /** Each page's connection, by the id it chose; the one that last spoke is asked to edit. */
 const pages = new Map()
@@ -258,6 +266,8 @@ async function handle(req, res) {
     for (const card of cards) res.write(`data: ${JSON.stringify(card)}\n\n`)
     // Edited diagrams as they now are, after the cards they belong to.
     for (const [diagram, scene] of scenes) res.write(`data: ${JSON.stringify({ kind: 'scene', diagram, elements: scene.elements })}\n\n`)
+    // The mode last, so a canvas board makes editable only the diagram on screen.
+    res.write(`data: ${JSON.stringify({ kind: 'mode', mode })}\n\n`)
     res.write(`data: ${JSON.stringify({ kind: 'status', state: status })}\n\n`)
     listeners.add(res)
     const page = /^[\w-]{1,40}$/.test(url.searchParams.get('c') ?? '') ? url.searchParams.get('c') : null
@@ -273,9 +283,9 @@ async function handle(req, res) {
   }
   if (req.method === 'GET' && url.pathname === '/viewers') return json(200, { viewers: listeners.size })
   if (req.method === 'GET' && url.pathname === '/cards') {
-    return json(200, { viewers: listeners.size, cards, scenes: Object.fromEntries([...scenes].map(([id, s]) => [id, s.summary])) })
+    return json(200, { viewers: listeners.size, mode, cards, scenes: Object.fromEntries([...scenes].map(([id, s]) => [id, s.summary])) })
   }
-  const POSTS = ['/post', '/say', '/rendered', '/scene', '/applied', '/snapshot']
+  const POSTS = ['/post', '/say', '/rendered', '/scene', '/applied', '/snapshot', '/mode']
   if (req.method !== 'POST' || !POSTS.includes(url.pathname)) return json(404, { error: 'not found' })
   if (!/^application\/json\b/.test(req.headers['content-type'] ?? '')) return json(415, { error: 'JSON only' })
 
@@ -288,6 +298,12 @@ async function handle(req, res) {
   }
   const from = /^[\w-]{1,40}$/.test(String(input.page ?? '')) ? String(input.page) : null
   if (from && pages.has(from) && url.pathname !== '/rendered') lastPage = from
+  if (url.pathname === '/mode') {
+    if (!MODES.includes(input.mode)) return json(400, { error: 'diagrams or canvas' })
+    mode = input.mode
+    broadcast({ kind: 'mode', mode }, from ? pages.get(from) : undefined)
+    return json(200, { ok: true })
+  }
   if (url.pathname === '/scene') {
     const diagram = Number(input.diagram)
     if (!cards.some(c => c.id === diagram && c.kind === 'diagram') || !Array.isArray(input.elements)) return json(400, { error: 'no such diagram' })
@@ -319,6 +335,12 @@ async function handle(req, res) {
     if (settle) settle(typeof input.error === 'string' ? { error: input.error.slice(0, 2000) } : { drawn: true })
     return json(200, { ok: true })
   }
+  // Claude sets the mode with a post, or on its own.
+  if (MODES.includes(input.mode) && input.mode !== mode) {
+    mode = input.mode
+    broadcast({ kind: 'mode', mode })
+  }
+  if (input.mode && Object.keys(input).every(k => k === 'mode')) return json(200, { ok: MODES.includes(input.mode), mode, viewers: listeners.size })
   if (input.status === 'working' || input.status === 'idle') {
     status = input.status
     broadcast({ kind: 'status', state: status })

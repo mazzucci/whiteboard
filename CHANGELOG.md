@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- **Edit a diagram yourself.** Edit turns a diagram into a canvas (Excalidraw,
-  bundled): drag boxes, write, add boxes, arrows and sticky notes. Your
-  changes reach Claude in words with your next message, and so does what you
+- **Two modes.** Diagrams (Claude's, as drawn, each new one a tab) or canvas
+  (every diagram editable by both, amended in place). Switch at the top of the
+  page, press Edit, run `/whiteboard canvas`, or let Claude pick.
+- **Edit a diagram yourself.** On a canvas (Excalidraw, bundled) you drag
+  boxes, write, add boxes, arrows and sticky notes. Your changes reach Claude in words with your next message, and so does what you
   have selected, so "make this red" means the box you picked.
 - **Claude amends instead of redrawing.** A new tool, `edit_board`, adds,
   connects, renames, recolours (the evidence colours, or any colour by name or
