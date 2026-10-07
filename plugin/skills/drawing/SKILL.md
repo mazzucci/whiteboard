@@ -31,6 +31,9 @@ show the difference (see "Show what you know" below).
 | What are the types and their relations? | `classDiagram` |
 | When does what happen? | `gantt` or `timeline` |
 | How do ideas branch? | `mindmap` |
+| How big is each part of a whole? | `pie` (see Charts) |
+| How do values compare, or change over time? | `xychart-beta` (bars and lines) |
+| Where does each item fall on two scales? | `quadrantChart` |
 
 ## Keep it legible
 
@@ -201,7 +204,8 @@ colours consistent between levels, so the cards read as one zoom.
 
 A proposal, a question or an aside about one box goes on a sticky note
 (`sticky_notes: [{ on: "<node id>", text }]`), pinned beside that box (in a
-flowchart; in other diagram types notes line up beside the diagram), not into
+flowchart, or on a chart's slice, bar or point by its label; in other diagram
+types notes line up beside the diagram), not into
 the diagram: a box drawn into the system looks like part of it. Notes without
 `mermaid` go on the latest diagram. Keep a note to a line or two.
 
@@ -217,6 +221,35 @@ Proposing a fix:
    sticky note: the proposal is in the diagram now.
 3. Until someone measures it, say it is a proposal, in the note, the legend
    ("Proposed") and your answer.
+
+## Charts
+
+When the numbers are the point (where the time goes, what grew, which option
+wins on two scales), draw a chart: `pie` for shares of a whole (up to about
+seven slices; fold the rest into "other"), `xychart-beta` for values by
+category or over time (`bar [...]` and `line [...]`, one value per x-axis
+category), `quadrantChart` for items placed on two scales from 0 to 1. Use
+real numbers: measured, or from the code, a log or the user; never invent them
+to make a chart. Put the unit in the title or the axis.
+
+```mermaid
+xychart-beta
+  title "p95 checkout latency by step (ms)"
+  x-axis ["pricing.quote", "inventory.check", payments, rendering]
+  y-axis "ms" 0 --> 3500
+  bar [3200, 1240, 420, 180]
+```
+
+The user can click a slice, a bar or a point to select it (Shift for more), and
+it comes with their next message: "Selected on the board, in "Latency": the bar
+"pricing.quote" (ms: 3200)". That is what "this" means in their message. To
+drill into a part, draw a new chart of just that part (it becomes the next tab),
+and say where it came from. A sticky note can sit on a slice, a bar or a point:
+`on` is its label, as written in the source.
+
+Syntax: quote labels that have spaces or punctuation (`"pricing.quote"`); pie
+values are positive numbers; `xychart-beta`, with the `-beta`; a quadrant
+point is `Name: [x, y]` with x and y between 0 and 1.
 
 ## Diagrams or canvas
 

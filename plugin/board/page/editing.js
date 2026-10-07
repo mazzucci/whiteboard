@@ -382,7 +382,7 @@ function withChanges(text, withSelection = true) {
   if (pending.length) showPending()
   // What they have selected is what "this" means in what they wrote.
   const d = diagrams[current]
-  const selected = d?.scene && text && withSelection ? selectionOf(d.scene, d.selected) : []
+  const selected = !text || !withSelection ? [] : d?.scene ? selectionOf(d.scene, d.selected) : picksOf(d)
   if (selected.length) said.push(`Selected on the board, in "${d.title}": ${selected.join(', ')}`)
   if (!said.length) return text
   return text ? `${said.join('\n\n')}\n\n${text}` : said.join('\n\n')

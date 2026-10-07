@@ -51,6 +51,7 @@ const pageFile = name => readFileSync(new URL(`./page/${name}`, import.meta.url)
 const STATIC = {
   '/app.js': ['text/javascript', pageFile('app.js')],
   '/editing.js': ['text/javascript', pageFile('editing.js')],
+  '/charts.js': ['text/javascript', pageFile('charts.js')],
   '/app.css': ['text/css', pageFile('app.css')],
 }
 // The canvas editor, read when first asked for: most boards never edit.

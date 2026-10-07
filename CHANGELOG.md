@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+- **Charts you can click.** Pie, bar and line (`xychart-beta`) and quadrant
+  charts: click a slice, a bar or a line's point to select it (Shift+click for
+  more, Escape or a click beside it clears), and the next message says what is
+  selected, with its value: "Selected on the board, in "Pets": the slice "Dogs"
+  (386, 79%)". Each chart keeps its own selection; the hint under the board
+  names it. Hovering a mark shows its value.
+- Sticky notes can sit on a chart's slice, bar or point, named by its label.
+- The drawing skill says when to draw a chart, and to use real numbers only.
+- `fixtures/` has a pie, an xychart and a quadrant chart.
+
 ## 0.4.1
 
 - **Fixed: a sticky note pinned to a box broke the board** (the zoom read
