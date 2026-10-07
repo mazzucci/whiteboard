@@ -150,3 +150,27 @@ test('boxes Claude removes on a diagram off screen stay removed when it is shown
   assert.deepEqual(page.errors, [])
   await page.close()
 })
+
+test('two pages move the same box before either sends: one winner, the same on both, and saving stops', async () => {
+  await b.call('/post', { mode: 'canvas' })
+  const { id } = await b.call('/post', { title: 'samebox', mermaid: flow(['s1', 's2']) })
+  const one = await b.open()
+  await b.until(async () => (await b.scenes())[id], 'the canvas')
+  const two = await b.open()
+  await b.until(async () => (await look(two)).tab === 'samebox' && (await look(two)).isCanvas, 'the second page on it')
+  const saves = { one: 0, two: 0 }
+  one.on('request', r => r.url().endsWith('/scene') && saves.one++)
+  two.on('request', r => r.url().endsWith('/scene') && saves.two++)
+  await move(two, 's2', 100)
+  await move(one, 's2', 200)
+  await sleep(150)
+  await move(one, 's2', 50)
+  await sleep(3000)
+  const settled = { ...saves }
+  await sleep(2000)
+  assert.deepEqual(saves, settled, `still saving: ${JSON.stringify(settled)} then ${JSON.stringify(saves)}`)
+  const yOf = (p, ref) => p.evaluate(ref => window.boardCanvas().api.getSceneElements().find(e => e.customData?.ref === ref).y, ref)
+  assert.ok(Math.abs((await yOf(one, 's2')) - (await yOf(two, 's2'))) < 1, 'both pages show the same s2')
+  await one.close()
+  await two.close()
+})

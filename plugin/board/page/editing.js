@@ -414,10 +414,22 @@ async function sceneArrived(event, isReplay) {
     const local = new Map(live.map(e => [e.id, e]))
     const known = new Map(d.known.map(e => [e.id, e]))
     const arrived = new Set(event.elements.map(e => e.id))
+    const arrivedById = new Map(event.elements.map(e => [e.id, e]))
+    // An element both pages changed: the same winner on both, as Excalidraw
+    // reconciles (the higher version, then the lower nonce), so the exchange
+    // ends: the losing page takes the other's and stops telling it.
+    const isTheirs = e => {
+      const other = arrivedById.get(e.id)
+      // The very same element (this page's edit, back in the other's save) is this page's still.
+      return other && (other.version > e.version || (other.version === e.version && other.versionNonce < e.versionNonce))
+    }
+    for (const id of [...d.mine]) if (local.has(id) && isTheirs(local.get(id))) d.mine.delete(id)
     const own = [...d.mine].filter(id => local.has(id))
-    const arrivedVersion = new Map(event.elements.map(e => [e.id, e.version]))
     // Saved back only when it adds something: a merge that already holds this page's edits ends the exchange.
-    isMerged = own.some(id => arrivedVersion.get(id) !== local.get(id).version)
+    isMerged = own.some(id => {
+      const other = arrivedById.get(id)
+      return !other || other.version !== local.get(id).version || other.versionNonce !== local.get(id).versionNonce
+    })
     scene = [...event.elements.map(e => (d.mine.has(e.id) && local.has(e.id) ? local.get(e.id) : e)), ...own.filter(id => !arrived.has(id)).map(id => local.get(id))]
     // What Claude knows: the other page's save, without this page's unsent edits, so they are told once.
     d.known = [
