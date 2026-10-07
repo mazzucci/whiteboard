@@ -580,7 +580,7 @@ function onEvent(e) {
   card._at = at
   const replay = isReplaying
   // A canvas, Claude's amendments to one, or a request for a picture: after the cards before them.
-  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card), mode: () => setMode(card.mode) }[card.kind]
+  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card), mode: () => setMode(card.mode, false, replay) }[card.kind]
   queue = queue.then(() => (act ? act() : add(card, replay))).catch(err => console.error(err))
 }
 

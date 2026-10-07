@@ -4,7 +4,9 @@
 
 - **Two modes.** Diagrams (Claude's, as drawn, each new one a tab) or canvas
   (every diagram editable by both, amended in place). Switch at the top of the
-  page, press Edit, run `/whiteboard canvas`, or let Claude pick.
+  page, press Edit, run `/whiteboard canvas`, or let Claude pick. Switching
+  makes the diagram on screen editable, and every new one; earlier ones stay
+  drawings until you edit them.
 - **Edit a diagram yourself.** On a canvas (Excalidraw, bundled) you drag
   boxes, write, add boxes, arrows and sticky notes. Your changes reach Claude in words with your next message, and so does what you
   have selected, so "make this red" means the box you picked.

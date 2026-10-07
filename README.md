@@ -94,7 +94,8 @@ evidence shows, then a proposed fix.
   tab, for explaining and investigating. **Canvas**: you and Claude edit every
   diagram together, for designing. Switch at the top of the page (or press
   **Edit**), with `/whiteboard canvas`, or let Claude pick when it opens the
-  board.
+  board. Switching makes the diagram on screen editable, and every new one;
+  earlier diagrams stay as they were drawn until you press **Edit** on them.
 - **Edit a diagram yourself.** On a canvas, drag boxes, write, add boxes,
   arrows and sticky notes. Your changes go to
   Claude in words with your next message ("moved `cache` below `api`; added a

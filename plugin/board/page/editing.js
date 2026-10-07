@@ -11,6 +11,13 @@ let editor = null // { ready, api, show, unmount } for the diagram on screen, wh
 let boardMode = 'diagrams'
 /** The mode the person switched to, said to Claude with their next message. */
 let modeSwitched = null
+/**
+ * On a canvas board, which diagrams are editable without asking: those that
+ * arrive after the switch (ids above `canvasFrom`), and those the person or
+ * the switch picked (`toEdit`). The ones before stay drawings until edited.
+ */
+let canvasFrom = Infinity
+const toEdit = new Set()
 let editorLoad = null
 /** The canvas on screen, for the board's own tests. */
 window.boardCanvas = () => editor
@@ -171,11 +178,17 @@ async function toCanvas(d) {
 }
 
 /**
- * The board's mode, from Claude, another page, or the person (`isTheirs`):
- * on a canvas board, the diagram on screen becomes editable.
+ * The board's mode, from Claude, another page, or the person (`isTheirs`).
+ * Switching to a canvas makes the diagram on screen editable, and the ones
+ * Claude draws from then on; the earlier ones stay drawings until edited.
  */
-function setMode(mode, isTheirs = false) {
+function setMode(mode, isTheirs = false, isReplay = false) {
   if (mode !== 'diagrams' && mode !== 'canvas') return
+  if (mode === 'canvas' && boardMode !== 'canvas') {
+    canvasFrom = Math.max(0, ...diagrams.map(d => d.id))
+    if (!isReplay && diagrams[current]) toEdit.add(diagrams[current].id)
+  }
+  if (mode === 'diagrams') canvasFrom = Infinity
   boardMode = mode
   document.querySelectorAll('.modes [data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)))
   if (isTheirs) {
@@ -187,8 +200,8 @@ function setMode(mode, isTheirs = false) {
 
 /** Shows the diagram on screen as a canvas, or takes the canvas away for a drawn diagram. */
 async function showEditor(d) {
-  // On a canvas board, a diagram becomes editable when it is shown.
-  if (boardMode === 'canvas' && d && !d.scene && EDITABLE.test(d.kind)) {
+  // On a canvas board, a diagram drawn since the switch, or picked, becomes editable when it is shown.
+  if (boardMode === 'canvas' && d && !d.scene && EDITABLE.test(d.kind) && (d.id > canvasFrom || toEdit.has(d.id))) {
     d.converting ??= toCanvas(d).finally(() => (d.converting = null))
     await d.converting
     if (diagrams[current] !== d) return
@@ -201,7 +214,7 @@ async function showEditor(d) {
   const isCanvas = !!d?.scene
   document.body.classList.toggle('editing', isCanvas)
   host.hidden = !isCanvas
-  $('edit').hidden = boardMode === 'canvas' || !d || !!d.scene || !EDITABLE.test(d.kind)
+  $('edit').hidden = !d || !!d.scene || !EDITABLE.test(d.kind)
   if (!isCanvas) return
   const W = await loadEditor()
   if (diagrams[current] !== d) return
@@ -376,6 +389,11 @@ function svgToPng(d) {
 
 // ---------------------------------------------------------------- controls
 
-// Edit, or the Canvas switch: the whole board becomes a canvas both edit.
-$('edit').onclick = () => setMode('canvas', true)
+// Edit: on a drawing board, the switch to a canvas (this diagram first); on a canvas, this diagram too.
+$('edit').onclick = () => {
+  const d = diagrams[current]
+  if (boardMode !== 'canvas') return setMode('canvas', true)
+  if (d) toEdit.add(d.id)
+  showEditor(d)
+}
 document.querySelectorAll('.modes [data-mode]').forEach(b => (b.onclick = () => setMode(b.dataset.mode, true)))
