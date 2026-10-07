@@ -24,9 +24,12 @@ async function marksOf(source) {
     return null
   }
   if (type === 'pie') {
-    const sections = [...db.getSections()].filter(([, v]) => v > 0)
+    const sections = [...db.getSections()]
     const total = sections.reduce((sum, [, v]) => sum + v, 0)
-    return sections.map(([label, value], n) => ({ at: ['slice', n, label], label, say: `the slice ${named(label)} (${amount(value)}, ${Math.round((value / total) * 100)}%)` }))
+    // As Mermaid draws them: in the order of the source, without slices under 1%.
+    return sections
+      .filter(([, v]) => (v / total) * 100 >= 1)
+      .map(([label, value], n) => ({ at: ['slice', n], label, say: `the slice ${named(label)} (${amount(value)}, ${Math.round((value / total) * 100)}%)` }))
   }
   if (type === 'quadrantChart') {
     const names = {}
@@ -60,45 +63,45 @@ async function marksOf(source) {
   return marks
 }
 
-/** A CSS colour in one spelling (#rrggbb), so a legend's colour and a slice's compare. */
-const paint = document.createElement('canvas').getContext('2d')
-function colourOf(css) {
-  paint.fillStyle = '#000000'
-  paint.fillStyle = css || '#000000'
-  return paint.fillStyle
-}
-
 /** The SVG with each mark findable (`data-mark`), named on hover, and lines given points to click. */
 function withMarks(svgText, marks) {
   const holder = document.createElement('div')
   holder.innerHTML = svgText
   const svg = holder.querySelector('svg')
   const slices = [...svg.querySelectorAll('path.pieCircle')]
-  // A slice is the colour of its label in the legend; failing that (more slices
-  // than colours), the slices are in the order of the source.
-  const legend = [...svg.querySelectorAll('g.legend')].map(g => [colourOf(g.querySelector('rect')?.style.fill), g.textContent.trim()])
-  const isByColour = new Set(legend.map(([c]) => c)).size === legend.length
-  const sliceOf = new Map(isByColour ? slices.map(p => [legend.find(([c]) => c === colourOf(p.getAttribute('fill')))?.[1], p]) : [])
-  const points = new Map([...svg.querySelectorAll('g.data-point')].map(g => [g.querySelector('text')?.textContent.trim(), g]))
+  const pointGroups = [...svg.querySelectorAll('g.data-point')]
+  const points = new Map(pointGroups.map(g => [g.querySelector('text')?.textContent.trim(), g]))
+  const circle = (x, y, r, cls) => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+    c.setAttribute('cx', x)
+    c.setAttribute('cy', y)
+    c.setAttribute('r', r)
+    c.setAttribute('class', cls)
+    return c
+  }
   const found = marks.map(m => {
     const [kind, a, b] = m.at
-    if (kind === 'slice') return isByColour ? sliceOf.get(b) : slices[a]
+    if (kind === 'slice') return slices[a]
     if (kind === 'point') return points.get(a)
     if (kind === 'bar') return svg.querySelectorAll(`g.bar-plot-${a} rect`)[b]
-    // A line is one path: a dot at each of its points, to click.
+    // A line is one path: at each of its points, a dot to see and, just
+    // around it, a spot to click. Elsewhere on a bar, the click is the bar's.
     const path = svg.querySelector(`g.line-plot-${a} path`)
     const at = [...(path?.getAttribute('d') ?? '').matchAll(/(-?[\d.]+)[ ,](-?[\d.]+)/g)][b]
     if (!at) return null
-    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
-    dot.setAttribute('cx', at[1])
-    dot.setAttribute('cy', at[2])
-    dot.setAttribute('r', '9')
-    dot.setAttribute('class', 'line-dot')
-    path.parentNode.append(dot)
-    return dot
+    const dot = circle(at[1], at[2], 3.5, 'line-point')
+    dot.style.fill = path.getAttribute('stroke') || '#8493a6'
+    const hit = circle(at[1], at[2], 7, 'line-dot')
+    path.parentNode.append(dot, hit)
+    return hit
   })
   // All or nothing: a chart drawn differently from how it was read is not clickable.
-  if (marks.length !== new Set(found).size || found.some(el => !el) || (slices.length && slices.length !== marks.length)) return null
+  const isWhole =
+    marks.length === new Set(found).size &&
+    found.every(Boolean) &&
+    (!slices.length || slices.length === marks.length) &&
+    (!pointGroups.length || pointGroups.length === marks.length)
+  if (!isWhole) return null
   found.forEach((el, n) => {
     el.dataset.mark = String(n)
     el.dataset.label = marks[n].label
@@ -116,13 +119,22 @@ function showPicks(d) {
   document.body.classList.toggle('on-chart', !!(svg && d?.marks))
   if (!svg || !d?.marks) return
   svg.classList.toggle('has-picks', d.picks.size > 0)
-  for (const el of svg.querySelectorAll('[data-mark]')) el.classList.toggle('picked', d.picks.has(Number(el.dataset.mark)))
-  // The hint says what goes with the next message.
-  const hint = document.querySelector('#stage-hint .chart-keys')
-  hint.dataset.idle ??= hint.textContent
-  const labels = [...d.picks].sort((a, b) => a - b).map(n => d.marks[n].label)
-  hint.textContent = labels.length ? `Selected: ${labels.join(', ')} · goes with your next message · Esc clears` : hint.dataset.idle
-  hint.classList.toggle('picked', labels.length > 0)
+  for (const el of svg.querySelectorAll('[data-mark]')) {
+    const isPicked = d.picks.has(Number(el.dataset.mark))
+    el.classList.toggle('picked', isPicked)
+    // On top of its neighbours, so its outline shows whole.
+    const last = [...el.parentNode.children].filter(c => c.tagName === el.tagName).pop()
+    if (isPicked && last !== el) last.after(el)
+  }
+  // The hint says what goes with the next message: with keys, or by touch.
+  // As Claude will read them (a bar and a line's point can share a label).
+  const labels = [...d.picks].sort((a, b) => a - b).map(n => d.marks[n].say.replace(/^the /, ''))
+  for (const [cls, clear] of [['chart-keys', 'Esc clears'], ['chart-touch', 'tap beside it to clear']]) {
+    const hint = document.querySelector(`#stage-hint .${cls}`)
+    hint.dataset.idle ??= hint.textContent
+    hint.textContent = labels.length ? `Selected: ${labels.join(', ')} · goes with your next message · ${clear}` : hint.dataset.idle
+    hint.classList.toggle('picked', labels.length > 0)
+  }
 }
 
 /** What is selected on a chart, in words. */

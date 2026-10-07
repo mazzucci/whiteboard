@@ -7,8 +7,10 @@
   more, Escape or a click beside it clears), and the next message says what is
   selected, with its value: "Selected on the board, in "Pets": the slice "Dogs"
   (386, 79%)". The selection goes with that one message, then clears. Each
-  chart keeps its own until then; the hint under the board names it. Hovering a
-  mark shows its value.
+  chart keeps its own until then; the hint under the board names it (on a
+  touch screen: tap to select, tap beside it to clear). Hovering a mark shows
+  its value; a line's points show as dots. A pie with `showData`, or with a
+  slice under 1% (which Mermaid does not draw), is clickable too.
 - Sticky notes can sit on a chart's slice, bar or point, named by its label
   (any text: `on` is no longer limited to an id).
 - A sticky note whose `on` names nothing on the diagram is told to Claude

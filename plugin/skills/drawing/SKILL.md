@@ -247,11 +247,15 @@ drill into a part, draw a new chart of just that part (it becomes the next tab),
 and say where it came from. A sticky note can sit on a slice, a bar or a point:
 `on` is its label, as written in the source.
 
-Syntax: quote labels that have spaces or punctuation (`"pricing.quote"`); pie
-values are positive numbers; `xychart-beta`, with the `-beta`; a quadrant
-point is `Name: [x, y]` with x and y between 0 and 1. Upright bars have room
-for a word under each: with longer labels (span names, file paths), use
-`xychart-beta horizontal`, where they read in a column.
+Syntax: pie labels are always quoted (`"Dogs" : 386`), values are positive,
+and a slice under 1% of the total is not drawn (fold it into "other"). In an
+xychart, quote x-axis labels that have spaces or punctuation
+(`"pricing.quote"`). A quadrant point is `Name: [x, y]`, each coordinate
+written like `0.85`, `0` or `1` (not `1.0` or `.5`), and each name once. Upright
+bars have room for a word under each: with longer labels (span names, file
+paths), use `xychart-beta horizontal`, where they read in a column. A sticky
+note's `on` names a label; when a bar and a line point share it, the note goes
+by the bar.
 
 ## Diagrams or canvas
 

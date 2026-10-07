@@ -789,7 +789,8 @@ const pinned = id => (stickies.has(id) ? stickies.get(id) : stickies.set(id, [])
 const boxIn = (root, on) =>
   on
     ? [...root.querySelectorAll('g.node[id]')].find(g => g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '') === on) ??
-      [...root.querySelectorAll('[data-mark]')].find(el => el.dataset.label === on)
+      // A bar before a line's point with the same label.
+      [...root.querySelectorAll('[data-mark]')].filter(el => el.dataset.label === on).sort((a, b) => a.classList.contains('line-dot') - b.classList.contains('line-dot'))[0]
     : undefined
 const boxOf = on => boxIn(canvas, on)
 

@@ -21,10 +21,12 @@ async function chart(title, mermaid, extra = {}) {
 }
 /** Every mark on screen: its label, what it says, whether it is selected. */
 const marks = () =>
-  page.$$eval('#canvas [data-mark]', els => els.map(el => ({ label: el.dataset.label, say: el.querySelector('title').textContent, picked: el.classList.contains('picked') })))
+  page.$$eval('#canvas [data-mark]', els =>
+    els.sort((a, b) => a.dataset.mark - b.dataset.mark).map(el => ({ label: el.dataset.label, say: el.querySelector('title').textContent, picked: el.classList.contains('picked') })),
+  )
 /** Clicks a mark by its label, as the person would (Shift with `isAdding`). */
 async function click(label, isAdding = false) {
-  const el = await page.$(`#canvas [data-mark][data-label="${label}"]`)
+  const el = (await page.$(`#canvas [data-mark][data-label="${label}"]:not(.line-dot)`)) ?? (await page.$(`#canvas [data-mark][data-label="${label}"]`))
   const box = await el.boundingBox()
   if (isAdding) await page.keyboard.down('Shift')
   // Inside the mark: a slice's centre may be outside it, so aim at its middle point on screen.
@@ -47,16 +49,20 @@ test('a pie: each slice by its label (its colour in the legend)', async () => {
   await chart('Pets', 'pie title Pets\n  "Rats" : 15\n  "Dogs" : 386\n  "Cats" : 85')
   const all = await marks()
   assert.deepEqual(all.map(m => m.label).sort(), ['Cats', 'Dogs', 'Rats'])
-  // The biggest slice is the one that says Dogs.
-  const sizes = await page.$$eval('#canvas [data-mark]', els => els.map(el => [el.dataset.label, el.getBBox().width * el.getBBox().height]))
-  assert.equal(sizes.sort((a, b) => b[1] - a[1])[0][0], 'Dogs')
+  // Each slice is the colour its label has in the legend.
+  const pairs = await page.evaluate(() => {
+    const css = c => Object.assign(document.createElement('canvas').getContext('2d'), { fillStyle: c }).fillStyle
+    const legend = Object.fromEntries([...document.querySelectorAll('#canvas g.legend')].map(g => [g.textContent.trim(), css(getComputedStyle(g.querySelector('rect')).fill)]))
+    return [...document.querySelectorAll('#canvas [data-mark]')].map(el => [legend[el.dataset.label], css(getComputedStyle(el).fill)])
+  })
+  for (const [inLegend, onSlice] of pairs) assert.equal(onSlice, inLegend)
   assert.match(all.find(m => m.label === 'Dogs').say, /slice "Dogs" \(386, 79%\)/)
 })
 
 test('a click selects a slice and the next message says so, then the selection is gone; a second click lets go', async () => {
   await click('Dogs')
   assert.deepEqual(await picked(), ['Dogs'])
-  assert.match(await page.$eval('#stage-hint .chart-keys', el => el.textContent), /^Selected: Dogs · goes with your next message/)
+  assert.match(await page.$eval('#stage-hint .chart-keys', el => el.textContent), /^Selected: slice "Dogs" \(386, 79%\) · goes with your next message/)
   await send(page, 'why so many?')
   const msg = await b.until(() => b.said.find(s => s.endsWith('why so many?')), 'the message')
   assert.match(msg, /^Selected on the board, in "Pets": the slice "Dogs" \(386, 79%\)\n\nwhy so many\?$/)
@@ -154,6 +160,48 @@ test('a note sits on a bar named by a label with spaces and punctuation, and one
   const [onBar] = await page.$$eval('.sticky', els => els.filter(el => el.textContent.includes('N+1')).map(el => el.getBoundingClientRect().toJSON()))
   const bar = await (await page.$('#canvas [data-mark]')).boundingBox()
   assert.ok(Math.abs(onBar.x + onBar.width / 2 - (bar.x + bar.width / 2)) < 120, 'the note is by its bar')
+})
+
+test('a pie with its values shown, or with a slice under 1%, is still clickable; a note on the hidden slice is told to Claude', async () => {
+  const out = await b.call('/post', { title: 'Shown', mermaid: 'pie showData\n  "Dogs" : 386\n  "Cats" : 85\n  "Fish" : 1', notes: [{ on: 'Dogs', text: 'Most' }, { on: 'Fish', text: 'Hidden' }] })
+  await b.until(async () => (await look(page)).tab === 'Shown' && (await page.$('svg.chart')), 'the pie')
+  assert.deepEqual((await marks()).map(m => m.label), ['Dogs', 'Cats'])
+  assert.deepEqual(out.noteErrors, ['no box or chart label "Fish" on the diagram, so that note sits beside it'])
+})
+
+test("a line's points show as dots and are clicked there; the rest of a bar under one is the bar's", async () => {
+  await chart('Line', 'xychart-beta\n  x-axis [a, b, c]\n  y-axis 0 --> 10\n  bar [5, 5, 5]\n  line [2, 5, 8]')
+  assert.equal((await page.$$('#canvas .line-point')).length, 3)
+  const centre = sel => page.$eval(sel, el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
+  // The point "b" sits on its bar's top edge: a click on the dot selects the point.
+  const dot = await centre('#canvas .line-dot[data-label="b"]')
+  await page.mouse.click(dot.x, dot.y)
+  assert.deepEqual((await marks()).filter(m => m.picked).map(m => m.say), ['point "b" on the line (5)'])
+  // Just beside the dot, still on the bar's top: the bar.
+  const bar = await (await page.$('#canvas rect[data-label="b"]')).boundingBox()
+  await page.mouse.click(bar.x + 12, bar.y + 3)
+  assert.deepEqual((await marks()).filter(m => m.picked).map(m => m.say), ['bar "b" (5)'])
+  // The point "a" is inside its bar, and still clickable at its dot.
+  const a = await centre('#canvas .line-dot[data-label="a"]')
+  await page.mouse.click(a.x, a.y)
+  assert.deepEqual((await marks()).filter(m => m.picked).map(m => m.say), ['point "a" on the line (2)'])
+  await page.keyboard.press('Escape')
+})
+
+test('a note on a label a bar and a line point share goes by the bar', async () => {
+  await chart('Shared', 'xychart-beta\n  x-axis [a, b]\n  y-axis 0 --> 10\n  line [9, 9]\n  bar [2, 2]', { notes: [{ on: 'a', text: 'here' }] })
+  await b.until(() => page.$('.sticky'), 'the note')
+  const note = await (await page.$('.sticky')).boundingBox()
+  const bar = await (await page.$('#canvas rect[data-label="a"]')).boundingBox()
+  assert.ok(note.y >= bar.y + bar.height - 2 || note.x >= bar.x + bar.width - 2, `the note by the bar: ${JSON.stringify({ note, bar })}`)
+  assert.ok(Math.abs(note.y - (bar.y + bar.height)) < 60 || Math.abs(note.x - (bar.x + bar.width)) < 60, 'close to it')
+})
+
+test('a quadrant chart with a name twice is drawn, not clickable', async () => {
+  await b.call('/post', { title: 'Dup', mermaid: 'quadrantChart\n  A: [0.2, 0.3]\n  A: [0.7, 0.8]\n  B: [0.5, 0.5]' })
+  await b.until(async () => (await look(page)).tab === 'Dup', 'the chart')
+  await sleep(200)
+  assert.equal(await page.$('#canvas [data-mark]'), null)
 })
 
 test('diagrams that are not charts are not clickable, and nothing failed', async () => {
