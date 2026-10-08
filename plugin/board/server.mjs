@@ -52,6 +52,7 @@ const STATIC = {
   '/app.js': ['text/javascript', pageFile('app.js')],
   '/editing.js': ['text/javascript', pageFile('editing.js')],
   '/charts.js': ['text/javascript', pageFile('charts.js')],
+  '/export.js': ['text/javascript', pageFile('export.js')],
   '/app.css': ['text/css', pageFile('app.css')],
 }
 // The canvas editor, read when first asked for: most boards never edit.

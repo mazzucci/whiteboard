@@ -257,6 +257,15 @@ paths), use `xychart-beta horizontal`, where they read in a column. A sticky
 note's `on` names a label; when a bar and a line point share it, the note goes
 by the bar.
 
+## Saving
+
+The board is kept only while the session runs. When the user wants to keep a
+diagram or the whole discussion, point them at the page: **Export** on a
+diagram (SVG, PNG, an `.excalidraw` file for an edited one, or the Mermaid
+source) and **Save board** (one web page, or Markdown with each diagram as a
+`mermaid` block). To put a diagram in the repository, write its Mermaid source
+into a Markdown file yourself.
+
 ## Diagrams or canvas
 
 The board has two modes. **Diagrams** (the default): your diagrams as you

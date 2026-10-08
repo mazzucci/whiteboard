@@ -172,6 +172,8 @@ test('a pie with its values shown, or with a slice under 1%, is still clickable;
 test("a line's points show as dots and are clicked there; the rest of a bar under one is the bar's", async () => {
   await chart('Line', 'xychart-beta\n  x-axis [a, b, c]\n  y-axis 0 --> 10\n  bar [5, 5, 5]\n  line [2, 5, 8]')
   assert.equal((await page.$$('#canvas .line-point')).length, 3)
+  // A click spot is transparent in the drawing itself: a picture of it (an export, Claude's look) shows only the dot.
+  assert.ok(await page.evaluate(() => diagrams[current].svg.match(/<circle[^>]*class="line-dot"[^>]*>/g).every(c => /fill="transparent"/.test(c))))
   const centre = sel => page.$eval(sel, el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } })
   // The point "b" sits on its bar's top edge: a click on the dot selects the point.
   const dot = await centre('#canvas .line-dot[data-label="b"]')

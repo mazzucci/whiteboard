@@ -124,6 +124,14 @@ evidence shows, then a proposed fix.
   what you changed on a canvas and your messages, including a sample or a file
   you opened yourself; and a picture of a diagram when words are not enough.
 - **Closed the tab?** Claude's next post opens it again, with everything so far.
+- **Export a diagram, or save the board.** **Export** on a diagram downloads it
+  as an SVG or a PNG, or copies its Mermaid source; a diagram you edited
+  downloads as a PNG or an `.excalidraw` file that opens, still editable, at
+  excalidraw.com. **Save board** (top right, and on the wrap-up banner)
+  downloads the whole board as one file: a web page with every diagram, its
+  sticky notes and source, and the conversation, which opens anywhere without
+  the plugin; or Markdown, with each diagram as a `mermaid` block, to paste
+  into an issue, a pull request or your notes.
 - **Wrap up.** One button asks Claude to summarise what you concluded in the
   conversation; then the page says so and closes its tab (or, if the browser
   does not let a page close itself, tells you it is done).
@@ -387,7 +395,9 @@ goes into your Claude Code session as your own words. So:
   picture, the page draws the diagram as an image and it goes into the
   conversation, like a screenshot you pasted.
 - **Gone with the session.** The board keeps everything in memory and stops
-  when the session ends or after Wrap up.
+  when the session ends or after Wrap up. Nothing is written anywhere unless
+  you export or save: those are ordinary downloads, made in the page, and the
+  saved web page runs no scripts.
 
 ## Limits
 
@@ -402,6 +412,9 @@ goes into your Claude Code session as your own words. So:
   Code, not on a phone or another computer.
 - Sticky notes sit beside a box in flowcharts; in other diagram types they line
   up beside the diagram.
+- An exported diagram is the diagram alone: its sticky notes are in the saved
+  board. A diagram you edited exports as a PNG or an `.excalidraw` file, not an
+  SVG.
 - A diagram you edit keeps its boxes, colours and arrows but not every Mermaid
   detail (a database cylinder becomes a box, for one); gantt, pie and the
   other types without boxes and arrows cannot be edited.

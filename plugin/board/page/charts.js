@@ -92,6 +92,8 @@ function withMarks(svgText, marks) {
     const dot = circle(at[1], at[2], 3.5, 'line-point')
     dot.style.fill = path.getAttribute('stroke') || '#8493a6'
     const hit = circle(at[1], at[2], 7, 'line-dot')
+    // Transparent in the drawing itself, so its pictures (exports, Claude's look) show only the dot.
+    hit.setAttribute('fill', 'transparent')
     path.parentNode.append(dot, hit)
     return hit
   })

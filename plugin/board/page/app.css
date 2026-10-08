@@ -133,6 +133,18 @@ body.editing .canvas, body.editing .stage .hint, body.editing #zoom-in, body.edi
 .error { color: var(--error); white-space: pre-wrap; font: 12px var(--mono); }
 [hidden] { display: none !important; }
 
+/* menus: Export on the toolbar, Save board in the header */
+.menu-wrap { position: relative; display: inline-flex; }
+.menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; display: grid; min-width: 200px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 8px 24px rgba(0, 0, 0, .14); }
+.menu.right { left: auto; right: 0; }
+.menu[hidden], .menu button[hidden] { display: none; }
+.menu button { padding: 6px 10px; border: 0; border-radius: 6px; background: none; text-align: left; white-space: nowrap; cursor: pointer; font-size: 13px; }
+.menu button:hover, .menu button:focus-visible { background: var(--soft); }
+.top .save { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--muted); font-size: 13px; cursor: pointer; }
+.top .save:hover { background: var(--soft); color: var(--ink); }
+.top .save .i { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ended .buttons { display: inline-flex; gap: 8px; }
+
 /* wrapped up */
 .ended {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 5; width: min(520px, calc(100% - 32px));
@@ -222,6 +234,11 @@ body.on-chart .hint .chart-keys { display: inline; }
   .toolbar .title { font-size: 13.5px; }
   .controls { gap: 4px; }
   .controls .lbl { display: none; }
+  .top .save .lbl { display: none; }
+  .menu { max-width: calc(100vw - 24px); }
+  .menu button { white-space: normal; }
+  .menu.right { position: fixed; top: 52px; left: 12px; right: 12px; }
+  .top .save { padding: 6px 9px; }
   .controls button { padding: 6px 9px; }
   .controls .i { width: 17px; height: 17px; }
   .controls .sep { margin: 0 2px; }

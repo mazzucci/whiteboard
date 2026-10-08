@@ -110,6 +110,8 @@ function markdown(text) {
 
 /** Drawn diagrams, in the order they arrived: { id, title, source, kind, legend, svg, w, h, view }. */
 let diagrams = []
+/** What the board said, in order (Claude's notes and diagrams, the person's replies): for a saved board. */
+const cardLog = []
 let current = -1
 let isCode = false
 let seq = 0
@@ -389,9 +391,11 @@ async function add(card, isReplay) {
   }
   if (card.kind === 'remove') {
     document.querySelectorAll(`[data-card="${card.id}"]`).forEach(el => el.remove())
+    if (cardLog.some(c => c.id === card.id)) cardLog.splice(cardLog.findIndex(c => c.id === card.id), 1)
     return
   }
   if (card.kind === 'you') {
+    cardLog.push(card)
     addMessage(card, markdown(card.text), isReplay)
     return
   }
@@ -447,6 +451,7 @@ async function add(card, isReplay) {
     for (const note of card.notes ?? []) pinned(card.id).push({ by: 'claude', ...note })
   }
   if (card.text || drawn || title) {
+    cardLog.push(card)
     const head = card.title && card.text ? `<p><b>${esc(card.title)}</b></p>` : ''
     const el = addMessage(card, head + (card.text ? markdown(card.text) : drawn ? '' : `<p><b>${esc(title)}</b></p>`), isReplay)
     if (drawn) {
@@ -752,7 +757,7 @@ function wrappedUp(card) {
   document.body.classList.add('has-banner')
   banner.innerHTML =
     `<div><b>Wrapped up.</b> ${card.text ? markdown(card.text).replace(/^<p>|<\/p>$/g, '') : "Claude's summary is in the Claude Code conversation."}</div>` +
-    '<div class="row"><span id="countdown"></span><button type="button" id="keep">Keep open</button></div>'
+    '<div class="row"><span id="countdown"></span><span class="buttons"><button type="button" id="save-ended" title="Every diagram, its notes and the conversation, as one web page">Save board</button><button type="button" id="keep">Keep open</button></span></div>'
   document.body.append(banner)
   let left = 5
   const tick = () => {
@@ -772,6 +777,12 @@ function wrappedUp(card) {
     clearInterval(timer)
     $('countdown').textContent = 'Kept open. The board is read-only now.'
     $('keep').hidden = true
+  }
+  // Saving keeps the page open: the save may take a moment, and the person may want another.
+  $('save-ended').onclick = async () => {
+    $('keep').click()
+    await SAVES.html()
+    $('countdown').textContent = 'Saved. The board is read-only now.'
   }
 }
 
