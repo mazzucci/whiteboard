@@ -80,6 +80,28 @@ in `crop` (points), its last frame held `hold` seconds with the line at
 blurred. `WINDOW=1` puts the page in a plain browser window; the take for
 the README ran with `REC_W=1120` for the recorder, a browser window's width.
 
+## The README's GIF: a design session with a side board
+
+`media/board-demo/recorder-sideboard.mjs` stands in for the person in a
+design: it clicks Claude's lean on each constraint but the database, says
+"Let's whiteboard relational vs non-relational for where orders and stock
+live", runs the pointer down the comparison on the side board Claude opens,
+decides on its first option, waits for Claude to carry it back and propose,
+and wraps up. Start it as above, then Claude Code (in any trusted folder; the
+board's label is replaced in the GIF) with this prompt:
+
+```
+Let's design the checkout flow for our small online shop together on the whiteboard. Settle the constraints with me first; we are unsure where orders and stock should live. Keep your answers short.
+```
+
+`python3 media/board-demo/edit-sideboard.py "$REC" out/` writes
+`out/whiteboard.gif` (about 40 s, about 4 MB), relabelling the board
+`checkout` (`LABEL=` to change it); copy it to `media/whiteboard.gif`.
+`recorder-brief.mjs` and `recorder-decide.mjs` record a brief and a decision
+on their own, for checking those by eye.
+
+The GIFs below are no longer in the README; their scripts still work.
+
 ## The before/after GIF
 
 The same idea with `media/board-demo/recorder-qa.mjs`, which asks a
@@ -102,9 +124,9 @@ This is our investigation of the slow checkout endpoint (investigation.md). On t
 ```
 
 `python3 media/board-demo/edit-charts.py "$REC" out/` writes
-`out/whiteboard-charts.gif`; copy it to `media/`.
+`out/whiteboard-charts.gif`.
 
-## The edit
+## The earlier README GIF's edit
 
 ```bash
 FIRST=2.4 WINDOW=1 SPEED=1.4 GIF_W=1000 python3 media/board-demo/edit.py "$REC" out/ "$REC/terminal"
@@ -112,4 +134,4 @@ FIRST=2.4 WINDOW=1 SPEED=1.4 GIF_W=1000 python3 media/board-demo/edit.py "$REC" 
 
 It adds the title card, speeds up the waits (and everything by `SPEED`), puts a caption under each step,
 adds the Terminal slides, and writes the MP4s and `out/whiteboard.gif`
-(about 32 s, about 5 MB); `FIRST` keeps only that many seconds of the first diagram. Copy the GIF to `media/whiteboard.gif`.
+(about 32 s, about 5 MB); `FIRST` keeps only that many seconds of the first diagram.

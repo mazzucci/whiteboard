@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 (unreleased)
+## 0.6.0
 
 - **A brief beside the diagrams.** When Claude explains a concept, briefs you
   on a document or sums up an investigation, it can write a brief next to the
@@ -37,6 +37,9 @@
     it.
   - Claude's posts go to the board you are looking at; the main board lists
     its side boards and where each stands. Save board includes them.
+- **A shorter README,** with one GIF: a design session, from constraints to a
+  side board to the proposal. The earlier GIFs' scripts are still in
+  `media/board-demo/`.
 
 ## 0.5.1
 
