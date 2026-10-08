@@ -607,3 +607,34 @@ test('a section without an id or a line is named, not dropped quietly; a rejecte
   expect(said(broken)).toContain('It was taken off the page, and the brief with it. Fix the source and post again, brief and all.')
   stop()
 })
+
+// ---------------------------------------------------------------- deciding
+
+test('a decision is posted in decide mode, changed with settle and brief_mode, and read back with where each constraint stands', async ($, on) => {
+  const brief = {
+    mode: 'decide',
+    bottomLine: 'No proposal yet.',
+    sections: [
+      { id: 'accounts', kind: 'constraint', title: 'Accounts', line: 'Guest or account?', status: 'settled', chosen: 'guest', settledBy: 'you', choices: [{ id: 'guest', label: 'Guest checkout' }, { id: 'required', label: 'Required' }], asks: [] },
+      { id: 'stock', kind: 'constraint', title: 'Stock', line: 'When is stock held?', status: 'open', lean: 'pay', choices: [{ id: 'pay', label: 'At payment' }, { id: 'cart', label: 'In the cart' }], asks: [] },
+      { id: 'markets', kind: 'constraint', title: 'Markets', line: 'One country.', status: 'assumed', lean: 'one', choices: [{ id: 'one', label: 'One country' }], asks: [] },
+      { id: 'email', kind: 'constraint', title: 'Email first', line: 'Email first?', status: 'open', suggested: true, asks: [] },
+      { id: 'gift', kind: 'idea', title: 'Gift cards', line: 'Later.', by: 'you', asks: [] },
+    ],
+    dropped: [],
+  }
+  const { posts, stop } = host(on, { brief, page: body => (body.briefOps || body.briefMode ? ({ ok: true, viewers: 1, drawn: false, done: 2, errors: [] } as never) : { ok: true, viewers: 1, drawn: true }) })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', bottom_line: 'No proposal yet.', brief_mode: 'decide', sections: [{ id: 'stock', kind: 'constraint', line: 'When?', choices: [{ id: 'pay', label: 'At payment' }], lean: 'pay' }] })
+  expect(posts.at(-1)).toMatchObject({ brief: { mode: 'decide', sections: [{ id: 'stock', kind: 'constraint', lean: 'pay' }] } })
+  const out = await $.tool.call({ tool: 'mcp__whiteboard__edit_board', brief_mode: 'brief', sections: [{ op: 'settle', id: 'stock', choice: 'pay' }] })
+  expect(posts.at(-1)).toMatchObject({ briefMode: 'brief', briefOps: [{ op: 'settle', id: 'stock', choice: 'pay' }] })
+  expect(said(out)).toContain('Changed the brief: 2 of 2 applied.')
+  const read = said(await $.tool.call({ tool: 'mcp__whiteboard__read_board' }))
+  expect(read).toContain('A decision: 1 constraint still open (stock); propose the design once none is.')
+  expect(read).toContain('`accounts` [settled by the user: Guest checkout] Accounts: Guest or account?')
+  expect(read).toContain('`stock` [open; choices pay, cart; you lean pay] Stock: When is stock held?')
+  expect(read).toContain('`markets` [assumed: One country; choices one] Markets: One country.')
+  expect(read).toContain('`email` [your suggestion, not yet taken] Email first: Email first?')
+  expect(read).toContain('`gift` [idea from the user] Gift cards: Later.')
+  stop()
+})

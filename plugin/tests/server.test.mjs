@@ -350,3 +350,59 @@ test('a brief posted with a diagram Mermaid rejects is taken off with it', async
   assert.equal((await posting).error, 'Parse error')
   assert.deepEqual((await cardsNow()).brief, before)
 })
+
+// ---------------------------------------------------------------- deciding
+
+test('a decision: constraints with choices, settled by the person on the page or by Claude, suggestions taken or not', async () => {
+  const posted = await briefPost({
+    isNew: true,
+    brief: {
+      mode: 'decide',
+      bottomLine: 'No proposal yet.',
+      sections: [
+        { id: 'accounts', kind: 'constraint', line: 'Guest or account?', choices: [{ id: 'guest', label: 'Guest' }, { id: 'required', label: 'Required' }, { id: 'bad id', label: 'x' }], lean: 'guest' },
+        { id: 'markets', kind: 'constraint', status: 'assumed', line: 'One country.', choices: [{ id: 'one', label: 'One' }, { id: 'many', label: 'Several' }], lean: 'one' },
+        { id: 'stock', kind: 'constraint', line: 'When is stock held?', choices: [{ id: 'pay', label: 'At payment' }], lean: 'nope' },
+        { id: 'note', line: 'A plain point.', choices: [{ id: 'x', label: 'ignored' }] },
+      ],
+    },
+  })
+  assert.equal(posted.ok, true)
+  let { brief } = await cardsNow()
+  assert.equal(brief.mode, 'decide')
+  const [accounts, markets, stock, note] = brief.sections
+  assert.deepEqual([accounts.status, accounts.lean, accounts.choices.map(c => c.id)], ['open', 'guest', ['guest', 'required']])
+  assert.deepEqual([markets.status, markets.lean], ['assumed', 'one'])
+  assert.equal(stock.lean, undefined, 'a lean that is no choice is dropped')
+  assert.deepEqual([note.kind, note.choices, note.status], ['point', undefined, undefined])
+
+  // The person settles two on the page, in one message; one of their picks names no choice.
+  await postJson('/say', { text: 'My choices on the board: Accounts: Guest; Markets: confirmed.', choices: [{ id: 'accounts', choice: 'guest' }, { id: 'markets' }, { id: 'stock', choice: 'never' }] })
+  brief = (await cardsNow()).brief
+  assert.deepEqual(brief.sections.map(s => [s.id, s.status, s.chosen, s.settledBy]).slice(0, 3), [['accounts', 'settled', 'guest', 'you'], ['markets', 'settled', 'one', 'you'], ['stock', 'open', undefined, undefined]])
+
+  // Claude settles from words, reopens, suggests; the person takes one suggestion and turns down another.
+  const out = await briefPost({
+    briefOps: [
+      { op: 'settle', id: 'stock', choice: 'pay' },
+      { op: 'settle', id: 'note' },
+      { op: 'settle', id: 'accounts', choice: 'nope' },
+      { op: 'reopen', id: 'markets' },
+      { op: 'add', id: 'email', kind: 'constraint', line: 'Email first?', suggested: true },
+      { op: 'add', id: 'gift', kind: 'idea', line: 'Gift cards later.', suggested: true, by: 'you' },
+    ],
+  })
+  assert.equal(out.done, 4)
+  assert.match(out.errors[0], /#2 note: only a constraint is settled/)
+  assert.match(out.errors[1], /#3 accounts: "nope" is not one of its choices \(guest, required\)/)
+  await postJson('/say', { text: 'My choices on the board: Email first: take it; Gift cards: not now.', choices: [{ id: 'email', choice: 'accept' }, { id: 'gift', choice: 'decline' }] })
+  brief = (await cardsNow()).brief
+  const byId = Object.fromEntries(brief.sections.map(s => [s.id, s]))
+  assert.deepEqual([byId.stock.status, byId.stock.settledBy, byId.markets.status, byId.markets.chosen], ['settled', 'claude', 'open', undefined])
+  // A suggested constraint with no choices is settled by taking it.
+  assert.deepEqual([byId.email.suggested, byId.email.status, byId.email.settledBy], [undefined, 'settled', 'you'])
+  assert.deepEqual(brief.dropped.find(s => s.id === 'gift')?.why, 'not wanted')
+  // The mode changes with a word from Claude.
+  assert.equal((await briefPost({ briefMode: 'brief' })).done, 1)
+  assert.equal((await cardsNow()).brief.mode, 'brief')
+})

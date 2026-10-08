@@ -747,12 +747,16 @@ new ResizeObserver(() => {
 const box = $('text')
 async function send(text, isTyped = true, about = isTyped ? briefAbout() : null) {
   const asked = about?.asked ?? text.trim()
+  // Choices on the brief go with any message, or alone.
+  const chose = isTyped ? briefChoicesSaid() : ''
   // Changes made on a canvas go first, in words (and what is selected, for what they typed).
   text = withChanges(text.trim(), isTyped)
+  if (chose) text = text ? `${chose}\n\n${text}` : chose
   // A question about a section of the brief says which, so the answer lands under it.
   if (about && asked && text.endsWith(asked)) text = `${text.slice(0, -asked.length)}${about.said}\n${asked}`
   // More detail is asked for, not a question: nothing waits under the section for an answer.
-  if (text) await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}) })
+  const choices = chose ? briefChoicesSent() : undefined
+  if (text) await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}), ...(choices ? { choices } : {}) })
   if (about && asked && text) briefSent()
 }
 $('form').onsubmit = e => {

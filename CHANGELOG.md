@@ -14,6 +14,18 @@
     ones are listed with why. The conversation notes each change.
   - Sources show as § links: the spec, the doc, or the file and line.
   - Save board puts the brief first, in the web page and in Markdown.
+- **Decide together.** When you are designing something or choosing between
+  options, Claude can make the brief a decision: the constraints that decide
+  it first, then its proposal.
+  - Each constraint shows its choices, with the one Claude leans towards.
+    Click your choices and they go together with your next message (or Send
+    on its own); they are settled at once.
+  - An assumption Claude made is marked as such, for you to confirm.
+  - The diagram says what is still open: the boxes a constraint decides are
+    dashed while it is open and green once it is settled.
+  - The header waits on what is open, then shows the proposal.
+  - Claude restructures as you go: a choice can drop a constraint or raise a
+    new one, and Claude's suggestions are yours to take or turn down.
 
 ## 0.5.1
 

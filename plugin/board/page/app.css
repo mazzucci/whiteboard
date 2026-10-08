@@ -300,6 +300,32 @@ a.cite:hover { color: var(--accent); border-color: var(--accent); }
 .brief .dropped .k { color: var(--muted); margin-bottom: 4px; }
 .brief .dropped s { color: var(--ink); opacity: .7; }
 .brief-hint { margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+/* a decision: constraints with their state and choices, the open ones counted above */
+.brief .bottom-line.waiting { background: color-mix(in srgb, #f59e0b 12%, var(--panel)); border-left-color: #d97706; }
+.brief .bottom-line.waiting .k { color: #b45309; }
+.brief .open-list { margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.brief .progress { display: flex; align-items: center; gap: 4px; margin: 8px 0 2px; font-size: 12px; color: var(--muted); }
+.brief .progress i { width: 22px; height: 5px; border-radius: 3px; background: var(--line); }
+.brief .progress i.settled { background: #22a35a; } .brief .progress i.assumed { background: #f0b45c; }
+.brief .progress span { margin-left: 6px; }
+.brief .pill { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 7px; font-size: 10.5px; font-weight: 700; letter-spacing: .02em; text-transform: none; vertical-align: 1px; }
+.brief .pill.open { color: #b45309; border: 1px dashed #d97706; }
+.brief .pill.assumed { color: #8a5a00; background: #fff4d6; }
+.brief .pill.settled { color: #17733d; background: #e3f6ea; }
+.brief .pill.idea { color: var(--ink); background: var(--you); }
+.brief .pill.suggested { color: var(--accent); border: 1px dashed var(--accent); }
+.brief .from { margin-left: 6px; font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+.brief .choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.brief .choices button { padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; font-size: 13px; text-align: left; }
+.brief .choices button small { display: block; color: var(--muted); font-size: 11px; }
+.brief .choices button small.leans { color: var(--accent); }
+.brief .choices button:hover { border-color: var(--accent); }
+.brief .choices button.chosen { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel)); box-shadow: inset 0 0 0 1px var(--accent); }
+.brief .settled-line { margin-top: 4px; font-size: 13px; color: #17733d; }
+/* On the map, each constraint's boxes say where it stands (the board is white in both themes). */
+.canvas g.node.st-open rect, .canvas g.node.st-open polygon, .canvas g.node.st-open path, .canvas rect.actor.st-open { stroke: #d97706 !important; stroke-width: 2.5px !important; stroke-dasharray: 6 4; fill: #fff7ed !important; }
+.canvas g.node.st-assumed rect, .canvas g.node.st-assumed polygon, .canvas g.node.st-assumed path, .canvas rect.actor.st-assumed { stroke: #f0b45c !important; stroke-width: 2.5px !important; }
+.canvas g.node.st-settled rect, .canvas g.node.st-settled polygon, .canvas g.node.st-settled path, .canvas rect.actor.st-settled { stroke: #22a35a !important; stroke-width: 2.5px !important; fill: #effaf3 !important; }
 .brief-status { display: none; align-items: center; gap: 8px; padding: 6px 16px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); }
 body.pane-brief .brief-status:not([hidden]) { display: flex; }
 .brief-status .dots { display: inline-flex; gap: 3px; }

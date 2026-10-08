@@ -218,7 +218,9 @@ const BOARD_NOTE =
   '(a note, a diagram, sticky notes), and keep what you write here to a line. When it is about a section of the brief ' +
   `("About the brief's section \`id\`"), answer under that section with ${EDIT_TOOL} ` +
   "(sections: [{ op: 'answer', id, text }]), and update the section's line, or the bottom line, if the answer changes it. " +
-  "When it asks for more detail, write it as that section's body (sections: [{ op: 'update', id, body }])."
+  "When it asks for more detail, write it as that section's body (sections: [{ op: 'update', id, body }]). " +
+  '"My choices on the board: …" are constraints the user settled there (already settled): update the diagram and the ' +
+  'brief for them, and once none is open, write your proposal as the bottom line.'
 /** Said when the person, after talking on the page, types in the conversation again. */
 const BACK_NOTE =
   'The user is back in this conversation: they typed this here, not on the whiteboard. Focus mode, if it was on, ' +
@@ -375,16 +377,40 @@ type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; no
 // ---------------------------------------------------------------- the brief
 
 /** A section of the brief, as Claude writes it. */
-type SectionInput = { id: string; title?: string; line: string; body?: string; focus?: string[]; cites?: { label: string; url?: string }[] }
-type BriefInput = { bottomLine: string; sections: SectionInput[] }
-/** A section as the board holds it: with the person's questions and Claude's answers, and the line it had before. */
-type Section = SectionInput & { was?: string; asks: { question?: string; answer?: string }[]; why?: string }
-type Brief = { bottomLine: string; wasBottomLine?: string; sections: Section[]; dropped: Section[] }
+type SectionInput = {
+  id: string
+  title?: string
+  line: string
+  body?: string
+  focus?: string[]
+  cites?: { label: string; url?: string }[]
+  kind?: 'point' | 'constraint' | 'idea'
+  choices?: { id: string; label: string; hint?: string }[]
+  lean?: string
+  status?: 'open' | 'assumed' | 'settled'
+  by?: 'you'
+  suggested?: boolean
+}
+type BriefInput = { bottomLine: string; sections: SectionInput[]; mode?: 'brief' | 'decide' }
+/** A section as the board holds it: with the person's questions and Claude's answers, the line it had before, and what was chosen. */
+type Section = SectionInput & { was?: string; asks: { question?: string; answer?: string }[]; why?: string; chosen?: string; settledBy?: 'you' | 'claude' }
+type Brief = { bottomLine: string; wasBottomLine?: string; mode?: 'brief' | 'decide'; sections: Section[]; dropped: Section[] }
 
 /** Sections as given, kept to what the board takes; the server checks the rest. */
 function sectionsOf(value: unknown): SectionInput[] {
   if (!Array.isArray(value)) return []
   return value.filter((s): s is SectionInput => !!s && typeof s === 'object' && typeof s.id === 'string' && typeof s.line === 'string')
+}
+
+/** A constraint's state, an idea's or a suggestion's, in a few words before its line. */
+function stateOf(s: Section): string {
+  const label = (id?: string) => s.choices?.find(c => c.id === id)?.label ?? id
+  if (s.suggested) return '[your suggestion, not yet taken] '
+  if (s.kind === 'idea') return `[idea${s.by === 'you' ? ' from the user' : ''}] `
+  if (s.kind !== 'constraint') return ''
+  const options = s.choices?.length ? `; choices ${s.choices.map(c => c.id).join(', ')}` : ''
+  if (s.status === 'settled') return `[settled by ${s.settledBy === 'you' ? 'the user' : 'you'}: ${label(s.chosen) ?? 'yes'}] `
+  return `[${s.status === 'assumed' ? `assumed: ${label(s.lean)}` : 'open'}${options}${s.lean && s.status !== 'assumed' ? `; you lean ${s.lean}` : ''}] `
 }
 
 /** The brief as Claude reads it back: the bottom line and each section's line, never the bodies. */
@@ -395,9 +421,13 @@ function briefText(b: Brief): string {
     `Bottom line: ${b.bottomLine}`,
     ...b.sections.map(s => {
       const waiting = open(s)
-      return `- \`${s.id}\` ${s.title && s.title !== s.id ? `${s.title}: ` : ''}${s.line}${s.focus?.length ? ` (on ${s.focus.join(', ')})` : ''}${waiting ? ` — ${waiting} question${waiting === 1 ? '' : 's'} from the user waiting for an answer` : ''}`
+      return `- \`${s.id}\` ${stateOf(s)}${s.title && s.title !== s.id ? `${s.title}: ` : ''}${s.line}${s.focus?.length ? ` (on ${s.focus.join(', ')})` : ''}${waiting ? ` — ${waiting} question${waiting === 1 ? '' : 's'} from the user waiting for an answer` : ''}`
     }),
   ]
+  if (b.mode === 'decide') {
+    const open = b.sections.filter(s => s.kind === 'constraint' && s.status === 'open' && !s.suggested)
+    lines.splice(1, 0, `A decision: ${open.length ? `${open.length} constraint${open.length === 1 ? '' : 's'} still open (${open.map(s => s.id).join(', ')}); propose the design once none is` : 'every constraint is settled: the bottom line should be the proposal'}.`)
+  }
   if (b.dropped.length) lines.push(`Dropped: ${b.dropped.map(s => `\`${s.id}\`${s.why ? ` (${s.why})` : ''}`).join(', ')}`)
   return lines.join('\n')
 }
@@ -626,7 +656,9 @@ export const register: Register = on => {
         'A brief (`bottom_line` and `sections`) sits beside the diagrams: the answer first, then up to nine ' +
         'one-line sections the user can open, question and steer, each pointing at the boxes it is about (`focus`). ' +
         `Post it once, with the diagram it explains, then change it in place with ${EDIT_TOOL} as the conversation ` +
-        'goes on (see the drawing skill, "Briefs"). ' +
+        'goes on (see the drawing skill, "Briefs"). For a design or a choice still to make, post it with ' +
+        "`brief_mode: 'decide'`: constraints with choices the user settles on the page, then your proposal " +
+        '(the drawing skill, "Deciding"). ' +
         'Messages that begin "(on the whiteboard)" were typed by the user on the page: answer them there with ' +
         'this tool, and keep what you write in the conversation to a line. When they wrap up, write the summary in ' +
         'the conversation itself, then call this tool with end: true: the page says the discussion is over and closes.',
@@ -646,6 +678,11 @@ export const register: Register = on => {
             type: 'string',
             description: 'A brief: the answer or verdict first, in one or two sentences of inline Markdown. With `sections`.',
           },
+          brief_mode: {
+            type: 'string',
+            enum: ['brief', 'decide'],
+            description: "brief (default): an explanation or a summary. decide: a design or a choice still to make: constraints first, settled on the page, then your proposal",
+          },
           sections: {
             type: 'array',
             maxItems: 9,
@@ -658,6 +695,12 @@ export const register: Register = on => {
                 line: { type: 'string', description: 'The section in one line of inline Markdown (under 160 characters)' },
                 body: { type: 'string', description: 'More detail, in simple Markdown: only when asked for, or when the line cannot stand alone' },
                 focus: { type: 'array', items: { type: 'string' }, description: "What on the diagram this section is about: flowchart node ids, sequence participant ids, or chart labels. They light up when the user points at it" },
+                kind: { type: 'string', enum: ['point', 'constraint', 'idea'], description: 'point (default); constraint: a question to settle before the design (with `choices`); idea: one not yet weighed' },
+                choices: { type: 'array', maxItems: 4, description: 'A constraint: its options, each `id` and a short `label` (`hint`: a few words more)', items: { type: 'object', properties: { id: { type: 'string' }, label: { type: 'string' }, hint: { type: 'string' } }, required: ['id', 'label'] } },
+                lean: { type: 'string', description: 'A constraint: the choice id you would pick, shown as your lean' },
+                status: { type: 'string', enum: ['open', 'assumed'], description: 'A constraint: open (default), or assumed (your guess, on `lean`, for the user to confirm)' },
+                by: { type: 'string', enum: ['you'], description: "'you' when the section is the user's own idea" },
+                suggested: { type: 'boolean', description: 'true for a section you suggest: the user takes it or not' },
                 cites: {
                   type: 'array',
                   maxItems: 4,
@@ -767,13 +810,15 @@ export const register: Register = on => {
               properties: {
                 op: {
                   type: 'string',
-                  enum: ['add', 'update', 'drop', 'restore', 'answer'],
+                  enum: ['add', 'update', 'drop', 'restore', 'answer', 'settle', 'reopen'],
                   description:
                     'add: a new section `id` with `line` (title, body, focus, cites; `after`: the id it goes after). ' +
                     'update: new `line`, `title`, `body`, `focus` or `cites` for section `id` (give only what changes; an empty ' +
                     'body, focus or cites clears it). drop: take section `id` out, saying `why`; it is listed as dropped. ' +
                     'restore: bring a dropped one back, at the end. ' +
-                    "answer: `text` under section `id`, answering the user's oldest unanswered question there (a note under it when there is none).",
+                    "answer: `text` under section `id`, answering the user's oldest unanswered question there (a note under it when there is none). " +
+                    'settle: settle constraint `id` on `choice` (when the user decided in words; their clicks on the page settle it already). ' +
+                    'reopen: open a settled constraint again.',
                 },
                 id: { type: 'string' },
                 title: { type: 'string' },
@@ -784,11 +829,19 @@ export const register: Register = on => {
                 after: { type: 'string', description: 'add: the id of the section it goes after (default: last)' },
                 why: { type: 'string', description: 'drop: why it no longer matters, in a few words' },
                 text: { type: 'string', description: 'answer: the answer, in simple Markdown' },
+                kind: { type: 'string', enum: ['point', 'constraint', 'idea'] },
+                choices: { type: 'array', maxItems: 4, description: 'A constraint: its options, each `id` and a short `label` (`hint`: a few words more)', items: { type: 'object', properties: { id: { type: 'string' }, label: { type: 'string' }, hint: { type: 'string' } }, required: ['id', 'label'] } },
+                lean: { type: 'string' },
+                status: { type: 'string', enum: ['open', 'assumed'] },
+                by: { type: 'string', enum: ['you'] },
+                suggested: { type: 'boolean' },
+                choice: { type: 'string', description: 'settle: the choice id' },
               },
               required: ['op', 'id'],
             },
           },
-          bottom_line: { type: 'string', description: "The brief's new bottom line, when what you learned changes it" },
+          bottom_line: { type: 'string', description: "The brief's new bottom line, when what you learned changes it (in a decision: your proposal, once every constraint is settled)" },
+          brief_mode: { type: 'string', enum: ['brief', 'decide'], description: 'Turn the brief into a decision (decide) when the user starts choosing, or back; say so when you do' },
           diagram: { type: 'integer', description: 'Which diagram, by its number on the board (1 is the first); default: the latest edited one, else the latest' },
           look: { type: 'boolean', description: 'false: no picture of the result (one comes back by default, small)' },
           ops: {
@@ -892,7 +945,7 @@ export const register: Register = on => {
     }
     const bottomLine = typeof e.bottom_line === 'string' ? e.bottom_line.trim() : ''
     if (sections.length && !bottomLine) return { deny: 'A brief starts with its bottom line: give `bottom_line` with the sections.' }
-    const brief = bottomLine ? { bottomLine, sections } : undefined
+    const brief = bottomLine ? { bottomLine, sections, ...(e.brief_mode === 'decide' ? { mode: 'decide' as const } : {}) } : undefined
     if (!text && !mermaid && !notes && !e.mode && !brief) return { deny: 'Nothing posted: give `text`, `mermaid`, `sticky_notes`, a brief, or a mix.' }
     if (!(await $.session.surfaces()).length) {
       return { deny: 'Nobody can see the whiteboard from this session (it has no screen attached). Explain in prose instead.' }
@@ -966,14 +1019,15 @@ export const register: Register = on => {
     const ops = Array.isArray(e.ops) ? e.ops.filter((op): op is Record<string, unknown> => !!op && typeof op === 'object') : []
     const briefOps = Array.isArray(e.sections) ? e.sections.filter((op): op is Record<string, unknown> => !!op && typeof op === 'object') : []
     const bottomLine = typeof e.bottom_line === 'string' && e.bottom_line.trim() ? e.bottom_line.trim() : undefined
-    if (!ops.length && !briefOps.length && !bottomLine) return { deny: 'Nothing to amend: give `ops` for a diagram, or `sections` or `bottom_line` for the brief.' }
+    const briefMode = e.brief_mode === 'brief' || e.brief_mode === 'decide' ? e.brief_mode : undefined
+    if (!ops.length && !briefOps.length && !bottomLine && !briefMode) return { deny: 'Nothing to amend: give `ops` for a diagram, or `sections` or `bottom_line` for the brief.' }
     if (!board) return { deny: `There is no whiteboard page in this session yet: draw the diagram with ${TOOL} first.` }
     let briefSaid = ''
-    if (briefOps.length || bottomLine) {
+    if (briefOps.length || bottomLine || briefMode) {
       let changed: { ok: boolean; done?: number; errors?: string[]; briefError?: string }
       try {
         const started = await boardOpen($)
-        changed = await boardPost($, started.open, { briefOps, ...(bottomLine ? { bottomLine } : {}) })
+        changed = await boardPost($, started.open, { briefOps, ...(bottomLine ? { bottomLine } : {}), ...(briefMode ? { briefMode } : {}) })
       } catch (error) {
         return { deny: failed(error) }
       }
@@ -981,7 +1035,7 @@ export const register: Register = on => {
       // An answer under a section is Claude answering on the board: nothing more is posted for the turn.
       if (boardTurn && briefOps.some(op => op.op === 'answer') && (changed.done ?? 0) > 0) boardTurn.isPosted = true
       const errors = changed.errors?.length ? ` Not applied: ${changed.errors.join('; ')}.` : ''
-      briefSaid = `Changed the brief: ${changed.done ?? 0} of ${briefOps.length + (bottomLine ? 1 : 0)} applied.${errors}`
+      briefSaid = `Changed the brief: ${changed.done ?? 0} of ${briefOps.length + (bottomLine ? 1 : 0) + (briefMode ? 1 : 0)} applied.${errors}`
       if (!ops.length) return { result: briefSaid }
     }
     let out: { ok: boolean; diagram?: string; tab?: number; done?: string[]; errors?: string[]; error?: string; look?: string }

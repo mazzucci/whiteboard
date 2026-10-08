@@ -97,6 +97,10 @@ evidence shows, then a proposed fix.
   sections. Point at one and its boxes light up; click it to ask about it, and
   the answer lands under it. The brief changes as you talk: rewritten lines
   show what they replaced, new ideas become sections, dropped ones are listed.
+- **Decide together.** When you are designing something, Claude can lay out
+  the constraints that decide it, each with its choices and Claude's lean.
+  Click yours; the diagram marks what is still open, and Claude proposes the
+  design once nothing is.
 - **Sticky notes.** Claude pins a proposal, a question or a gotcha beside the
   box it is about (in a flowchart, or on a chart's slice, bar or point; beside
   the diagram in other types), without

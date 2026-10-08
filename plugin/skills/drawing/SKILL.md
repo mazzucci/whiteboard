@@ -1,6 +1,6 @@
 ---
 name: drawing
-description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser, also to answer 'how does X work?' questions about protocols and systems outside the project. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, writing a brief beside them (a bottom line and sections the user can question) and changing it in place, fixing a diagram Mermaid rejects, and amending a diagram the user edited on the page (edit_board)."
+description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser, also to answer 'how does X work?' questions about protocols and systems outside the project. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, writing a brief beside them (a bottom line and sections the user can question) and changing it in place, deciding a design with the user (constraints and choices settled on the page before a proposal), fixing a diagram Mermaid rejects, and amending a diagram the user edited on the page (edit_board)."
 ---
 
 # Drawing on the whiteboard
@@ -232,6 +232,33 @@ investigation. A one-off answer needs no brief.
     matters is dropped with `why`. At nine, merge or drop before adding.
 - Keep the diagram and the brief in step: when a section's line changes what
   the diagram should show, amend or redraw the diagram as well.
+
+## Deciding: constraints first
+
+When the user is designing something or choosing between options, do not
+propose a design at once. Post the brief with `brief_mode: 'decide'`: the
+constraints that decide it, then your proposal once they are settled.
+
+- **A constraint per question that changes the design** (`kind:
+  'constraint'`): one line asking it, two to four `choices` (id and a short
+  label, with a `hint`), and `lean` on the one you would pick. Settle what you
+  can safely assume yourself as `status: 'assumed'` (on your lean): the user
+  confirms or changes it. Five or six constraints is plenty.
+- **Draw the design as it stands** beside it, with each constraint's `focus`
+  on the boxes it decides: open ones show dashed on the diagram, settled ones
+  green, so the picture says what is still undecided. Redraw it as choices
+  come in, keeping box ids.
+- **The user settles on the page**: their clicks arrive as "My choices on the
+  board: Accounts: Guest checkout; …" and are settled already. When they
+  decide in words instead, settle it yourself (`settle`, with `choice`).
+- **Restructure as you learn**: a choice that makes a constraint moot drops
+  it (with why); one that raises a new question adds a constraint, or a
+  `suggested: true` section the user takes or not. An idea the user types
+  becomes a section with `by: 'you'` (`kind: 'idea'`, or a constraint if it
+  changes the design).
+- **The proposal is the bottom line**, written once nothing is open: the
+  design in a sentence or two, with its risks and what to build first as
+  sections. Until then the bottom line says what you are waiting on.
 
 ## Sticky notes
 

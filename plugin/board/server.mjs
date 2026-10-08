@@ -32,13 +32,15 @@
 //                     answers once a page has applied them
 //                     { snapshot: true, diagram? }: a PNG of a diagram, as base64
 //                     { mode: 'diagrams' | 'canvas' }: how the board works (with a post or alone)
-//                     { brief: { bottomLine, sections }, isNew? }: a brief beside the diagrams
-//                     (refused when one is there already, unless isNew)
-//                     { briefOps: [...], bottomLine? }: changes to the brief, each checked
-//                     and applied in order (add, update, drop, restore, answer)
+//                     { brief: { bottomLine, sections, mode? }, isNew? }: a brief beside the diagrams
+//                     (refused when one is there already, unless isNew); mode `decide` makes
+//                     it a decision: constraints with choices, settled before a proposal
+//                     { briefOps: [...], bottomLine?, briefMode? }: changes to the brief, each
+//                     checked and applied in order (add, update, drop, restore, answer, settle, reopen)
 //   POST /rendered    { id, error?, unpinned? } from the page: how a card's diagram drew, and notes it could not pin
-//   POST /say         { text, about? } from the page; `about` is the brief's section the
-//                     person asked about: their question waits there for Claude's answer
+//   POST /say         { text, about?, choices? } from the page; `about` is the brief's section the
+//                     person asked about: their question waits there for Claude's answer;
+//                     `choices` [{ id, choice }] settle constraints (or take Claude's suggestions)
 //   POST /scene       { diagram, elements, summary } from the page: a diagram's canvas
 //                     as it now is; kept, and sent to the board's other pages
 //   POST /applied     { id, done, errors, look? } from the page: how Claude's amendments
@@ -236,15 +238,55 @@ function focusOf(value) {
   return ids.length ? ids : undefined
 }
 
+/** What a section is: a point (the default), a constraint to settle, or an idea not yet weighed. */
+const KINDS = ['point', 'constraint', 'idea']
+/** A constraint's options: at most four, each an id and a short label. */
+function choicesOf(value) {
+  if (!Array.isArray(value)) return undefined
+  const choices = value
+    .map(c => ({ id: String(c?.id ?? '').trim(), label: lineOf(c?.label, 40), hint: lineOf(c?.hint, 60) }))
+    .filter(c => SECTION_ID.test(c.id) && c.label)
+    .slice(0, 4)
+  return choices.length ? choices : undefined
+}
+
 /** A section as Claude gave it, checked: { section } or { error }. */
 function sectionOf(input) {
   const id = String(input?.id ?? '').trim()
   if (!SECTION_ID.test(id)) return { error: `"${id.slice(0, 40)}" is not a section id (letters, digits, - and _, up to 32)` }
   const line = lineOf(input.line, 300)
   if (!line) return { error: `section ${id} has no line` }
+  const kind = KINDS.includes(input.kind) ? input.kind : 'point'
+  const choices = kind === 'constraint' ? choicesOf(input.choices) : undefined
+  const lean = choices?.some(c => c.id === input.lean) ? input.lean : undefined
   return {
-    section: { id, title: lineOf(input.title, 40) ?? id, line, body: textOf(input.body, 4000), focus: focusOf(input.focus), cites: citesOf(input.cites), v: 1, asks: [] },
+    section: {
+      id, kind, title: lineOf(input.title, 40) ?? id, line, body: textOf(input.body, 4000), focus: focusOf(input.focus), cites: citesOf(input.cites),
+      // A constraint is open until settled; an assumed one is Claude's guess, for the person to confirm.
+      ...(kind === 'constraint' ? { status: input.status === 'assumed' ? 'assumed' : 'open', choices, lean } : {}),
+      ...(input.by === 'you' ? { by: 'you' } : {}),
+      ...(input.suggested === true ? { suggested: true } : {}),
+      v: 1, asks: [],
+    },
   }
+}
+
+/**
+ * Settles a constraint on a choice (or confirms an assumed one, on Claude's
+ * lean): { change } or { error }. The person's choices come from the page.
+ */
+function settle(section, choice, by) {
+  if (section.kind !== 'constraint') return { error: `${section.id}: only a constraint is settled` }
+  const pick = choice ?? (section.status === 'assumed' ? section.lean : undefined)
+  if (section.choices?.length && !section.choices.some(c => c.id === pick)) {
+    return { error: `${section.id}: "${String(pick ?? '').slice(0, 32)}" is not one of its choices (${section.choices.map(c => c.id).join(', ')})` }
+  }
+  section.status = 'settled'
+  section.chosen = pick
+  section.settledBy = by
+  delete section.suggested
+  section.v++
+  return { change: { op: 'settle', id: section.id } }
 }
 
 /** A new brief: { brief } or { error }. */
@@ -260,7 +302,7 @@ function briefOf(input) {
     if (sections.some(x => x.id === out.section.id)) return { error: `two sections are called ${out.section.id}` }
     sections.push(out.section)
   }
-  return { brief: { bottomLine, v: 1, sections, dropped: [] } }
+  return { brief: { bottomLine, v: 1, mode: input.mode === 'decide' ? 'decide' : 'brief', sections, dropped: [] } }
 }
 
 /** Applies one change to the brief: { change } saying what it did, or { error }. */
@@ -294,6 +336,15 @@ function briefOp(op) {
     const line = lineOf(op.line, 300)
     const isNewLine = Boolean(line && line !== section.line)
     if (typeof op.title === 'string') section.title = lineOf(op.title, 40) ?? section.title
+    if (KINDS.includes(op.kind) && op.kind !== section.kind) {
+      section.kind = op.kind
+      if (op.kind === 'constraint') section.status ??= 'open'
+    }
+    if (section.kind === 'constraint') {
+      if (Array.isArray(op.choices)) section.choices = choicesOf(op.choices)
+      if (typeof op.lean === 'string') section.lean = section.choices?.some(c => c.id === op.lean) ? op.lean : undefined
+      if (op.status === 'open' || op.status === 'assumed') section.status = op.status
+    }
     if (typeof op.body === 'string') section.body = textOf(op.body, 4000)
     if (Array.isArray(op.focus)) section.focus = focusOf(op.focus)
     if (Array.isArray(op.cites)) section.cites = citesOf(op.cites)
@@ -322,7 +373,16 @@ function briefOp(op) {
     section.asks = section.asks.slice(-6)
     return { change: { op: 'answer', id } }
   }
-  return { error: `${id}: unknown change "${String(kind).slice(0, 20)}" (add, update, drop, restore, answer)` }
+  if (kind === 'settle') return settle(section, typeof op.choice === 'string' ? op.choice : undefined, 'claude')
+  if (kind === 'reopen') {
+    if (section.kind !== 'constraint' || section.status !== 'settled') return { error: `${id}: not a settled constraint` }
+    section.status = 'open'
+    delete section.chosen
+    delete section.settledBy
+    section.v++
+    return { change: { op: 'reopen', id } }
+  }
+  return { error: `${id}: unknown change "${String(kind).slice(0, 20)}" (add, update, drop, restore, answer, settle, reopen)` }
 }
 
 /** Sends the brief as it now is, with what changed and who changed it. */
@@ -488,6 +548,25 @@ async function handle(req, res) {
       section.asks = [...section.asks, { question: clip(input.asked, 1000)?.trim() || text.slice(0, 1000) }].slice(-6)
       briefChanged([{ op: 'ask', id: section.id }], 'you')
     }
+    // The person's choices on the board settle their constraints at once; Claude hears them in the message.
+    const chosen = []
+    for (const c of Array.isArray(input.choices) && brief ? input.choices.slice(0, 12) : []) {
+      const target = brief.sections.find(s => s.id === c?.id)
+      if (!target) continue
+      if (target.suggested && c.choice === 'decline') {
+        brief.sections.splice(brief.sections.indexOf(target), 1)
+        brief.dropped.push({ ...target, why: 'not wanted' })
+        chosen.push({ op: 'drop', id: target.id })
+      } else if (target.suggested && c.choice === 'accept') {
+        delete target.suggested
+        target.v++
+        chosen.push(target.kind === 'constraint' && !target.choices?.length ? settle(target, undefined, 'you').change : { op: 'accept', id: target.id })
+      } else {
+        const out = settle(target, typeof c.choice === 'string' ? c.choice : undefined, 'you')
+        if (out.change) chosen.push(out.change)
+      }
+    }
+    if (chosen.length) briefChanged(chosen, 'you')
     say(text)
     return json(200, { ok: true })
   }
@@ -522,10 +601,14 @@ async function handle(req, res) {
     if (!input.mermaid && !clip(input.text, 20_000) && !input.notes) return json(200, { ok: true, viewers: listeners.size, drawn: false, sections: brief.sections.length })
   }
   // Changes to the brief: each checked and applied in order; those that fail are said, the rest stand.
-  if (Array.isArray(input.briefOps) || typeof input.bottomLine === 'string') {
+  if (Array.isArray(input.briefOps) || typeof input.bottomLine === 'string' || typeof input.briefMode === 'string') {
     if (!brief) return json(200, { ok: false, viewers: listeners.size, briefError: 'there is no brief on the board yet' })
     const changes = []
     const errors = []
+    if ((input.briefMode === 'brief' || input.briefMode === 'decide') && input.briefMode !== brief.mode) {
+      brief.mode = input.briefMode
+      changes.push({ op: 'mode', mode: brief.mode })
+    }
     const bottomLine = lineOf(input.bottomLine, 600)
     if (bottomLine && bottomLine === brief.bottomLine) errors.push('bottom_line: nothing to change (it already says that)')
     if (bottomLine && bottomLine !== brief.bottomLine) {
