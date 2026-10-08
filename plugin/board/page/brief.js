@@ -254,9 +254,12 @@ function renderBrief(fresh = []) {
   const isDecision = b.mode === 'decide'
   const toConfirm = b.sections.filter(s => s.kind === 'constraint' && s.status === 'assumed' && !s.suggested).length
   const confirm = toConfirm ? ` · ${toConfirm} to confirm` : ''
+  // A comparison's bottom line is Claude's lean, until the person decides; it waits only on what they must answer.
   const head = !isDecision
     ? 'Bottom line'
-    : open.length
+    : b.options?.length && !open.length
+      ? 'Bottom line · Claude leans'
+      : open.length
       ? `Bottom line · waiting on ${open.length}${confirm}`
       : b.isProposal
         ? `Bottom line · proposal${confirm}`

@@ -48,6 +48,7 @@ test('Claude opens a side board: the page goes there, with its own brief, diagra
   const now = await where()
   assert.deepEqual([now.crumbs, now.tabs, now.bottomLine, now.comparing], ['Relational vs not', ['1Fit'], 'Relational is the safer default.', true])
   assert.deepEqual(now.head, ['', 'Relational', 'Documents'])
+  assert.equal(await page.$eval('.bottom-line .k', el => el.textContent), 'Bottom line · Claude leans')
   assert.deepEqual(now.rows, [['TogetherOne step.', '✓Transactions.', '~Sometimes.']])
   assert.deepEqual((await page.$$eval('#messages .brief-event', els => els.map(el => el.textContent))).slice(-2), ['Claude opened a side board: “Relational vs not”', 'Claude laid out the comparison'])
   assert.deepEqual(page.errors, [])
