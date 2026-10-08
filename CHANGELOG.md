@@ -21,6 +21,13 @@
   what browsers can draw.
 - The wrap-up banner waits while the pointer is on it, so there is time to
   save before the tab closes.
+- Fixed: the hand-drawn font (Excalifont) was missing when picked on a
+  canvas; it is now part of the board, under its SIL Open Font License.
+- An edited ER diagram reads back to Claude by its tables' names (`CUSTOMER`,
+  not `entity-CUSTOMER-0`), so Claude's amendments find them; a state
+  diagram's `[*]` reads back as its start and end, not as odd boxes.
+- In the Markdown save, a newer Mermaid type (charts, architecture, block…)
+  says that some viewers may not draw it yet.
 
 ## 0.5.0
 

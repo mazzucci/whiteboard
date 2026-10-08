@@ -48,9 +48,8 @@ const { metafile } = await build({
 for (const [file, name] of [['dist/editor.js', 'editor.js.gz'], ['dist/editor.css', 'editor.css.gz']]) {
   writeFileSync(new URL(name, out), gzipSync(readFileSync(file), { level: 9 }))
 }
-// Excalidraw's fonts with a clear licence (vendor/README.md): not Xiaolai
-// (Chinese, 12 MB) or Excalifont (no licence published). It loads them itself.
-for (const family of ['Assistant', 'Cascadia', 'ComicShanns', 'Liberation', 'Lilita', 'Nunito', 'Virgil']) {
+// Excalidraw's fonts (vendor/README.md), all but Xiaolai (Chinese, 12 MB). It loads them itself.
+for (const family of ['Assistant', 'Cascadia', 'ComicShanns', 'Excalifont', 'Liberation', 'Lilita', 'Nunito', 'Virgil']) {
   cpSync(`node_modules/@excalidraw/excalidraw/dist/prod/fonts/${family}`, new URL(`fonts/${family}`, out).pathname, { recursive: true })
 }
 // Packages published without their licence file: MIT, held by these (from each project's repository).

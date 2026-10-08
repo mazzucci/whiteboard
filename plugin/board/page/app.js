@@ -498,6 +498,7 @@ else events.onopen = () => {
   pending = []
   stickies.clear()
   cardLog.length = 0
+  document.body.classList.remove('on-chart')
   setConnected(true)
   isReplaying = true
   // Replayed cards arrive at once; anything after a short pause is new.

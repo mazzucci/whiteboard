@@ -6,7 +6,7 @@ import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { request } from 'node:http'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const serverPath = fileURLToPath(new URL('../board/server.mjs', import.meta.url))
@@ -120,6 +120,9 @@ test('the editor and its fonts load from the board itself, and nothing outside t
     assert.ok((await res.arrayBuffer()).byteLength > 1000, path)
   }
   assert.equal((await call('/editor/fonts/Excalifont/nope.woff2')).status, 404)
+  // The hand-drawn font is the board's own too (it was a 404 before 0.5.1).
+  const hand = readdirSync(new URL('../board/vendor/editor/fonts/Excalifont/', import.meta.url))[0]
+  assert.equal((await call(`/editor/fonts/Excalifont/${hand}`)).status, 200)
   assert.equal((await call('/editor/fonts/../editor.js.gz')).status, 403)
   assert.equal((await call('/editor/fonts/Excalifont/..%2F..%2Feditor.js.gz')).status, 403)
   assert.match((await call('/')).headers.get('content-security-policy'), /font-src 'self'/)

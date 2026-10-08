@@ -260,6 +260,9 @@ function threadsOf() {
   return threads.sort((a, b) => diagrams.indexOf(a[0]) - diagrams.indexOf(b[0]))
 }
 
+/** Mermaid types from 10.2 on, which older viewers lack. */
+const NEWER_TYPES = /^(xychart|quadrantChart|sankey|block|architecture|packet|kanban|radar|treemap)/
+
 /** One diagram in Markdown: its legend, its Mermaid, its sticky notes. */
 function diagramMarkdown(d, heading) {
   const fence = fenceFor(d.source)
@@ -269,6 +272,8 @@ function diagramMarkdown(d, heading) {
     '',
     ...(d.scene ? ["_Edited on the board: this is Claude's Mermaid; the edited canvas is in the board saved as a web page, or exported as .excalidraw._", ''] : []),
     ...(legendLine(d) ? [legendLine(d), ''] : []),
+    // Newer diagram types are not drawn everywhere yet.
+    ...(NEWER_TYPES.test(d.kind) ? ["_A newer Mermaid type: some viewers (Notion, an older GitHub or GitLab) may not draw it; the board saved as a web page, or a PNG export, keeps it as drawn._", ''] : []),
     `${fence}mermaid`,
     d.source.trim(),
     fence,

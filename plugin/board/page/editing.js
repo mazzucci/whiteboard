@@ -108,8 +108,20 @@ function summaryOf(elements, selectedIds = []) {
     if (named) return named[0]
     return e.backgroundColor && e.backgroundColor !== 'transparent' ? e.backgroundColor : 'plain'
   }
-  const shapes = live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type) && !isRepeat(e))
-  const box = e => ({ ref: refOf(e), text: label(e), class: classOf(e), x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.width), h: Math.round(e.height) })
+  // A state diagram's end point is a ring with a dot inside: the dot is part of it, not a box.
+  const shapes = live.filter(e => ['rectangle', 'ellipse', 'diamond'].includes(e.type) && !isRepeat(e) && e.customData?.kind !== 'part')
+  // Its start and end points read as Claude wrote them, `[*]`.
+  const point = { start: '[*] start', end: '[*] end' }
+  const box = e => ({
+    ref: refOf(e),
+    text: label(e) || (point[e.customData?.kind] ?? ''),
+    // A start or end point is black as Mermaid draws it: that is no colour of Claude's.
+    class: point[e.customData?.kind] && e.backgroundColor === '#000000' ? 'plain' : classOf(e),
+    x: Math.round(e.x),
+    y: Math.round(e.y),
+    w: Math.round(e.width),
+    h: Math.round(e.height),
+  })
   return {
     boxes: shapes.filter(e => e.customData?.kind !== 'note' && classOf(e) !== 'note').map(box),
     notes: shapes.filter(e => e.customData?.kind === 'note' || classOf(e) === 'note').map(e => ({ ...box(e), on: e.customData?.on ? (pair(e.customData.on)?.[1] ?? e.customData.on) : refOf(nearest(e, shapes)) })),
@@ -228,6 +240,7 @@ async function makeCanvas(d) {
     showEditNote(d)
     throw err
   }
+  elements = plainRefs(elements, typeOf(d.source))
   const notes = (stickies.get(d.id) ?? []).map((n, i) => ({ op: 'note', id: `note-${i + 1}`, on: n.on, text: n.text }))
   if (notes.length) elements = W.applyOps(elements, notes).elements
   // Every box named before the canvas counts as what Claude knows: naming one later would read as a change.
@@ -332,6 +345,39 @@ function showEditNote(d) {
 const EDITABLE = /^(flowchart|graph|sequenceDiagram|classDiagram|erDiagram|stateDiagram)/
 
 /** A box the person drew gets a ref from its text, so both sides can name it. */
+/**
+ * Refs as Claude wrote them. The converter names an ER entity
+ * `entity-CUSTOMER-0`, and a state diagram's `[*]` `root_start` and `root_end`
+ * (its dot `root_end__inner`; in a composite state, `Paying_start`): Claude
+ * knows them as `CUSTOMER`, and as `start` and `end` (`Paying-start`). A
+ * diagram with states of its own named `start` or `end` keeps the converter's
+ * names for its `[*]`.
+ */
+function plainRefs(elements, type) {
+  const used = new Set(elements.map(e => e.customData?.ref).filter(Boolean))
+  // A `[*]` has no words in it; a state of Claude's (`session_start`) does, and keeps its name.
+  const isWordless = e => !elements.some(t => t.type === 'text' && t.containerId === e.id)
+  const plain = e => {
+    const ref = e.customData?.ref
+    if (!ref) return null
+    if (type === 'erDiagram') {
+      const m = /^entity-(.+)-\d+$/.exec(ref)
+      return m && { ref: m[1] }
+    }
+    if (!/^stateDiagram/.test(type) || !isWordless(e)) return null
+    const m = /^(.*?)_(start|end)(__inner)?$/.exec(ref)
+    if (!m) return null
+    const name = m[1] === 'root' ? m[2] : `${m[1]}-${m[2]}`
+    return m[3] ? { ref: `${name}-dot`, kind: 'part' } : { ref: name, kind: m[2] }
+  }
+  return elements.map(e => {
+    const to = plain(e)
+    if (!to || (used.has(to.ref) && to.ref !== e.customData.ref)) return e
+    used.add(to.ref)
+    return { ...e, customData: { ...e.customData, ...to } }
+  })
+}
+
 function withRefs(elements) {
   const used = new Set(elements.map(e => e.customData?.ref).filter(Boolean))
   return elements.map(e => {
