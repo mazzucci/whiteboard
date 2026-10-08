@@ -37,7 +37,8 @@ const INTRO =
   `whiteboard:drawing skill before the first diagram. ${READ_TOOL} reads back what is on the page, Mermaid source ` +
   'and sticky notes included, when the user talks about something there you did not draw in this conversation. ' +
   `The board has two modes: diagrams (yours, as drawn; each new one a tab) for explaining and investigating, and ` +
-  'canvas (every diagram editable by both of you) for designing or brainstorming together; pick one with `mode` ' +
+  'canvas (every diagram editable by both of you) for sketching together; a decision stays in diagrams mode, where the ' +
+  'board marks what is open and settled. Pick one with `mode` ' +
   `when you post, or the user switches. On a canvas, ${EDIT_TOOL} amends a diagram in place (add, connect, ` +
   'recolour, rename, remove boxes) instead of drawing it again.'
 let isIntroduced = false
@@ -221,7 +222,10 @@ const BOARD_NOTE =
   "When it asks for more detail, write it as that section's body (sections: [{ op: 'update', id, body }]). " +
   '"My choices on the board: …" are what the user settled there, suggestions they took or turned down included: ' +
   'they are settled already (do not settle them again; anything the board could not settle is said after). Update ' +
-  'the diagram and the brief for them, and once none is open, write your proposal as the bottom line.'
+  'the diagram and the brief for them, and once none is open, write your proposal as the bottom line. A message that ' +
+  'starts "(On the side board `id`, …)" was typed there: answer on that board (it is where your posts go). ' +
+  '"I decide on the side board …" has settled its constraint on the main board and brought the user back there: ' +
+  'carry the decision into the main board (its line, the diagram).'
 /** Said when the person, after talking on the page, types in the conversation again. */
 const BACK_NOTE =
   'The user is back in this conversation: they typed this here, not on the whiteboard. Focus mode, if it was on, ' +
@@ -361,7 +365,7 @@ async function boardOpen($: EngineInterface, isAsked = false): Promise<Started> 
 
 type Legend = { label: string; stroke?: string; isDashed: boolean }
 type Note = { on?: string; text: string }
-type Card = { title?: string; text?: string; mermaid?: string; legend?: Legend[]; notes?: Note[]; mode?: Mode; brief?: BriefInput; isNew?: boolean }
+type Card = { title?: string; text?: string; mermaid?: string; legend?: Legend[]; notes?: Note[]; mode?: Mode; brief?: BriefInput; isNew?: boolean; sideBoard?: { id: string; title?: string; for?: string }; board?: string }
 type Mode = 'diagrams' | 'canvas'
 
 /** Claude's sticky notes (`sticky_notes`), as the page takes them: text, and the node id each is pinned to. */
@@ -373,7 +377,7 @@ function notesOf(value: unknown): Note[] | undefined {
   return notes.length ? notes : undefined
 }
 /** How the page drew a diagram: drawn, Mermaid's error, or not seen (no page open, or it did not answer). */
-type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; noDiagram?: boolean; noteError?: string; noteErrors?: string[]; briefError?: string }
+type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; noDiagram?: boolean; noteError?: string; noteErrors?: string[]; briefError?: string; boardError?: string; board?: string }
 
 // ---------------------------------------------------------------- the brief
 
@@ -392,10 +396,26 @@ type SectionInput = {
   by?: 'you'
   suggested?: boolean
 }
-type BriefInput = { bottomLine: string; sections: SectionInput[]; mode?: 'brief' | 'decide' }
+type BriefInput = { bottomLine: string; sections: SectionInput[]; mode?: 'brief' | 'decide'; options?: { id: string; label: string; hint?: string }[] }
 /** A section as the board holds it: with the person's questions and Claude's answers, the line it had before, and what was chosen. */
 type Section = SectionInput & { was?: string; asks: { question?: string; answer?: string }[]; why?: string; chosen?: string; settledBy?: 'you' | 'claude' }
-type Brief = { bottomLine: string; wasBottomLine?: string; mode?: 'brief' | 'decide'; sections: Section[]; dropped: Section[] }
+type Brief = { bottomLine: string; wasBottomLine?: string; mode?: 'brief' | 'decide'; options?: { id: string; label: string }[]; sections: Section[]; dropped: Section[] }
+/** A board: the main one, or a side board opened from it for one question. */
+type BoardInfo = { id: string; title?: string; for?: string; state: 'open' | 'decided' | 'parked' | 'dropped'; why?: string; brief: Brief | null }
+
+/** Every board, as Claude reads them back: the one the user is on in full, the main board's lines, the rest in a line each. */
+function boardsText(all: BoardInfo[], viewing: string): string {
+  const main = all.find(b => b.id === 'main')
+  const sides = all.filter(b => b.id !== 'main')
+  const on = all.find(b => b.id === viewing) ?? main
+  const parts: string[] = []
+  if (on && on.id !== 'main') parts.push(`The user is on the side board \`${on.id}\`, "${on.title}"${on.for ? ` (opened to decide the main board's \`${on.for}\`)` : ''}. Your posts and edits go there unless you name another board.`)
+  if (on?.brief) parts.push(briefText(on.brief, on.id === 'main' ? '' : ` on the side board \`${on.id}\``))
+  if (on?.id !== 'main' && main?.brief) parts.push(briefText(main.brief, ' on the main board'))
+  const others = sides.filter(b => b !== on)
+  if (others.length) parts.push(`Side boards: ${others.map(b => `\`${b.id}\` "${b.title}" (${b.state}${b.for ? `, for ${b.for}` : ''}${b.why ? `: ${b.why}` : ''})`).join('; ')}`)
+  return parts.join('\n\n')
+}
 
 /** Sections as given, kept to what the board takes; the server checks the rest. */
 function sectionsOf(value: unknown): SectionInput[] {
@@ -416,10 +436,11 @@ function stateOf(s: Section): string {
 }
 
 /** The brief as Claude reads it back: the bottom line and each section's line, never the bodies. */
-function briefText(b: Brief): string {
+function briefText(b: Brief, where = ''): string {
   const open = (s: Section) => s.asks.filter(a => a.question && !a.answer).length
   const lines = [
-    `The brief beside the diagrams (each section by id: its line; bodies and answers left out):`,
+    `The brief${where} beside the diagrams (each section by id: its line; bodies and answers left out):`,
+    ...(b.options?.length ? [`A comparison of: ${b.options.map(o => `\`${o.id}\` ${o.label}`).join(', ')}`] : []),
     `Bottom line: ${b.bottomLine}`,
     ...b.sections.map(s => {
       const waiting = open(s)
@@ -527,6 +548,7 @@ function sceneText(s: Scene): string[] {
 
 type BoardCard = {
   id: number
+  board?: string
   kind: 'diagram' | 'note' | 'sticky' | 'you' | 'end'
   title?: string
   text?: string
@@ -547,14 +569,17 @@ function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scene
 
 function boardCardsText(viewers: number, cards: BoardCard[], isLatest: boolean, scenes: Record<string, Scene>, mode: Mode): string {
   const diagrams = cards.filter(c => c.kind === 'diagram')
+  // Diagrams are numbered on their own board, as the page's tabs are.
+  const boardOf = (c: BoardCard) => c.board ?? 'main'
+  const onItsBoard = (c: BoardCard) => diagrams.filter(d => boardOf(d) === boardOf(c))
   const stickiesOf = (id: number) => cards.filter(c => c.kind === 'sticky' && c.diagram === id).map(c => noteLine({ on: c.on, text: c.text ?? '' }))
   const diagramText = (c: BoardCard) => {
-    const n = diagrams.indexOf(c) + 1
+    const n = onItsBoard(c).indexOf(c) + 1
     const scene = scenes[String(c.id)]
     // An edited diagram's notes are on its canvas.
     const notes = scene ? [] : [...(c.notes ?? []).map(noteLine), ...stickiesOf(c.id)]
     return [
-      `Diagram ${n} of ${diagrams.length}${c.title ? `, "${c.title}"` : ''}:`,
+      `Diagram ${n} of ${onItsBoard(c).length}${boardOf(c) !== 'main' ? ` on the side board \`${boardOf(c)}\`` : ''}${c.title ? `, "${c.title}"` : ''}:`,
       ...(c.text ? [c.text] : []),
       '```mermaid',
       c.mermaid ?? '',
@@ -606,7 +631,10 @@ async function redrawnOnCanvas($: EngineInterface, mermaid: string): Promise<str
   const fresh = nodeIdsOf(mermaid)
   if (fresh.size < 2) return null
   const diagrams = read.cards.filter(c => c.kind === 'diagram')
-  for (const [i, c] of diagrams.entries()) {
+  for (const c of diagrams) {
+    // Numbered on its own board, as edit_board takes it.
+    const i = diagrams.filter(d => (d.board ?? 'main') === (c.board ?? 'main')).indexOf(c)
+    const where = (c.board ?? 'main') !== 'main' ? ` on the side board \`${c.board}\`` : ''
     const scene = read.scenes?.[String(c.id)]
     // On a drawing board only an edited diagram is amended; the rest are a story told in tabs.
     if (read.mode !== 'canvas' && !scene) continue
@@ -614,7 +642,7 @@ async function redrawnOnCanvas($: EngineInterface, mermaid: string): Promise<str
     const common = [...fresh].filter(id => old.has(id))
     if (old.size >= 2 && common.length >= 0.6 * Math.max(fresh.size, old.size)) {
       return (
-        `${read.mode === 'canvas' ? 'The board is a canvas, and d' : 'D'}iagram ${i + 1}${c.title ? ` "${c.title}"` : ''}${scene ? ', edited on the board,' : ''} already shows these boxes ` +
+        `${read.mode === 'canvas' ? 'The board is a canvas, and d' : 'D'}iagram ${i + 1}${where}${c.title ? ` "${c.title}"` : ''}${scene ? ', edited on the board,' : ''} already shows these boxes ` +
         `(${common.slice(0, 6).map(id => `\`${id}\``).join(', ')}${common.length > 6 ? ', …' : ''}). Amend it with ${EDIT_TOOL} ` +
         '(class or color to recolour as the evidence comes in, text to update a label, add, connect, remove): that keeps ' +
         'the layout the user may have arranged. If you mean a separate diagram, post again with as_new: true.'
@@ -685,6 +713,23 @@ export const register: Register = on => {
             enum: ['brief', 'decide'],
             description: "brief (default): an explanation or a summary. decide: a design or a choice still to make: constraints first, settled on the page, then your proposal",
           },
+          side_board: {
+            type: 'object',
+            description:
+              'Open a side board for one question (when the user says "let\'s whiteboard this", or agrees to your offer): ' +
+              'the rest of this post (its brief, its diagram) goes on it, and the user is taken there. `for`: the main ' +
+              "board's constraint it decides; its decision settles that one. At most three open. A parked side board opens again " +
+              'with its id alone (its brief as it was), or with a new brief.',
+            properties: { id: { type: 'string' }, title: { type: 'string' }, for: { type: 'string', description: "The main board's constraint id this side board decides" } },
+            required: ['id', 'title'],
+          },
+          board: { type: 'string', description: "Which board this goes on: 'main' or a side board's id (default: the one the user is looking at)" },
+          options: {
+            type: 'array',
+            maxItems: 4,
+            description: "A comparison (on a side board): the options compared, as columns; each section is a criterion, with `cells`. Pick the ids of the main board constraint's choices when they match",
+            items: { type: 'object', properties: { id: { type: 'string' }, label: { type: 'string' }, hint: { type: 'string' } }, required: ['id', 'label'] },
+          },
           sections: {
             type: 'array',
             maxItems: 9,
@@ -703,6 +748,11 @@ export const register: Register = on => {
                 status: { type: 'string', enum: ['open', 'assumed'], description: 'A constraint: open (default), or assumed (your guess, on `lean`, for the user to confirm)' },
                 by: { type: 'string', enum: ['you'], description: "'you' when the section is the user's own idea" },
                 suggested: { type: 'boolean', description: 'true for a section you suggest: the user takes it or not' },
+                cells: {
+                  type: 'object',
+                  description: 'A criterion in a comparison: by option id, `mark` (yes, part, no, unknown) and `text` (one short clause). A mark without a source is your judgement: cite one where it is a fact',
+                  additionalProperties: { type: 'object', properties: { mark: { type: 'string', enum: ['yes', 'part', 'no', 'unknown'] }, text: { type: 'string' } } },
+                },
                 cites: {
                   type: 'array',
                   maxItems: 4,
@@ -722,9 +772,10 @@ export const register: Register = on => {
             enum: ['diagrams', 'canvas'],
             description:
               'How the board works from now on: diagrams (yours, as drawn; each new one a tab: for explaining and ' +
-              'investigating) or canvas (every diagram editable by both of you, amended in place: for designing or ' +
-              'brainstorming together). Set it with your first post when the conversation calls for one; the user ' +
-              'can switch it on the page.',
+              'investigating) or canvas (every diagram editable by both of you, amended in place: for sketching ' +
+              'together, when the user wants to move boxes themselves). A decision (brief_mode decide) stays in diagrams ' +
+              'mode: the board marks each constraint on drawn diagrams, and you redraw as choices settle. Set it with ' +
+              'your first post when the conversation calls for one; the user can switch it on the page.',
           },
           sticky_notes: {
             type: 'array',
@@ -775,6 +826,7 @@ export const register: Register = on => {
         type: 'object',
         properties: {
           latest: { type: 'boolean', description: 'Only the latest diagram, with its sticky notes' },
+          board: { type: 'string', description: "With `image` and `diagram`: the board the diagram is on, 'main' or a side board's id (default: the one the user is looking at)" },
           image: {
             type: 'boolean',
             description:
@@ -839,12 +891,22 @@ export const register: Register = on => {
                 by: { type: 'string', enum: ['you'] },
                 suggested: { type: 'boolean' },
                 choice: { type: 'string', description: 'settle: the choice id' },
+                cells: { type: 'object', description: 'A criterion in a comparison: by option id, { mark, text }; only the options given change' },
               },
               required: ['op', 'id'],
             },
           },
           bottom_line: { type: 'string', description: "The brief's new bottom line, when what you learned changes it (in a decision: your proposal, once every constraint is settled)" },
           brief_mode: { type: 'string', enum: ['brief', 'decide'], description: 'Turn the brief into a decision (decide) when the user starts choosing, or back; say so when you do' },
+          board: { type: 'string', description: "Which board's brief or diagrams to change: 'main' or a side board's id (default: the one the user is looking at); diagrams are numbered on their own board" },
+          side_board: {
+            type: 'object',
+            description:
+              "Done with a side board: return (with `choice`, one of its options: that settles the main board's constraint it was opened for), " +
+              'park (for later) or drop (with `why`). The user is back on the main board.',
+            properties: { op: { type: 'string', enum: ['return', 'park', 'drop'] }, id: { type: 'string' }, choice: { type: 'string' }, why: { type: 'string' } },
+            required: ['op', 'id'],
+          },
           diagram: { type: 'integer', description: 'Which diagram, by its number on the board (1 is the first); default: the latest edited one, else the latest' },
           look: { type: 'boolean', description: 'false: no picture of the result (one comes back by default, small)' },
           ops: {
@@ -948,8 +1010,12 @@ export const register: Register = on => {
     }
     const bottomLine = typeof e.bottom_line === 'string' ? e.bottom_line.trim() : ''
     if (sections.length && !bottomLine) return { deny: 'A brief starts with its bottom line: give `bottom_line` with the sections.' }
-    const brief = bottomLine ? { bottomLine, sections, ...(e.brief_mode === 'decide' ? { mode: 'decide' as const } : {}) } : undefined
+    const options = Array.isArray(e.options) ? (e.options as { id: string; label: string }[]) : undefined
+    const brief = bottomLine ? { bottomLine, sections, ...(e.brief_mode === 'decide' ? { mode: 'decide' as const } : {}), ...(options?.length ? { options } : {}) } : undefined
+    const sideBoard = e.side_board && typeof e.side_board === 'object' ? (e.side_board as { id: string; title?: string; for?: string }) : undefined
+    const onBoard = typeof e.board === 'string' ? e.board : undefined
     if (!text && !mermaid && !notes && !e.mode && !brief) return { deny: 'Nothing posted: give `text`, `mermaid`, `sticky_notes`, a brief, or a mix.' }
+
     if (!(await $.session.surfaces()).length) {
       return { deny: 'Nobody can see the whiteboard from this session (it has no screen attached). Explain in prose instead.' }
     }
@@ -963,7 +1029,7 @@ export const register: Register = on => {
     let out: Awaited<ReturnType<typeof postToBoard>>
     try {
       const mode = e.mode === 'canvas' || e.mode === 'diagrams' ? e.mode : undefined
-      out = await postToBoard($, { title, text: text || undefined, mermaid: mermaid || undefined, legend, notes, mode, brief, ...(e.as_new === true ? { isNew: true } : {}) })
+      out = await postToBoard($, { title, text: text || undefined, mermaid: mermaid || undefined, legend, notes, mode, brief, ...(e.as_new === true ? { isNew: true } : {}), ...(sideBoard ? { sideBoard } : {}), ...(onBoard ? { board: onBoard } : {}) })
     } catch (error) {
       return { deny: failed(error) }
     }
@@ -976,6 +1042,7 @@ export const register: Register = on => {
       }
     }
     if (out.posted.briefError) return { deny: `The board could not take this brief: ${out.posted.briefError}. Nothing was posted.` }
+    if (out.posted.boardError) return { deny: `The board could not do that: ${out.posted.boardError}. Nothing was posted.` }
     if (out.posted.error) {
       return {
         deny: `Mermaid could not draw this diagram:\n${mermaidError(out.posted.error)}\nIt was taken off the page${brief ? ', and the brief with it' : ''}. Fix the source and post again${brief ? ', brief and all' : ''}.`,
@@ -988,8 +1055,14 @@ export const register: Register = on => {
     // Notes whose box is not on the canvas: the rest of the post is on the board.
     const notPinned = out.posted.noteErrors?.length ? ` Not pinned: ${out.posted.noteErrors.join('; ')}.` : ''
     const unknownNote = unknown.length ? ` The legend names classes with no classDef: ${unknown.join(', ')}.` : ''
-    const briefNote = brief ? ` The brief is beside the diagrams with ${sections.length} section${sections.length === 1 ? '' : 's'}: from now on change it in place with ${EDIT_TOOL}.` : ''
-    return { result: `${postedWhere(out, Boolean(mermaid))}${briefNote}${notPinned}${unknownNote}` }
+    const briefNote = brief
+      ? sideBoard
+        ? ` The side board "${sideBoard.title ?? sideBoard.id}" is open and the user is on it: answer there; when it is decided (the user picks an option on the page, or you ${EDIT_TOOL} side_board return), they are back on the main board.`
+        : ` The brief is beside the diagrams with ${sections.length} section${sections.length === 1 ? '' : 's'}: from now on change it in place with ${EDIT_TOOL}.`
+      : ''
+    // Where it went: the board the user is on, unless named.
+    const onSide = out.posted.board && out.posted.board !== 'main' ? ` It went on the side board \`${out.posted.board}\`.` : ''
+    return { result: `${postedWhere(out, Boolean(mermaid))}${onSide}${briefNote}${notPinned}${unknownNote}` }
   })
 
   on('tool.call', { tool: `mcp__whiteboard__${READ_TOOL}` }, async ($, e) => {
@@ -998,8 +1071,10 @@ export const register: Register = on => {
     let open: Board
     try {
       open = await board
-      const { viewers, cards, scenes, mode, brief } = await boardGet<{ viewers: number; cards: BoardCard[]; scenes?: Record<string, Scene>; mode?: Mode; brief?: Brief | null }>($, open, '/cards')
-      text = boardText(viewers, cards, e.latest === true, scenes, mode, brief ?? null)
+      const read = await boardGet<{ viewers: number; cards: BoardCard[]; scenes?: Record<string, Scene>; mode?: Mode; brief?: Brief | null; boards?: BoardInfo[]; viewing?: string }>($, open, '/cards')
+      text = boardText(read.viewers, read.cards, e.latest === true, read.scenes, read.mode, read.brief ?? null)
+      // Side boards: the one the user is on in full, the main board's lines, the rest in a line each.
+      if (read.boards?.some(b => b.id !== 'main')) text = `${boardCardsText(read.viewers, read.cards, e.latest === true, read.scenes ?? {}, read.mode ?? 'diagrams')}\n\n${boardsText(read.boards, read.viewing ?? 'main')}`
     } catch (error) {
       return { result: `The whiteboard page has stopped (${error instanceof Error ? error.message : String(error)}): nothing to read.` }
     }
@@ -1008,6 +1083,7 @@ export const register: Register = on => {
     const shot = await boardPost<{ ok: boolean; png?: string; diagram?: string; error?: string }>($, open, {
       snapshot: true,
       ...(Number.isInteger(e.diagram) ? { diagram: e.diagram } : {}),
+      ...(typeof e.board === 'string' ? { board: e.board } : {}),
     }).catch(error => ({ ok: false, error: error instanceof Error ? error.message : String(error) }) as { ok: boolean; png?: string; diagram?: string; error?: string })
     if (!shot.png) return { result: `${text}\n\n(No picture: ${shot.error ?? 'the page did not send one'}.)` }
     return {
@@ -1023,29 +1099,47 @@ export const register: Register = on => {
     const briefOps = Array.isArray(e.sections) ? e.sections.filter((op): op is Record<string, unknown> => !!op && typeof op === 'object') : []
     const bottomLine = typeof e.bottom_line === 'string' && e.bottom_line.trim() ? e.bottom_line.trim() : undefined
     const briefMode = e.brief_mode === 'brief' || e.brief_mode === 'decide' ? e.brief_mode : undefined
+    const onBoard = typeof e.board === 'string' ? e.board : undefined
+    const side = e.side_board && typeof e.side_board === 'object' ? (e.side_board as { op: string; id: string; choice?: string; why?: string }) : undefined
+    if (side) {
+      if (!board) return { deny: `There is no whiteboard page in this session yet.` }
+      let closed: { ok: boolean; boardError?: string }
+      try {
+        const started = await boardOpen($)
+        closed = await boardPost($, started.open, { sideBoardOp: side })
+      } catch (error) {
+        return { deny: failed(error) }
+      }
+      if (closed.boardError) return { deny: `The board could not do that: ${closed.boardError}.` }
+      if (!ops.length && !briefOps.length && !bottomLine && !briefMode) {
+        return { result: `Side board ${side.id}: ${side.op === 'return' ? (side.choice ? `decided on ${side.choice}, which settles its constraint on the main board` : 'decided') : side.op === 'park' ? 'parked' : 'dropped'}; the user is back on the main board.` }
+      }
+    }
     if (!ops.length && !briefOps.length && !bottomLine && !briefMode) return { deny: 'Nothing to amend: give `ops` for a diagram, or `sections` or `bottom_line` for the brief.' }
     if (!board) return { deny: `There is no whiteboard page in this session yet: draw the diagram with ${TOOL} first.` }
     let briefSaid = ''
     if (briefOps.length || bottomLine || briefMode) {
-      let changed: { ok: boolean; done?: number; errors?: string[]; briefError?: string }
+      let changed: { ok: boolean; done?: number; errors?: string[]; briefError?: string; boardError?: string; board?: string }
       try {
         const started = await boardOpen($)
-        changed = await boardPost($, started.open, { briefOps, ...(bottomLine ? { bottomLine } : {}), ...(briefMode ? { briefMode } : {}) })
+        changed = await boardPost($, started.open, { briefOps, ...(bottomLine ? { bottomLine } : {}), ...(briefMode ? { briefMode } : {}), ...(onBoard ? { board: onBoard } : {}) })
       } catch (error) {
         return { deny: failed(error) }
       }
-      if (changed.briefError) return { deny: `There is no brief on the board yet: post one with ${TOOL} (bottom_line and sections).` }
+      if (changed.boardError) return { deny: `The board could not do that: ${changed.boardError}.` }
+      const where = changed.board && changed.board !== 'main' ? ` on the side board \`${changed.board}\`` : ''
+      if (changed.briefError) return { deny: `There is no brief${where || ' on the board'} yet: post one with ${TOOL} (bottom_line and sections).` }
       // An answer under a section is Claude answering on the board: nothing more is posted for the turn.
       if (boardTurn && briefOps.some(op => op.op === 'answer') && (changed.done ?? 0) > 0) boardTurn.isPosted = true
       const errors = changed.errors?.length ? ` Not applied: ${changed.errors.join('; ')}.` : ''
-      briefSaid = `Changed the brief: ${changed.done ?? 0} of ${briefOps.length + (bottomLine ? 1 : 0) + (briefMode ? 1 : 0)} applied.${errors}`
+      briefSaid = `Changed the brief${where}: ${changed.done ?? 0} of ${briefOps.length + (bottomLine ? 1 : 0) + (briefMode ? 1 : 0)} applied.${errors}`
       if (!ops.length) return { result: briefSaid }
     }
     let out: { ok: boolean; diagram?: string; tab?: number; done?: string[]; errors?: string[]; error?: string; look?: string }
     try {
       // A closed tab opens again, so the amendment is seen.
       const started = await boardOpen($)
-      out = await boardPost($, started.open, { ops, ...(Number.isInteger(e.diagram) ? { diagram: e.diagram } : {}), ...(e.look === false ? { look: false } : {}) })
+      out = await boardPost($, started.open, { ops, ...(Number.isInteger(e.diagram) ? { diagram: e.diagram } : {}), ...(e.look === false ? { look: false } : {}), ...(onBoard ? { board: onBoard } : {}) })
     } catch (error) {
       return { deny: failed(error) }
     }

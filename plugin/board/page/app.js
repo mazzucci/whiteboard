@@ -125,13 +125,15 @@ function renderTabs() {
   const tabs = $('tabs')
   tabs.innerHTML = ''
   diagrams.forEach((d, i) => {
+    // Each board has its own diagrams: only this board's are tabs.
+    if (d.board !== boardOn) return
     const tab = document.createElement('button')
     tab.type = 'button'
     tab.className = 'tab'
     tab.setAttribute('role', 'tab')
     tab.setAttribute('aria-selected', String(i === current))
     tab.title = d.title
-    tab.innerHTML = `<span class="n">${i + 1}</span>${esc(d.title)}`
+    tab.innerHTML = `<span class="n">${onBoard().indexOf(d) + 1}</span>${esc(d.title)}`
     tab.onclick = () => select(i)
     if (d.isNew) {
       tab.classList.add('new')
@@ -150,6 +152,8 @@ function legendHtml(entries) {
 
 function select(i) {
   if (!diagrams.length) return
+  // A diagram on another board (a chip in the conversation, an amendment): that board comes up with it.
+  if (diagrams[i] && diagrams[i].board !== boardOn) return showBoard(diagrams[i].board, true, i)
   const shown = diagrams[current] && canvas.innerHTML ? { d: diagrams[current], nodes: nodesOnCanvas() } : null
   current = Math.max(0, Math.min(diagrams.length - 1, i))
   const d = diagrams[current]
@@ -157,9 +161,10 @@ function select(i) {
   $('stage-empty').hidden = true
   $('d-title').textContent = d.title
   $('d-kind').textContent = d.kind
-  $('d-count').textContent = `${current + 1}/${diagrams.length}`
-  $('prev').disabled = current === 0
-  $('next').disabled = current === diagrams.length - 1
+  const own = onBoard()
+  $('d-count').textContent = `${own.indexOf(d) + 1}/${own.length}`
+  $('prev').disabled = own[0] === d
+  $('next').disabled = own.at(-1) === d
   $('legend').innerHTML = legendHtml(d.legend)
   $('source-code').textContent = d.source
   canvas.innerHTML = d.svg
@@ -428,7 +433,7 @@ async function add(card, isReplay) {
     }
     // A note on an earlier diagram brings that diagram up.
     const d = diagrams.find(x => x.id === card.diagram)
-    if (!isReplay && d && diagrams[current]?.id !== card.diagram) select(diagrams.indexOf(d))
+    if (!isReplay && d && d.board === boardOn && diagrams[current]?.id !== card.diagram) select(diagrams.indexOf(d))
     return
   }
   let drawn = null
@@ -463,7 +468,7 @@ async function add(card, isReplay) {
   }
   const title = card.title || (card.mermaid ? typeOf(card.mermaid) || 'Diagram' : '')
   if (drawn) {
-    diagrams.push({ id: card.id, title, source: card.mermaid, kind: typeOf(card.mermaid), legend: card.legend, ...drawn, view: null, isNew: !isReplay })
+    diagrams.push({ id: card.id, board: card.board ?? 'main', title, source: card.mermaid, kind: typeOf(card.mermaid), legend: card.legend, ...drawn, view: null, isNew: !isReplay })
     for (const note of card.notes ?? []) pinned(card.id).push({ by: 'claude', ...note })
   }
   if (card.text || drawn || title) {
@@ -483,7 +488,22 @@ async function add(card, isReplay) {
       el.querySelector('.body').append(chip)
     }
   }
-  if (drawn) select(diagrams.length - 1)
+  // A diagram on another board waits there; one on this board comes up (and the board has room for it again).
+  if (drawn && diagrams.at(-1).board === boardOn) {
+    document.body.classList.remove('board-empty')
+    select(diagrams.length - 1)
+  }
+  else if (drawn) renderTabs()
+}
+
+/** This board's diagrams, in order. */
+const onBoard = () => diagrams.filter(d => d.board === boardOn)
+/** The diagram `step` places along this board's diagrams from the one on screen. */
+function stepDiagram(step) {
+  const own = onBoard()
+  const at = own.indexOf(diagrams[current])
+  const d = own[Math.max(0, Math.min(own.length - 1, at + step))]
+  if (d) select(diagrams.indexOf(d))
 }
 
 // ---------------------------------------------------------------- events
@@ -516,6 +536,7 @@ function connect() {
     cardLog.length = 0
     document.body.classList.remove('on-chart')
     document.querySelectorAll('.brief-event').forEach(el => el.remove())
+    resetBoards()
     resetBrief()
     setConnected(true)
     isReplaying = true
@@ -621,14 +642,14 @@ function onEvent(e) {
   card._at = at
   const replay = isReplaying
   // A canvas, Claude's amendments to one, or a request for a picture: after the cards before them.
-  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card), mode: () => setMode(card.mode, false, replay), brief: () => briefArrived(card, replay) }[card.kind]
+  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card), mode: () => setMode(card.mode, false, replay), brief: () => briefArrived(card, replay), board: () => boardArrived(card, replay) }[card.kind]
   queue = queue.then(() => (act ? act() : add(card, replay))).catch(err => console.error(err))
 }
 
 // ---------------------------------------------------------------- controls
 
-$('prev').onclick = () => select(current - 1)
-$('next').onclick = () => select(current + 1)
+$('prev').onclick = () => stepDiagram(-1)
+$('next').onclick = () => stepDiagram(1)
 $('zoom-in').onclick = () => zoomBy(1.25)
 $('zoom-out').onclick = () => zoomBy(0.8)
 $('fit').onclick = () => fit()
@@ -721,7 +742,7 @@ document.addEventListener('keydown', e => {
   const keys = {
     i: () => zoomBy(1.25), o: () => zoomBy(0.8), f: () => fit(),
     ArrowUp: () => panBy(0, step), ArrowDown: () => panBy(0, -step), ArrowLeft: () => panBy(step, 0), ArrowRight: () => panBy(-step, 0),
-    '[': () => select(current - 1), ']': () => select(current + 1), c: () => setCode(!isCode),
+    '[': () => stepDiagram(-1), ']': () => stepDiagram(1), c: () => setCode(!isCode),
   }
   const act = keys[e.key]
   if (act && diagrams.length) {
@@ -748,15 +769,18 @@ const box = $('text')
 async function send(text, isTyped = true, about = isTyped ? briefAbout() : null) {
   const asked = about?.asked ?? text.trim()
   // Choices on the brief go with any message, or alone.
-  const chose = isTyped ? briefChoicesSaid() : ''
+  const chose = isTyped ? [briefChoicesSaid(), briefDecisionSaid()].filter(Boolean).join(' ') : ''
   // Changes made on a canvas go first, in words (and what is selected, for what they typed).
   text = withChanges(text.trim(), isTyped)
   if (chose) text = text ? `${chose}\n\n${text}` : chose
   // A question about a section of the brief says which, so the answer lands under it.
   if (about && asked && text.endsWith(asked)) text = `${text.slice(0, -asked.length)}${about.said}\n${asked}`
   // More detail is asked for, not a question: nothing waits under the section for an answer.
-  const choices = chose ? briefChoicesToSend() : undefined
-  const sent = text ? await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}), ...(choices ? { choices } : {}) }).catch(() => null) : null
+  // A side board's decision is for the main board's constraint it was opened for.
+  const choices = chose ? [...briefChoicesToSend(), ...(briefDecision ? [{ id: briefDecision.board, board: 'main', choice: briefDecision.choice }] : [])] : undefined
+  const sent = text
+    ? await post('/say', { page: pageId, text, board: boardOn, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}), ...(choices ? { choices } : {}) }).catch(() => null)
+    : null
   // post() gives the fetch Response: ok once the board has the message.
   if (choices && sent?.ok) briefChoicesSent()
   if (about && asked && text) briefSent()

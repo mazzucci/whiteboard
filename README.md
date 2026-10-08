@@ -101,6 +101,9 @@ evidence shows, then a proposed fix.
   the constraints that decide it, each with its choices and Claude's lean.
   Click yours; the diagram marks what is still open, and Claude proposes the
   design once nothing is.
+- **Side boards.** Say "let's whiteboard this" about one question and Claude
+  opens a board just for it, such as a comparison of the options. Pick one,
+  and the main board's decision is settled; you are back where you were.
 - **Sticky notes.** Claude pins a proposal, a question or a gotcha beside the
   box it is about (in a flowchart, or on a chart's slice, bar or point; beside
   the diagram in other types), without

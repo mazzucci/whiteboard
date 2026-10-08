@@ -332,11 +332,19 @@ function boardMarkdown(when = new Date()) {
 const citesMarkdown = s => (s.cites ?? []).map(c => (c.url ? `[§ ${c.label.replace(/[[\]]/g, '\\$&')}](<${c.url}>)` : `§ ${c.label}`)).join(' ')
 
 /** The brief in Markdown: the bottom line, each section with its detail and the questions answered there, what was dropped. */
-function briefSavedMarkdown() {
-  const b = briefNow
+function briefSavedMarkdown(b = briefByBoard.get('main') ?? null, heading = '## The brief') {
   if (!b) return []
-  const lines = ['## The brief', '', `> **Bottom line:** ${b.bottomLine}`, '']
-  for (const s of b.sections) {
+  const lines = [heading, '', `> **Bottom line:** ${b.bottomLine}`, '']
+  // A comparison as a table: a row per criterion, a column per option.
+  const rows = b.options?.length ? b.sections.filter(s => s.cells && s.kind !== 'constraint') : []
+  if (rows.length) {
+    const cell = t => String(t ?? '').replace(/\|/g, '\\|')
+    const MARK = { yes: '✓', part: '~', no: '✕', unknown: '?' }
+    lines.push(`| | ${b.options.map(o => cell(o.label)).join(' | ')} |`, `|---|${b.options.map(() => '---|').join('')}`)
+    for (const s of rows) lines.push(`| **${cell(s.title)}** | ${b.options.map(o => (s.cells[o.id] ? `${MARK[s.cells[o.id].mark] ?? '?'} ${cell(s.cells[o.id].text)}` : '?')).join(' | ')} |`)
+    lines.push('')
+  }
+  for (const s of b.sections.filter(s => !rows.includes(s))) {
     const chosen = s.choices?.find(c => c.id === s.chosen)?.label
     const state = s.kind === 'constraint' ? ` _(${s.status === 'settled' ? `settled: ${chosen ?? 'yes'}` : s.status})_` : s.kind === 'idea' ? ' _(idea)_' : ''
     lines.push(`### ${s.title}${state}`, '', `${s.line}${s.cites?.length ? ` ${citesMarkdown(s)}` : ''}`, '')
@@ -347,12 +355,18 @@ function briefSavedMarkdown() {
     }
   }
   if (b.dropped.length) lines.push(`_Dropped: ${b.dropped.map(s => `${s.title}${s.why ? ` (${s.why})` : ''}`).join('; ')}._`, '')
+  // Then each side board opened from the main one, with where it stands.
+  if (heading === '## The brief') {
+    for (const side of boardsMeta.filter(x => x.id !== 'main' && briefByBoard.get(x.id))) {
+      lines.push(...briefSavedMarkdown(briefByBoard.get(side.id), `## Side board: ${side.title} (${side.state}${side.why ? `: ${side.why}` : ''})`))
+    }
+  }
   return lines
 }
 
 /** The brief as a section of the saved web page. */
 function briefSavedHtml() {
-  const b = briefNow
+  const b = briefByBoard.get('main') ?? null
   if (!b) return ''
   const cites = s => (s.cites ?? []).map(c => (c.url ? ` <a href="${esc(c.url)}">§ ${esc(c.label)}</a>` : ` <span class="meta">§ ${esc(c.label)}</span>`)).join('')
   return (
@@ -367,6 +381,10 @@ function briefSavedHtml() {
       )
       .join('') +
     (b.dropped.length ? `<p class="meta">Dropped: ${b.dropped.map(s => `${esc(s.title)}${s.why ? ` (${esc(s.why)})` : ''}`).join('; ')}.</p>` : '') +
+    boardsMeta
+      .filter(x => x.id !== 'main' && briefByBoard.get(x.id))
+      .map(x => `<h3>Side board: ${esc(x.title)} <span class="meta">(${esc(x.state)})</span></h3><p>${inline(briefByBoard.get(x.id).bottomLine)}</p>`)
+      .join('') +
     '</section>'
   )
 }

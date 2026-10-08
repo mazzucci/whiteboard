@@ -26,6 +26,17 @@
   - The header waits on what is open, then shows the proposal.
   - Claude restructures as you go: a choice can drop a constraint or raise a
     new one, and Claude's suggestions are yours to take or turn down.
+- **Side boards.** Say "let's whiteboard this" about a question inside a
+  decision (relational or not, which rate limiter), or take Claude up on its
+  offer, and Claude opens a side board for it: its own brief and diagrams,
+  one click from the main board.
+  - A comparison lays the options out as columns, each criterion a row of
+    marks (✓ ~ ✕ ?) and one short clause.
+  - Pick an option to decide it: the main board's constraint is settled, and
+    you are back there. Claude can also park a side board for later, or drop
+    it.
+  - Claude's posts go to the board you are looking at; the main board lists
+    its side boards and where each stands. Save board includes them.
 
 ## 0.5.1
 
