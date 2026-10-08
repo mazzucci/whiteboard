@@ -337,7 +337,9 @@ function briefSavedMarkdown() {
   if (!b) return []
   const lines = ['## The brief', '', `> **Bottom line:** ${b.bottomLine}`, '']
   for (const s of b.sections) {
-    lines.push(`### ${s.title}`, '', `${s.line}${s.cites?.length ? ` ${citesMarkdown(s)}` : ''}`, '')
+    const chosen = s.choices?.find(c => c.id === s.chosen)?.label
+    const state = s.kind === 'constraint' ? ` _(${s.status === 'settled' ? `settled: ${chosen ?? 'yes'}` : s.status})_` : s.kind === 'idea' ? ' _(idea)_' : ''
+    lines.push(`### ${s.title}${state}`, '', `${s.line}${s.cites?.length ? ` ${citesMarkdown(s)}` : ''}`, '')
     if (s.body) lines.push(s.body, '')
     for (const a of s.asks ?? []) {
       if (a.question) lines.push(`**You asked:** ${a.question}`, '')
