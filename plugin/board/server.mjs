@@ -210,7 +210,10 @@ function notesOf(value) {
 /** At most this many sections at a time: the brief fits one screen. */
 const MAX_SECTIONS = 9
 let brief = null
-/** The brief before the one just posted, until its diagram has drawn. */
+/**
+ * The brief before the one just posted, until its diagram has drawn. Only a
+ * post with both a brief and a diagram uses it, and each such post sets it.
+ */
 let briefBefore
 const SECTION_ID = /^[A-Za-z0-9][\w-]{0,31}$/
 

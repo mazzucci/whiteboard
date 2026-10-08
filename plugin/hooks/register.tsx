@@ -217,7 +217,8 @@ const BOARD_NOTE =
   `The user typed this on the whiteboard page and is watching the page, not this conversation: answer there with ${TOOL} ` +
   '(a note, a diagram, sticky notes), and keep what you write here to a line. When it is about a section of the brief ' +
   `("About the brief's section \`id\`"), answer under that section with ${EDIT_TOOL} ` +
-  "(sections: [{ op: 'answer', id, text }]), and update the section's line, or the bottom line, if the answer changes it."
+  "(sections: [{ op: 'answer', id, text }]), and update the section's line, or the bottom line, if the answer changes it. " +
+  "When it asks for more detail, write it as that section's body (sections: [{ op: 'update', id, body }])."
 /** Said when the person, after talking on the page, types in the conversation again. */
 const BACK_NOTE =
   'The user is back in this conversation: they typed this here, not on the whiteboard. Focus mode, if it was on, ' +

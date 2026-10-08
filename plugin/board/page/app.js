@@ -387,11 +387,12 @@ function showTyping() {
   // On a narrow screen the conversation may be hidden: the Chat button shows it too.
   document.querySelector('.views [data-view="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
   document.querySelector('.panes [data-pane="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
-  briefTurnChanged(typing.hidden ? null : $('typing-text').textContent)
   typing.hidden = !isWorking && !waiting
   $('typing-text').textContent = isWorking
     ? waiting > 1 ? `Claude is working… your ${waiting} messages are queued` : 'Claude is working…'
     : 'Sent. Claude Code picks it up in a moment…'
+  // The brief says it too, from what was just set.
+  briefTurnChanged(typing.hidden ? null : $('typing-text').textContent)
   const messages = $('messages')
   if (!typing.hidden && messages.scrollHeight - messages.scrollTop - messages.clientHeight < 120) messages.scrollTop = messages.scrollHeight
 }

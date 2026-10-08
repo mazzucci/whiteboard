@@ -122,7 +122,7 @@ test('More detail asks Claude for it, about that section', async () => {
   await page.click(section('pkce'))
   await page.click(`${section('pkce')} [data-act="more"]`)
   await b.until(() => b.said.at(-1)?.endsWith('More detail, please.'), 'asked for more')
-  assert.equal(b.said.at(-1), 'About the brief\'s section `pkce` ("PKCE": A secret the app keeps protects the code.):\nMore detail, please.')
+  assert.equal(b.said.at(-1), 'About the brief\'s section `pkce` ("PKCE": A secret the app keeps protects the code.): (write it as the section\'s body)\nMore detail, please.')
   // Asked for, not a question: nothing waits under the section, the detail comes as its body.
   await sleep(300)
   assert.deepEqual((await brief()).sections.find(s => s.id === 'pkce').asks, [])
@@ -137,10 +137,12 @@ test('a question Claude did not answer under its section says so once Claude is 
   await b.call('/post', { status: 'working' })
   await sleep(300)
   assert.match((await brief()).sections.find(s => s.id === 'roles').asks[0], /Waiting for Claude…/)
+  assert.match(await page.$eval('#brief-status-text', el => el.textContent), /^Claude is working…/)
   // The turn ends with no answer under the section (Claude answered in the conversation).
   await b.call('/post', { status: 'idle' })
   await b.until(async () => /Not answered here/.test((await brief()).sections.find(s => s.id === 'roles').asks[0]), 'not waiting any more')
   assert.equal((await brief()).sections.find(s => s.id === 'roles').asks[0], 'You asked: Which one is mine? Not answered here: Claude may have answered in the chat.')
+  assert.equal(await page.$eval('#brief-status', el => el.hidden), true)
 })
 
 test("a section lights up a sequence diagram's participants: their boxes and lifelines", async () => {

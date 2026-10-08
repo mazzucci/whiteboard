@@ -30,7 +30,8 @@ function resetBrief() {
   briefPick = null
   briefSeen.clear()
   briefPane.innerHTML = ''
-  document.body.classList.remove('has-brief', 'pane-brief')
+  document.body.classList.remove('has-brief')
+  showPane('chat')
   showBriefPick()
   showFocus()
 }
@@ -82,7 +83,7 @@ function briefArrived(card, isReplay) {
   // Taken off again (its diagram failed to draw), back to the brief before it, or none.
   if (!card.brief) {
     resetBrief()
-    showPane('chat')
+    briefEvent('The brief was taken off with its diagram', null)
     return
   }
   const isFirst = !briefNow
@@ -276,7 +277,7 @@ briefPane.addEventListener('click', e => {
   }
   if (act === 'more') {
     const s = briefNow.sections.find(x => x.id === li.dataset.id)
-    send('More detail, please.', false, { ...briefAboutOf(s), asked: 'More detail, please.', isMore: true })
+    send('More detail, please.', false, { ...briefAboutOf(s), said: `${briefAboutOf(s).said} (write it as the section's body)`, asked: 'More detail, please.', isMore: true })
     return
   }
   if (e.target.closest('.qa, .body')) return
