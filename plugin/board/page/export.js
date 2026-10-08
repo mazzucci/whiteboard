@@ -199,6 +199,7 @@ async function boardHtml(when = new Date()) {
 <main>
 <header><h1>Whiteboard · ${esc(label)}</h1><p>Saved ${esc(when.toLocaleString())} · ${diagrams.length} diagram${diagrams.length === 1 ? '' : 's'}</p></header>
 ${contents}
+${briefSavedHtml()}
 ${sections.join('\n')}
 ${talk ? `<section class="conversation"><h2>The conversation on the board</h2>\n${talk}\n</section>` : ''}
 <footer>Saved from Whiteboard, a Claude Code plugin · open source · not affiliated with Anthropic</footer>
@@ -290,6 +291,8 @@ function diagramMarkdown(d, heading) {
  */
 function boardMarkdown(when = new Date()) {
   const lines = [`# Whiteboard · ${boardLabel()}`, '', `Saved ${when.toLocaleString()} · ${diagrams.length} diagram${diagrams.length === 1 ? '' : 's'}`, '']
+  // The brief is the answer: it goes first, the diagrams it points at after it.
+  lines.push(...briefSavedMarkdown())
   const tab = d => diagrams.indexOf(d) + 1
   for (const thread of threadsOf()) {
     const latest = thread.at(-1)
@@ -320,6 +323,50 @@ function boardMarkdown(when = new Date()) {
     }
   }
   return lines.join('\n')
+}
+
+
+// ---------------------------------------------------------------- the brief, saved
+
+/** A section's sources, for a reader: a link where there is one. */
+const citesMarkdown = s => (s.cites ?? []).map(c => (c.url ? `[§ ${c.label}](${c.url})` : `§ ${c.label}`)).join(' ')
+
+/** The brief in Markdown: the bottom line, each section with its detail and the questions answered there, what was dropped. */
+function briefSavedMarkdown() {
+  const b = briefNow
+  if (!b) return []
+  const lines = ['## The brief', '', `> **Bottom line:** ${b.bottomLine}`, '']
+  for (const s of b.sections) {
+    lines.push(`### ${s.title}`, '', `${s.line}${s.cites?.length ? ` ${citesMarkdown(s)}` : ''}`, '')
+    if (s.body) lines.push(s.body, '')
+    for (const a of s.asks ?? []) {
+      if (a.question) lines.push(`**You asked:** ${a.question}`, '')
+      if (a.answer) lines.push(`**Claude:** ${a.answer}`, '')
+    }
+  }
+  if (b.dropped.length) lines.push(`_Dropped: ${b.dropped.map(s => `${s.title}${s.why ? ` (${s.why})` : ''}`).join('; ')}._`, '')
+  return lines
+}
+
+/** The brief as a section of the saved web page. */
+function briefSavedHtml() {
+  const b = briefNow
+  if (!b) return ''
+  const cites = s => (s.cites ?? []).map(c => (c.url ? ` <a href="${esc(c.url)}">§ ${esc(c.label)}</a>` : ` <span class="meta">§ ${esc(c.label)}</span>`)).join('')
+  return (
+    '<section class="brief" id="brief"><h2>The brief</h2>' +
+    `<blockquote><b>Bottom line:</b> ${inline(b.bottomLine)}</blockquote>` +
+    b.sections
+      .map(
+        s =>
+          `<h3>${esc(s.title)}</h3><p>${inline(s.line)}${cites(s)}</p>` +
+          (s.body ? `<div class="md">${markdown(s.body)}</div>` : '') +
+          (s.asks ?? []).map(a => `${a.question ? `<p><b>You asked:</b> ${esc(a.question)}</p>` : ''}${a.answer ? `<div class="md"><b>Claude:</b> ${markdown(a.answer)}</div>` : ''}`).join(''),
+      )
+      .join('') +
+    (b.dropped.length ? `<p class="meta">Dropped: ${b.dropped.map(s => `${esc(s.title)}${s.why ? ` (${esc(s.why)})` : ''}`).join('; ')}.</p>` : '') +
+    '</section>'
+  )
 }
 
 const SAVES = {

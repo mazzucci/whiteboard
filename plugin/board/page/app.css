@@ -254,6 +254,63 @@ body.on-chart .hint .chart-keys { display: inline; }
   .ended { bottom: calc(12px + env(safe-area-inset-bottom)); }
 }
 
+/* ---------------------------------------------------------------- the brief
+   Claude's bottom line and sections, in the conversation's column (Brief / Chat). */
+@media (min-width: 901px) { body.has-brief .layout { grid-template-columns: minmax(0, 1fr) clamp(380px, 34vw, 520px); } }
+.panes { display: none; gap: 4px; padding: 10px 12px 0; }
+body.has-brief .panes { display: flex; }
+.panes button { padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); font-size: 13px; cursor: pointer; }
+.panes button[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+.panes .unread { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px; background: #e5484d; color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.panes [data-pane="chat"].busy::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; animation: blink 1.2s infinite ease-in-out; }
+.brief { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 16px; }
+body.pane-brief .brief { display: block; }
+body.pane-brief .messages { display: none; }
+.brief .bottom-line { padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 9%, var(--panel)); border-left: 3px solid var(--accent); }
+.brief .k { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.brief .bottom-line p { margin: 4px 0 0; font-size: 15.5px; line-height: 1.5; }
+.brief .secs { list-style: none; margin: 10px 0 0; padding: 0; }
+.brief .sec { position: relative; margin: 0 -8px; padding: 10px 8px; border-top: 1px solid var(--line); border-radius: 8px; cursor: pointer; outline: none; }
+.brief .sec:hover { background: color-mix(in srgb, var(--soft) 70%, transparent); }
+.brief .sec:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.brief .sec.picked { background: color-mix(in srgb, var(--accent) 8%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.brief .sec.fresh, .brief .bottom-line.fresh { animation: brief-fresh 2.4s ease-out; }
+@keyframes brief-fresh { 0%, 30% { background: #fff3bf; } }
+.brief .sec-title { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.brief .line { margin-top: 2px; font-size: 14.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.brief .line code, .brief .bottom-line code, .brief .was code { font: 12.5px var(--mono); background: var(--soft); padding: 1px 4px; border-radius: 4px; }
+.brief .cite { display: inline-block; margin-left: 5px; padding: 0 6px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); font-size: 11px; line-height: 17px; text-decoration: none; vertical-align: 1px; white-space: nowrap; }
+a.cite:hover { color: var(--accent); border-color: var(--accent); }
+.brief .updated { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: #fde68a; color: #6b4e00; font-size: 10.5px; font-weight: 700; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
+.brief .was { margin-top: 3px; font-size: 12.5px; color: var(--muted); text-decoration: line-through; }
+.brief .body { margin-top: 6px; font-size: 13.5px; }
+.brief .qa { margin-top: 8px; padding-left: 10px; border-left: 2px solid var(--line); font-size: 13.5px; }
+.brief .qa .q { color: var(--muted); }
+.brief .qa .q b { color: var(--ink); font-weight: 600; }
+.brief .qa .a { margin-top: 3px; }
+.brief .qa .waiting { color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.brief .qa .dots { display: inline-flex; gap: 3px; }
+.brief .qa .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite ease-in-out; }
+.brief .qa .dots i:nth-child(2) { animation-delay: .15s; } .brief .qa .dots i:nth-child(3) { animation-delay: .3s; }
+.brief .sec-acts { display: flex; gap: 6px; margin-top: 8px; }
+.brief .sec-acts button { padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); cursor: pointer; font-size: 12.5px; }
+.brief .sec-acts button:hover { border-color: var(--accent); color: var(--accent); }
+.brief .dropped { margin-top: 14px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12.5px; color: var(--muted); }
+.brief .dropped .k { color: var(--muted); margin-bottom: 4px; }
+.brief .dropped s { color: var(--ink); opacity: .7; }
+.brief-hint { margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+.brief-event { align-self: center; max-width: 92%; padding: 3px 10px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
+.brief-event::before { content: "◆ "; color: var(--accent); }
+.brief-event:hover { color: var(--accent); }
+.about-tag { margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+.composer .about { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 12%, var(--panel)); font-size: 12px; }
+.composer .about span { flex: 1; }
+.composer .about button { padding: 0 6px; border: 0; background: none; color: var(--muted); cursor: pointer; }
+/* The boxes the section being pointed at is about: they stay, the rest fade (the board is white in both themes). */
+.canvas.brief-focus g.node:not(.is-focus), .canvas.brief-focus [data-mark]:not(.is-focus) { opacity: .3; transition: opacity .2s; }
+.canvas.brief-focus .edgePaths, .canvas.brief-focus .edgeLabels, .canvas.brief-focus .flowchart-link { opacity: .4; transition: opacity .2s; }
+.canvas.brief-focus g.node.is-focus rect, .canvas.brief-focus g.node.is-focus polygon, .canvas.brief-focus g.node.is-focus circle, .canvas.brief-focus g.node.is-focus path { stroke: #2563eb !important; stroke-width: 3px !important; }
+
 /* A banner at the bottom (wrapped up, lost connection) takes the key hint's place. */
 body.has-banner .stage .hint { display: none; }
 /* Narrow screens: the Chat button pulses while Claude works or a message waits. */

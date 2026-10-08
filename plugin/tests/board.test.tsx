@@ -44,6 +44,8 @@ function host(
     scenes?: Record<string, unknown>
     /** The board's mode, as /cards reads it. */
     mode?: string
+    /** The brief, as /cards reads it. */
+    brief?: Record<string, unknown>
   } = {},
 ) {
   const spawned: string[][] = []
@@ -95,7 +97,7 @@ function host(
     expect(e.init?.headers).toMatchObject({ 'x-board-token': 'tok' })
     if (e.init?.method === 'GET') {
       const path = new URL(e.url).pathname
-      const value = path === '/viewers' ? { viewers: options.viewers?.() ?? 1 } : { viewers: 1, cards: options.cards ?? [], scenes: options.scenes ?? {}, mode: options.mode ?? 'diagrams' }
+      const value = path === '/viewers' ? { viewers: options.viewers?.() ?? 1 } : { viewers: 1, cards: options.cards ?? [], scenes: options.scenes ?? {}, mode: options.mode ?? 'diagrams', brief: options.brief ?? null }
       return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(value) } }
     }
     const body = JSON.parse(String(e.init?.body)) as Record<string, unknown>
@@ -503,5 +505,96 @@ test('when no page could pin the notes, Claude hears that, not a Mermaid error',
   await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
   const out = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', sticky_notes: [{ on: 'api', text: 'ok' }] })
   expect(said(out)).toContain('could not pin these sticky notes: no page is open')
+  stop()
+})
+
+// ---------------------------------------------------------------- the brief
+
+const BRIEF_SECTIONS = [
+  { id: 'roles', title: 'Four roles', line: 'You, the app, the login service, the API.', focus: ['U', 'A', 'C', 'R'] },
+  { id: 'flow', title: 'The main flow', line: 'The app swaps a one-time code for a token.', cites: [{ label: 'RFC 6749 §4.1', url: 'https://www.rfc-editor.org/rfc/rfc6749#section-4.1' }] },
+]
+
+test('a brief goes to the board with its diagram; another is refused while one is there, unless it is new', async ($, on) => {
+  let hasBrief = false
+  const { posts, stop } = host(on, {
+    page: body => {
+      if (!body.brief) return { ok: true, viewers: 1, drawn: true }
+      if (hasBrief && body.isNew !== true) return { ok: false, viewers: 1, drawn: false, briefError: 'a brief is on the board already' } as never
+      hasBrief = true
+      return { ok: true, viewers: 1, drawn: true }
+    },
+  })
+  const out = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', title: 'OAuth', mermaid: SOURCE, bottom_line: 'OAuth in one line.', sections: BRIEF_SECTIONS })
+  expect(posts.at(-1)).toMatchObject({ title: 'OAuth', brief: { bottomLine: 'OAuth in one line.', sections: [{ id: 'roles' }, { id: 'flow' }] } })
+  expect(said(out)).toContain('The brief is beside the diagrams with 2 sections: from now on change it in place with edit_board')
+  const again = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', bottom_line: 'Again.', sections: BRIEF_SECTIONS })
+  expect(said(again)).toContain('A brief is on the board already: change it in place with edit_board')
+  const fresh = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', bottom_line: 'On TLS now.', sections: [], as_new: true })
+  expect(posts.at(-1)).toMatchObject({ brief: { bottomLine: 'On TLS now.' }, isNew: true })
+  expect(said(fresh)).toContain('with 0 sections')
+  // Sections need their bottom line.
+  expect(said(await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', sections: BRIEF_SECTIONS }))).toContain('A brief starts with its bottom line')
+  stop()
+})
+
+test('edit_board changes the brief in place and says what failed; with no brief yet, Claude is told to post one', async ($, on) => {
+  let hasBrief = false
+  const { posts, stop } = host(on, {
+    page: body => {
+      if (body.brief) hasBrief = true
+      if (body.briefOps && !hasBrief) return { ok: false, viewers: 1, drawn: false, briefError: 'there is no brief on the board yet' } as never
+      if (body.briefOps) return { ok: true, viewers: 1, drawn: false, done: 2, errors: ['#2 nope: no section by that id'] } as never
+      return { ok: true, viewers: 1, drawn: true }
+    },
+  })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  expect(said(await $.tool.call({ tool: 'mcp__whiteboard__edit_board', sections: [{ op: 'drop', id: 'roles' }] }))).toContain('There is no brief on the board yet: post one with post_to_board')
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', bottom_line: 'OAuth in one line.', sections: BRIEF_SECTIONS })
+  const out = await $.tool.call({
+    tool: 'mcp__whiteboard__edit_board',
+    bottom_line: 'OAuth, better.',
+    sections: [{ op: 'update', id: 'flow', line: 'Over a back channel.' }, { op: 'drop', id: 'nope', why: 'gone' }],
+  })
+  expect(posts.at(-1)).toMatchObject({ bottomLine: 'OAuth, better.', briefOps: [{ op: 'update', id: 'flow' }, { op: 'drop', id: 'nope' }] })
+  expect(said(out)).toContain('Changed the brief: 2 of 3 applied. Not applied: #2 nope: no section by that id.')
+  expect(said(await $.tool.call({ tool: 'mcp__whiteboard__edit_board' }))).toContain('or `sections` or `bottom_line` for the brief')
+  stop()
+})
+
+test('a question about a section, answered under it, is answered on the board: nothing more is posted', async ($, on) => {
+  const { prompts, posts, stop } = host(on, {
+    page: body => (body.briefOps ? ({ ok: true, viewers: 1, drawn: false, done: 1, errors: [] } as never) : { ok: true, viewers: 1, drawn: true }),
+  })
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', bottom_line: 'OAuth in one line.', sections: BRIEF_SECTIONS })
+  const question = "(on the whiteboard) About the brief's section `flow` (\"The main flow\": The app swaps a one-time code for a token.):\nWhy?"
+  await $.prompt.submit({ text: question } as never)
+  expect(prompts.at(-1)?.context?.join(' ')).toContain("answer under that section with edit_board (sections: [{ op: 'answer', id, text }])")
+  await $.turn.start({ text: question, turnId: 'q1' })
+  await $.tool.call({ tool: 'mcp__whiteboard__edit_board', sections: [{ op: 'answer', id: 'flow', text: 'So the token stays off the address bar.' }] })
+  await $.turn.complete({ answer: 'Answered under the section.', durationMs: 1, isAborted: false, turnId: 'q1', reason: 'answer' } as never)
+  expect(posts.some(p => p.text === 'Answered under the section.')).toBe(false)
+  stop()
+})
+
+test('read_board gives Claude the brief as it is: the bottom line, each line by id, questions waiting, what was dropped', async ($, on) => {
+  const brief = {
+    bottomLine: 'OAuth in one line.',
+    sections: [
+      { ...BRIEF_SECTIONS[0], asks: [] },
+      { ...BRIEF_SECTIONS[1], body: 'A long body Claude does not need back.', asks: [{ question: 'Why?' }, { question: 'And?', answer: 'Because.' }] },
+    ],
+    dropped: [{ id: 'tokens', title: 'Tokens', line: 'x', asks: [], why: 'not needed' }],
+  }
+  const { stop } = host(on, { brief })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  const read = said(await $.tool.call({ tool: 'mcp__whiteboard__read_board' }))
+  expect(read).toContain('Bottom line: OAuth in one line.')
+  expect(read).toContain('- `roles` Four roles: You, the app, the login service, the API. (on U, A, C, R)')
+  expect(read).toContain('- `flow` The main flow: The app swaps a one-time code for a token. — 1 question from the user waiting for an answer')
+  expect(read).toContain('Dropped: `tokens` (not needed)')
+  expect(read).not.toContain('A long body')
   stop()
 })

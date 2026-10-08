@@ -176,6 +176,8 @@ function select(i) {
   keepInView(d)
   renderTabs()
   showEditor(d)
+  // The brief's section being pointed at lights up its boxes on whichever diagram is in front.
+  showFocus()
 }
 
 /** Whether the diagram on screen is a canvas being edited: then the canvas has the pointer and the keys. */
@@ -339,7 +341,10 @@ function addMessage(card, html, isReplay = false) {
   messages.insertBefore(el, $('typing'))
   if (isYou && !isReplay) pending.push({ at: card._at ?? 0, el })
   if (!isYou) answered()
-  if (!isYou && !isReplay) countUnread()
+  if (!isYou && !isReplay) {
+    countUnread()
+    countChatUnread()
+  }
   showTyping()
   if (isAtBottom || isYou) messages.scrollTop = messages.scrollHeight
   return el
@@ -381,6 +386,7 @@ function showTyping() {
   const waiting = waitingCount()
   // On a narrow screen the conversation may be hidden: the Chat button shows it too.
   document.querySelector('.views [data-view="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
+  document.querySelector('.panes [data-pane="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
   typing.hidden = !isWorking && !waiting
   $('typing-text').textContent = isWorking
     ? waiting > 1 ? `Claude is working… your ${waiting} messages are queued` : 'Claude is working…'
@@ -403,7 +409,8 @@ async function add(card, isReplay) {
   }
   if (card.kind === 'you') {
     cardLog.push(card)
-    addMessage(card, markdown(card.text), isReplay)
+    const section = card.about && briefNow?.sections.find(s => s.id === card.about)
+    addMessage(card, markdown(card.text) + (section ? `<div class="about-tag">About “${esc(section.title)}” in the brief</div>` : ''), isReplay)
     return
   }
   if (card.kind === 'sticky') {
@@ -499,6 +506,8 @@ else events.onopen = () => {
   stickies.clear()
   cardLog.length = 0
   document.body.classList.remove('on-chart')
+  document.querySelectorAll('.brief-event').forEach(el => el.remove())
+  resetBrief()
   setConnected(true)
   isReplaying = true
   // Replayed cards arrive at once; anything after a short pause is new.
@@ -604,7 +613,7 @@ function onEvent(e) {
   card._at = at
   const replay = isReplaying
   // A canvas, Claude's amendments to one, or a request for a picture: after the cards before them.
-  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card), mode: () => setMode(card.mode, false, replay) }[card.kind]
+  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card), mode: () => setMode(card.mode, false, replay), brief: () => briefArrived(card, replay) }[card.kind]
   queue = queue.then(() => (act ? act() : add(card, replay))).catch(err => console.error(err))
 }
 
@@ -728,10 +737,14 @@ new ResizeObserver(() => {
 // ---------------------------------------------------------------- composer
 
 const box = $('text')
-async function send(text, isTyped = true) {
+async function send(text, isTyped = true, about = isTyped ? briefAbout() : null) {
+  const asked = about?.asked ?? text.trim()
   // Changes made on a canvas go first, in words (and what is selected, for what they typed).
   text = withChanges(text.trim(), isTyped)
-  if (text) await post('/say', { page: pageId, text })
+  // A question about a section of the brief says which, so the answer lands under it.
+  if (about && asked && text.endsWith(asked)) text = `${text.slice(0, -asked.length)}${about.said}\n${asked}`
+  if (text) await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked } : {}) })
+  if (about) briefSent()
 }
 $('form').onsubmit = e => {
   e.preventDefault()

@@ -66,11 +66,17 @@
     </div>
   </section>
   <aside class="chat" aria-label="Conversation">
+    <nav class="panes" aria-label="Brief or conversation">
+      <button type="button" data-pane="brief" aria-pressed="false">Brief</button>
+      <button type="button" data-pane="chat" aria-pressed="true">Chat <span class="unread" id="chat-unread" hidden></span></button>
+    </nav>
+    <div class="brief" id="brief" aria-label="Claude's brief"></div>
     <div class="messages" id="messages">
       <div class="empty" id="chat-empty">Claude's notes appear here. Answer below: your messages go to the same Claude Code session.</div>
       <div class="typing" id="typing" hidden><span class="dots"><i></i><i></i><i></i></span><span id="typing-text"></span></div>
     </div>
     <form class="composer" id="form">
+      <div class="about" id="about" hidden><span id="about-text"></span><button type="button" id="about-clear" aria-label="Not about this section">×</button></div>
       <textarea id="text" rows="2" placeholder="Reply to Claude…" disabled></textarea>
       <div class="actions">
         <span class="hint">Enter sends · Shift+Enter for a new line</span>
@@ -85,5 +91,6 @@
 <script src="/editing.js"></script>
 <script src="/charts.js"></script>
 <script src="/export.js"></script>
+<script src="/brief.js"></script>
 </body>
 </html>
