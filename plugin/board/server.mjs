@@ -240,12 +240,15 @@ function focusOf(value) {
 
 /** What a section is: a point (the default), a constraint to settle, or an idea not yet weighed. */
 const KINDS = ['point', 'constraint', 'idea']
+/** Words the page uses for its own buttons (take or turn down a suggestion, turn down an assumption): no choice is called that. */
+const RESERVED = ['accept', 'decline', 'reject']
 /** A constraint's options: at most four, each an id and a short label. */
 function choicesOf(value) {
   if (!Array.isArray(value)) return undefined
   const choices = value
     .map(c => ({ id: String(c?.id ?? '').trim(), label: lineOf(c?.label, 40), hint: lineOf(c?.hint, 60) }))
-    .filter((c, i, all) => SECTION_ID.test(c.id) && c.label && all.findIndex(x => x.id === c.id) === i)
+    .filter(c => SECTION_ID.test(c.id) && !RESERVED.includes(c.id) && c.label)
+    .filter((c, i, all) => all.findIndex(x => x.id === c.id) === i)
     .slice(0, 4)
   return choices.length ? choices : undefined
 }
@@ -342,6 +345,10 @@ function briefOp(op) {
   }
   if (!section) return { error: `${id}: no section by that id${brief.dropped.some(s => s.id === id) ? ' (it was dropped: restore it first)' : ''}` }
   if (kind === 'update') {
+    // Refused before anything changes: a settled constraint is opened with reopen.
+    if ((op.status === 'open' || op.status === 'assumed') && section.status === 'settled' && (op.kind ?? section.kind) === 'constraint') {
+      return { error: `${id}: settled; reopen it to change that` }
+    }
     const before = JSON.stringify(section)
     const line = lineOf(op.line, 300)
     const isNewLine = Boolean(line && line !== section.line)
@@ -353,9 +360,8 @@ function briefOp(op) {
       else for (const key of ['status', 'choices', 'lean', 'chosen', 'settledBy']) delete section[key]
     }
     if (section.kind === 'constraint') {
-      if ((op.status === 'open' || op.status === 'assumed') && section.status === 'settled') return { error: `${id}: settled; reopen it to change that` }
       if (Array.isArray(op.choices)) section.choices = choicesOf(op.choices)
-      if (typeof op.lean === 'string') section.lean = op.lean
+      if (typeof op.lean === 'string') section.lean = op.lean || undefined
       // A lean must be one of the choices, as they now are.
       if (section.lean && !section.choices?.some(c => c.id === section.lean)) delete section.lean
       if (op.status === 'open' || op.status === 'assumed') section.status = op.status

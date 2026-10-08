@@ -110,8 +110,11 @@ function briefArrived(card, isReplay) {
   const isFirst = !briefNow
   briefNow = card.brief
   document.body.classList.add('has-brief')
-  // A new brief starts with nothing seen.
-  if (card.changes.some(c => c.op === 'new')) briefSeen.clear()
+  // A new brief starts with nothing seen, and (unless replayed) no choice pending from the one before.
+  if (card.changes.some(c => c.op === 'new')) {
+    briefSeen.clear()
+    if (!isReplay) briefChoices.clear()
+  }
   if (isReplay) for (const s of briefNow.sections) briefSeen.set(s.id, s.v)
   if (isReplay) briefSeen.set('bottom line', briefNow.v)
   if (briefPick && !briefNow.sections.some(s => s.id === briefPick)) {

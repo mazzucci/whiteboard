@@ -457,3 +457,14 @@ test('in a decision, the bottom line becomes the proposal only when Claude write
   await briefPost({ briefOps: [{ op: 'reopen', id: 'a' }] })
   assert.equal((await cardsNow()).brief.isProposal, false)
 })
+
+test('an update refused on a settled constraint changes nothing; choices are never called accept, decline or reject', async () => {
+  await briefPost({ isNew: true, brief: { mode: 'decide', bottomLine: 'B', sections: [{ id: 'k', kind: 'constraint', title: 'Old', line: 'K?', choices: [{ id: 'x', label: 'X' }, { id: 'reject', label: 'No' }, { id: 'y', label: '' }, { id: 'y', label: 'Y' }] }] } })
+  let k = (await cardsNow()).brief.sections[0]
+  assert.deepEqual(k.choices.map(c => c.id), ['x', 'y'])
+  await postJson('/say', { text: 'K: X.', choices: [{ id: 'k', choice: 'x' }] })
+  const out = await briefPost({ briefOps: [{ op: 'update', id: 'k', title: 'New', status: 'open' }] })
+  assert.match(out.errors[0], /k: settled; reopen it to change that/)
+  k = (await cardsNow()).brief.sections[0]
+  assert.deepEqual([k.title, k.status], ['Old', 'settled'])
+})

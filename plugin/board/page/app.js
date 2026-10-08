@@ -757,6 +757,7 @@ async function send(text, isTyped = true, about = isTyped ? briefAbout() : null)
   // More detail is asked for, not a question: nothing waits under the section for an answer.
   const choices = chose ? briefChoicesToSend() : undefined
   const sent = text ? await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}), ...(choices ? { choices } : {}) }).catch(() => null) : null
+  // post() gives the fetch Response: ok once the board has the message.
   if (choices && sent?.ok) briefChoicesSent()
   if (about && asked && text) briefSent()
 }
