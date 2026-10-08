@@ -755,8 +755,9 @@ async function send(text, isTyped = true, about = isTyped ? briefAbout() : null)
   // A question about a section of the brief says which, so the answer lands under it.
   if (about && asked && text.endsWith(asked)) text = `${text.slice(0, -asked.length)}${about.said}\n${asked}`
   // More detail is asked for, not a question: nothing waits under the section for an answer.
-  const choices = chose ? briefChoicesSent() : undefined
-  if (text) await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}), ...(choices ? { choices } : {}) })
+  const choices = chose ? briefChoicesToSend() : undefined
+  const sent = text ? await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}), ...(choices ? { choices } : {}) }).catch(() => null) : null
+  if (choices && sent?.ok) briefChoicesSent()
   if (about && asked && text) briefSent()
 }
 $('form').onsubmit = e => {

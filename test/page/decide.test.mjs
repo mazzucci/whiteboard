@@ -55,14 +55,14 @@ test('a decision waits on its open constraints, shows each one’s choices and C
   await b.until(async () => (await decision()).sections.length === 4 && (await decision()).boxes.Acc, 'the decision and its diagram')
   const now = await decision()
   // An assumption does not hold up the proposal.
-  assert.equal(now.head, 'Bottom line · waiting on 3')
+  assert.equal(now.head, 'Bottom line · waiting on 3 · 1 to confirm')
   assert.equal(now.open, 'Open: Accounts, Payments, Stock')
   assert.equal(now.progress, '0 settled · 1 assumed · 3 open')
   assert.deepEqual(now.sections.map(s => [s.id, s.pill, s.choices]), [
     ['accounts', 'open', ['guest^', 'required']],
     ['payments', 'open', ['hosted^', 'embedded']],
     ['stock', 'open', ['payment', 'cart']],
-    ['markets', 'assumed', ['']],
+    ['markets', 'assumed', ['', 'reject']],
   ])
   assert.deepEqual(now.boxes, { Cart: '', Acc: 'st-open', Pay: 'st-open', Done: '', Stock: 'st-open' })
   assert.deepEqual(page.errors, [])
@@ -101,10 +101,11 @@ test("Claude's suggestion is taken or turned down with the next message; a decis
   await page.click(`${sec('email')} [data-choose="accept"]`)
   await page.click(`${sec('stock')} [data-choose="payment"]`)
   await page.click('#form [type=submit]')
-  await b.until(async () => (await decision()).head === 'Bottom line · proposal', 'nothing open')
+  // Everything settled is not yet a proposal: Claude writes it.
+  await b.until(async () => (await decision()).head === "Bottom line · all settled, waiting for Claude's proposal", 'nothing open')
   assert.equal(b.said.at(-1), 'My choices on the board: Email first: take it; Stock: From payment start.')
   await b.call('/post', { bottomLine: 'A guest-first, three-step checkout on the hosted payment page; stock held from payment start.' })
-  await b.until(async () => (await page.$eval('.bottom-line p', p => p.textContent)).startsWith('A guest-first'), 'the proposal')
+  await b.until(async () => (await decision()).head.startsWith('Bottom line · proposal'), 'the proposal')
   assert.equal(await page.$eval('#messages .brief-event:last-of-type', el => el.textContent), 'Claude wrote the proposal')
 })
 
@@ -113,4 +114,22 @@ test('saved as Markdown, each constraint says where it stands', async () => {
   assert.match(md, /### Accounts _\(settled: Guest checkout\)_/)
   assert.match(md, /### Email first _\(settled: yes\)_/)
   assert.deepEqual(page.errors, [])
+})
+
+test('a choice made before Claude changed that constraint does not go with the message', async () => {
+  await b.call('/post', { briefOps: [{ op: 'reopen', id: 'payments' }] })
+  await b.until(async () => (await decision()).sections.find(s => s.id === 'payments').pill === 'open', 'payments open again')
+  await page.click(`${sec('payments')} [data-choose="embedded"]`)
+  assert.match((await decision()).tag, /Payments: Embedded fields/)
+  // Claude changes the options meanwhile: the click no longer means anything, and is not sent.
+  await b.call('/post', { briefOps: [{ op: 'update', id: 'payments', choices: [{ id: 'stripe', label: 'Stripe Checkout' }, { id: 'adyen', label: 'Adyen' }] }] })
+  await b.until(async () => (await decision()).tag === null, 'the stale choice gone')
+  // Claude's suggestion with choices is taken by choosing one.
+  await b.call('/post', { briefOps: [{ op: 'add', id: 'ship', kind: 'constraint', title: 'Shipping', line: 'How is shipping priced?', suggested: true, choices: [{ id: 'flat', label: 'Flat rate' }, { id: 'live', label: 'Live rates' }] }] })
+  await b.until(async () => (await decision()).sections.some(s => s.id === 'ship'), 'the suggestion')
+  assert.deepEqual((await decision()).sections.find(s => s.id === 'ship').choices, ['flat', 'live', 'decline'])
+  await page.click(`${sec('ship')} [data-choose="flat"]`)
+  await page.click('#form [type=submit]')
+  await b.until(async () => (await decision()).sections.find(s => s.id === 'ship').pill === 'settled', 'taken and settled')
+  assert.equal(b.said.at(-1), 'My choices on the board: Shipping: Flat rate.')
 })

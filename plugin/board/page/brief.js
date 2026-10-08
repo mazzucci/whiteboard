@@ -31,7 +31,6 @@ function resetBrief() {
   briefNow = null
   briefPick = null
   briefSeen.clear()
-  briefChoices.clear()
   briefPane.innerHTML = ''
   document.body.classList.remove('has-brief')
   showPane('chat')
@@ -74,7 +73,8 @@ function briefChangeLine(change, by) {
   const chosen = s?.choices?.find(c => c.id === s.chosen)?.label
   return {
     new: briefNow.mode === 'decide' ? 'Claude started a decision' : 'Claude wrote a brief',
-    bottomLine: briefNow.mode === 'decide' && !briefOpen().length ? 'Claude wrote the proposal' : 'Claude changed the bottom line',
+    bottomLine: briefNow.mode === 'decide' && briefNow.isProposal ? 'Claude wrote the proposal' : 'Claude changed the bottom line',
+    reject: `You turned down ${name}`,
     mode: briefNow.mode === 'decide' ? 'Claude turned the brief into a decision' : 'Claude turned the decision back into a brief',
     add: s?.suggested ? `Claude suggests ${name}` : s?.by === 'you' ? `Claude added your idea ${name}` : `Claude added ${name}`,
     update: change.isNewLine ? `Claude rewrote ${name}` : `Claude updated ${name}`,
@@ -85,6 +85,15 @@ function briefChangeLine(change, by) {
     reopen: `Claude opened ${name} again`,
     accept: `You took Claude's suggestion ${name}`,
   }[change.op] ?? ''
+}
+
+/** Whether a choice can still be made on a section: taking or turning down a suggestion, one of a constraint's choices, or confirming or turning down an assumption. */
+function isChoiceValid(s, choice) {
+  if (!s) return false
+  if (s.suggested) return choice === 'accept' || choice === 'decline' || !!s.choices?.some(c => c.id === choice)
+  if (s.kind !== 'constraint' || s.status === 'settled') return false
+  if (s.choices?.length) return s.choices.some(c => c.id === choice)
+  return s.status === 'assumed' && (choice === '' || choice === 'reject')
 }
 
 /** The constraints still open (an assumption does not hold up the proposal; Claude's suggestions wait for the person). */
@@ -109,10 +118,9 @@ function briefArrived(card, isReplay) {
     briefPick = null
     showBriefPick()
   }
-  // A choice on a section that is gone, or settled since, no longer goes.
-  for (const id of [...briefChoices.keys()]) {
-    const s = briefNow.sections.find(x => x.id === id)
-    if (!s || (s.status === 'settled' && !s.suggested)) briefChoices.delete(id)
+  // A choice still has to make sense as the brief now is: on a section that is there, still to settle, and one of its options.
+  for (const [id, choice] of [...briefChoices]) {
+    if (!isChoiceValid(briefNow.sections.find(x => x.id === id), choice)) briefChoices.delete(id)
   }
   showBriefPick()
   renderBrief(isReplay ? [] : card.changes.map(c => c.op === 'bottomLine' ? 'bottom line' : c.id))
@@ -155,23 +163,21 @@ function stateHtml(s) {
 
 /** A constraint's choices (or Claude's suggestion, to take or not); a settled one says what was chosen, and by whom. */
 function choicesHtml(s) {
+  const button = (id, label, hint = '', isLean = false) =>
+    `<button type="button" data-choose="${esc(id)}" class="${briefChoices.get(s.id) === id ? 'chosen' : ''}${isLean ? ' lean' : ''}">${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}${isLean ? '<small class="leans">Claude leans here</small>' : ''}</button>`
+  // A suggestion is taken, or taken by choosing one of its choices; or turned down.
   if (s.suggested) {
-    const now = briefChoices.get(s.id)
-    return `<div class="choices">${[['accept', 'Take it'], ['decline', 'Not now']].map(([id, label]) => `<button type="button" data-choose="${id}" class="${now === id ? 'chosen' : ''}">${label}</button>`).join('')}</div>`
+    const takes = s.kind === 'constraint' && s.choices?.length ? s.choices.map(c => button(c.id, c.label, c.hint, s.lean === c.id)) : [button('accept', 'Take it')]
+    return `<div class="choices">${takes.join('')}${button('decline', 'Not now')}</div>`
   }
   if (s.kind !== 'constraint') return ''
   if (s.status === 'settled') {
     const label = s.choices?.find(c => c.id === s.chosen)?.label
     return `<div class="settled-line">✓ ${label ? esc(label) : 'Settled'}${s.settledBy === 'you' ? ' · your choice' : ' · Claude settled it from what you said'}</div>`
   }
-  const options = s.choices ?? (s.status === 'assumed' ? [] : [])
-  const now = briefChoices.get(s.id)
-  const buttons = options.map(
-    c =>
-      `<button type="button" data-choose="${esc(c.id)}" class="${now === c.id ? 'chosen' : ''}${s.lean === c.id ? ' lean' : ''}">${esc(c.label)}${c.hint ? `<small>${esc(c.hint)}</small>` : ''}${s.lean === c.id ? '<small class="leans">Claude leans here</small>' : ''}</button>`,
-  )
-  // An assumption with no choices is confirmed as it stands.
-  if (!options.length && s.status === 'assumed') buttons.push(`<button type="button" data-choose="" class="${now === '' ? 'chosen' : ''}">Confirm</button>`)
+  const buttons = (s.choices ?? []).map(c => button(c.id, c.label, c.hint, s.lean === c.id))
+  // An assumption with no choices is confirmed as it stands, or turned down for Claude to ask.
+  if (!buttons.length && s.status === 'assumed') buttons.push(button('', 'Confirm'), button('reject', 'Not this'))
   return buttons.length ? `<div class="choices">${buttons.join('')}</div>` : ''
 }
 
@@ -224,7 +230,15 @@ function renderBrief(fresh = []) {
   // A decision says what it waits on until every constraint is settled; then its bottom line is the proposal.
   const open = briefOpen()
   const isDecision = b.mode === 'decide'
-  const head = !isDecision ? 'Bottom line' : open.length ? `Bottom line · waiting on ${open.length}` : 'Bottom line · proposal'
+  const toConfirm = b.sections.filter(s => s.kind === 'constraint' && s.status === 'assumed' && !s.suggested).length
+  const confirm = toConfirm ? ` · ${toConfirm} to confirm` : ''
+  const head = !isDecision
+    ? 'Bottom line'
+    : open.length
+      ? `Bottom line · waiting on ${open.length}${confirm}`
+      : b.isProposal
+        ? `Bottom line · proposal${confirm}`
+        : `Bottom line · all settled, waiting for Claude's proposal${confirm}`
   briefPane.innerHTML =
     `<div class="bottom-line${fresh.includes('bottom line') ? ' fresh' : ''}${isDecision && open.length ? ' waiting' : ''}"><div class="k">${head}${isNewBottom ? '<span class="updated">updated</span>' : ''}</div>` +
     `<p>${inline(b.bottomLine)}</p>${isNewBottom ? `<div class="was">${inline(b.wasBottomLine)}</div>` : ''}` +
@@ -330,18 +344,19 @@ function briefChoicesSaid() {
   for (const [id, choice] of briefChoices) {
     const s = briefNow?.sections.find(x => x.id === id)
     if (!s) continue
-    const label = s.suggested ? (choice === 'accept' ? 'take it' : 'not now') : s.choices?.find(c => c.id === choice)?.label ?? 'confirmed'
+    const label = choice === 'accept' ? 'take it' : choice === 'decline' ? 'not now' : choice === 'reject' ? 'not this' : choice === '' ? 'confirmed' : s.choices?.find(c => c.id === choice)?.label
+    if (!label) continue
     parts.push(`${s.title}: ${label}`)
   }
   return parts.length ? `My choices on the board: ${parts.join('; ')}.` : ''
 }
-/** The choices that go with a message, for the board; they are taken off once sent. */
+/** The choices that go with a message, for the board. */
+const briefChoicesToSend = () => [...briefChoices].map(([id, choice]) => ({ id, ...(choice ? { choice } : {}) }))
+/** The message went: its choices are taken off. */
 function briefChoicesSent() {
-  const choices = [...briefChoices].map(([id, choice]) => ({ id, ...(choice ? { choice } : {}) }))
   briefChoices.clear()
   renderBrief()
   showBriefPick()
-  return choices
 }
 $('choices-clear').onclick = () => {
   briefChoices.clear()

@@ -219,8 +219,9 @@ const BOARD_NOTE =
   `("About the brief's section \`id\`"), answer under that section with ${EDIT_TOOL} ` +
   "(sections: [{ op: 'answer', id, text }]), and update the section's line, or the bottom line, if the answer changes it. " +
   "When it asks for more detail, write it as that section's body (sections: [{ op: 'update', id, body }]). " +
-  '"My choices on the board: …" are constraints the user settled there (already settled): update the diagram and the ' +
-  'brief for them, and once none is open, write your proposal as the bottom line.'
+  '"My choices on the board: …" are what the user settled there, suggestions they took or turned down included: ' +
+  'they are settled already (do not settle them again; anything the board could not settle is said after). Update ' +
+  'the diagram and the brief for them, and once none is open, write your proposal as the bottom line.'
 /** Said when the person, after talking on the page, types in the conversation again. */
 const BACK_NOTE =
   'The user is back in this conversation: they typed this here, not on the whiteboard. Focus mode, if it was on, ' +
@@ -405,12 +406,13 @@ function sectionsOf(value: unknown): SectionInput[] {
 /** A constraint's state, an idea's or a suggestion's, in a few words before its line. */
 function stateOf(s: Section): string {
   const label = (id?: string) => s.choices?.find(c => c.id === id)?.label ?? id
-  if (s.suggested) return '[your suggestion, not yet taken] '
+  if (s.suggested) return `[your suggestion, not yet taken${s.choices?.length ? `; choices ${s.choices.map(c => c.id).join(', ')}` : ''}] `
   if (s.kind === 'idea') return `[idea${s.by === 'you' ? ' from the user' : ''}] `
   if (s.kind !== 'constraint') return ''
   const options = s.choices?.length ? `; choices ${s.choices.map(c => c.id).join(', ')}` : ''
   if (s.status === 'settled') return `[settled by ${s.settledBy === 'you' ? 'the user' : 'you'}: ${label(s.chosen) ?? 'yes'}] `
-  return `[${s.status === 'assumed' ? `assumed: ${label(s.lean)}` : 'open'}${options}${s.lean && s.status !== 'assumed' ? `; you lean ${s.lean}` : ''}] `
+  const mine = s.by === 'you' ? '; the user\'s' : ''
+  return `[${s.status === 'assumed' ? `assumed${s.lean ? `: ${label(s.lean)}` : ''}` : 'open'}${options}${s.lean && s.status !== 'assumed' ? `; you lean ${s.lean}` : ''}${mine}] `
 }
 
 /** The brief as Claude reads it back: the bottom line and each section's line, never the bodies. */
@@ -813,8 +815,9 @@ export const register: Register = on => {
                   enum: ['add', 'update', 'drop', 'restore', 'answer', 'settle', 'reopen'],
                   description:
                     'add: a new section `id` with `line` (title, body, focus, cites; `after`: the id it goes after). ' +
-                    'update: new `line`, `title`, `body`, `focus` or `cites` for section `id` (give only what changes; an empty ' +
-                    'body, focus or cites clears it). drop: take section `id` out, saying `why`; it is listed as dropped. ' +
+                    'update: new `line`, `title`, `body`, `focus`, `cites`, `kind`, `choices`, `lean`, `status` (open or assumed), ' +
+                    '`suggested: false` (the user took your suggestion in words) or `by` for section `id` (give only what changes; ' +
+                    'an empty body, focus or cites clears it). drop: take section `id` out, saying `why`; it is listed as dropped. ' +
                     'restore: bring a dropped one back, at the end. ' +
                     "answer: `text` under section `id`, answering the user's oldest unanswered question there (a note under it when there is none). " +
                     'settle: settle constraint `id` on `choice` (when the user decided in words; their clicks on the page settle it already). ' +

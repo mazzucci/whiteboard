@@ -620,6 +620,7 @@ test('a decision is posted in decide mode, changed with settle and brief_mode, a
       { id: 'markets', kind: 'constraint', title: 'Markets', line: 'One country.', status: 'assumed', lean: 'one', choices: [{ id: 'one', label: 'One country' }], asks: [] },
       { id: 'email', kind: 'constraint', title: 'Email first', line: 'Email first?', status: 'open', suggested: true, asks: [] },
       { id: 'gift', kind: 'idea', title: 'Gift cards', line: 'Later.', by: 'you', asks: [] },
+      { id: 'tax', kind: 'constraint', title: 'Tax', line: 'Prices include tax.', status: 'assumed', by: 'you', asks: [] },
     ],
     dropped: [],
   }
@@ -636,5 +637,8 @@ test('a decision is posted in decide mode, changed with settle and brief_mode, a
   expect(read).toContain('`markets` [assumed: One country; choices one] Markets: One country.')
   expect(read).toContain('`email` [your suggestion, not yet taken] Email first: Email first?')
   expect(read).toContain('`gift` [idea from the user] Gift cards: Later.')
+  // An assumption with no lean, and the user's own constraint, read back plainly.
+  expect(read).toContain("`tax` [assumed; the user's] Tax: Prices include tax.")
+  expect(read).not.toContain('undefined')
   stop()
 })

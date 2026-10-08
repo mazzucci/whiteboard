@@ -245,7 +245,7 @@ function choicesOf(value) {
   if (!Array.isArray(value)) return undefined
   const choices = value
     .map(c => ({ id: String(c?.id ?? '').trim(), label: lineOf(c?.label, 40), hint: lineOf(c?.hint, 60) }))
-    .filter(c => SECTION_ID.test(c.id) && c.label)
+    .filter((c, i, all) => SECTION_ID.test(c.id) && c.label && all.findIndex(x => x.id === c.id) === i)
     .slice(0, 4)
   return choices.length ? choices : undefined
 }
@@ -271,15 +271,25 @@ function sectionOf(input) {
   }
 }
 
+/** A decision's constraints still open (an assumption does not hold up the proposal; suggestions wait for the person). */
+const openOf = b => b.sections.filter(s => s.kind === 'constraint' && s.status === 'open' && !s.suggested)
+
 /**
  * Settles a constraint on a choice (or confirms an assumed one, on Claude's
  * lean): { change } or { error }. The person's choices come from the page.
  */
 function settle(section, choice, by) {
   if (section.kind !== 'constraint') return { error: `${section.id}: only a constraint is settled` }
+  // Settled already (the person's clicks settle at once): it is not settled again, nor changed without a reopen.
+  if (section.status === 'settled') {
+    const on = section.choices?.find(c => c.id === section.chosen)?.label ?? 'yes'
+    return { error: `${section.id}: settled already, on ${on}${section.settledBy === 'you' ? ' by the user' : ''} (reopen it first if that changed)` }
+  }
   const pick = choice ?? (section.status === 'assumed' ? section.lean : undefined)
-  if (section.choices?.length && !section.choices.some(c => c.id === pick)) {
-    return { error: `${section.id}: "${String(pick ?? '').slice(0, 32)}" is not one of its choices (${section.choices.map(c => c.id).join(', ')})` }
+  // A choice must be one of its own; one with no choices is settled as it stands.
+  const isOwn = section.choices?.length ? section.choices.some(c => c.id === pick) : pick === undefined
+  if (!isOwn) {
+    return { error: `${section.id}: "${String(pick ?? '').slice(0, 32)}" is not one of its choices (${section.choices?.map(c => c.id).join(', ') || 'it has none'})` }
   }
   section.status = 'settled'
   section.chosen = pick
@@ -338,13 +348,21 @@ function briefOp(op) {
     if (typeof op.title === 'string') section.title = lineOf(op.title, 40) ?? section.title
     if (KINDS.includes(op.kind) && op.kind !== section.kind) {
       section.kind = op.kind
-      if (op.kind === 'constraint') section.status ??= 'open'
+      // No longer a constraint: nothing of its state stays; a new one starts open.
+      if (op.kind === 'constraint') section.status = 'open'
+      else for (const key of ['status', 'choices', 'lean', 'chosen', 'settledBy']) delete section[key]
     }
     if (section.kind === 'constraint') {
+      if ((op.status === 'open' || op.status === 'assumed') && section.status === 'settled') return { error: `${id}: settled; reopen it to change that` }
       if (Array.isArray(op.choices)) section.choices = choicesOf(op.choices)
-      if (typeof op.lean === 'string') section.lean = section.choices?.some(c => c.id === op.lean) ? op.lean : undefined
+      if (typeof op.lean === 'string') section.lean = op.lean
+      // A lean must be one of the choices, as they now are.
+      if (section.lean && !section.choices?.some(c => c.id === section.lean)) delete section.lean
       if (op.status === 'open' || op.status === 'assumed') section.status = op.status
     }
+    // Taking a suggestion in words, or saying the idea was the person's.
+    if (op.suggested === false) delete section.suggested
+    if (op.by === 'you') section.by = 'you'
     if (typeof op.body === 'string') section.body = textOf(op.body, 4000)
     if (Array.isArray(op.focus)) section.focus = focusOf(op.focus)
     if (Array.isArray(op.cites)) section.cites = citesOf(op.cites)
@@ -538,7 +556,7 @@ async function handle(req, res) {
     return json(200, { ok: true })
   }
   if (url.pathname === '/say') {
-    const text = clip(input.text, 4000)?.trim()
+    let text = clip(input.text, 4000)?.trim()
     if (!text) return json(400, { error: 'empty' })
     // A question about a section of the brief waits there for Claude's answer.
     const section = brief?.sections.find(s => s.id === input.about)
@@ -550,23 +568,40 @@ async function handle(req, res) {
     }
     // The person's choices on the board settle their constraints at once; Claude hears them in the message.
     const chosen = []
+    const unsettled = []
     for (const c of Array.isArray(input.choices) && brief ? input.choices.slice(0, 12) : []) {
       const target = brief.sections.find(s => s.id === c?.id)
-      if (!target) continue
+      if (!target) {
+        unsettled.push(`${String(c?.id).slice(0, 32)} (not in the brief any more)`)
+        continue
+      }
       if (target.suggested && c.choice === 'decline') {
         brief.sections.splice(brief.sections.indexOf(target), 1)
         brief.dropped.push({ ...target, why: 'not wanted' })
         chosen.push({ op: 'drop', id: target.id })
-      } else if (target.suggested && c.choice === 'accept') {
+      } else if (target.suggested && (c.choice === 'accept' || target.choices?.some(x => x.id === c.choice))) {
+        // Taken: a suggested constraint with choices is taken by choosing one.
         delete target.suggested
         target.v++
-        chosen.push(target.kind === 'constraint' && !target.choices?.length ? settle(target, undefined, 'you').change : { op: 'accept', id: target.id })
+        const out = target.kind === 'constraint' && (c.choice !== 'accept' || !target.choices?.length) ? settle(target, c.choice === 'accept' ? undefined : c.choice, 'you') : null
+        chosen.push(out?.change ?? { op: 'accept', id: target.id })
+      } else if (c.choice === 'reject' && target.status === 'assumed') {
+        // Not this assumption: open again, for Claude to ask.
+        target.status = 'open'
+        target.v++
+        chosen.push({ op: 'reject', id: target.id })
       } else {
         const out = settle(target, typeof c.choice === 'string' ? c.choice : undefined, 'you')
         if (out.change) chosen.push(out.change)
+        else unsettled.push(out.error)
       }
     }
-    if (chosen.length) briefChanged(chosen, 'you')
+    if (chosen.length) {
+      brief.isProposal = brief.isProposal && !openOf(brief).length
+      briefChanged(chosen, 'you')
+    }
+    // Claude hears what the board could not settle, after what they wrote.
+    if (unsettled.length) text = `${text}\n\n(Not settled on the board: ${unsettled.join('; ')}.)`
     say(text)
     return json(200, { ok: true })
   }
@@ -605,9 +640,12 @@ async function handle(req, res) {
     if (!brief) return json(200, { ok: false, viewers: listeners.size, briefError: 'there is no brief on the board yet' })
     const changes = []
     const errors = []
-    if ((input.briefMode === 'brief' || input.briefMode === 'decide') && input.briefMode !== brief.mode) {
-      brief.mode = input.briefMode
-      changes.push({ op: 'mode', mode: brief.mode })
+    if (input.briefMode === 'brief' || input.briefMode === 'decide') {
+      if (input.briefMode === brief.mode) errors.push(`brief_mode: it is a ${brief.mode === 'decide' ? 'decision' : 'brief'} already`)
+      else {
+        brief.mode = input.briefMode
+        changes.push({ op: 'mode', mode: brief.mode })
+      }
     }
     const bottomLine = lineOf(input.bottomLine, 600)
     if (bottomLine && bottomLine === brief.bottomLine) errors.push('bottom_line: nothing to change (it already says that)')
@@ -624,6 +662,10 @@ async function handle(req, res) {
       else changes.push(out.change)
     }
     if (ops.length > 30) errors.push(`#31 to #${ops.length}: not applied, at most 30 at a time`)
+    // In a decision, a bottom line written once nothing is open is the proposal; it stops being one when something opens.
+    const isOpen = openOf(brief).length > 0
+    if (brief.mode === 'decide' && changes.some(c => c.op === 'bottomLine') && !isOpen) brief.isProposal = true
+    if (isOpen || brief.mode !== 'decide') brief.isProposal = false
     if (changes.length) briefChanged(changes)
     return json(200, { ok: true, viewers: listeners.size, done: changes.length, errors, sections: brief.sections.map(s => s.id) })
   }
