@@ -442,6 +442,11 @@ investigation and the recording guide; `fixtures/` one diagram per type;
 `media/` the README's GIFs and the scripts that record and edit them
 (`media/board-demo/`). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
+Working on it with Claude Code: `.claude/skills/` holds the project's
+workflow as skills a session loads by itself: orientation, shipping a change
+through a pull request, an independent review, a live take of a real session,
+and a release.
+
 ## Support
 
 Questions, bugs and ideas: [GitHub Issues](https://github.com/mazzucci/whiteboard/issues).
