@@ -89,10 +89,15 @@ test('saved as Markdown: the main brief, then each side board with its compariso
 })
 
 test('a reopened page goes to the board the person was last on, and a side board taken off again sends it back to the main board', async () => {
-  // On the main board now (after the decision); a reload must land there, not on the last board opened.
+  // A second side board opens (the last board card says the person is there), then they go back to the main board:
+  // only /view says so, and a reload must land there, not on the side board.
+  await b.call('/post', { sideBoard: { id: 'two', title: 'Second' }, brief: { bottomLine: 'Two.', sections: [] } })
+  await b.until(async () => (await where()).board === 'two', 'on the second side board')
+  await page.click('.brief .crumbs .back')
+  await b.until(async () => (await b.call('/cards')).viewing === 'main', 'the server told')
   await page.reload()
   await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 10_000 })
-  await b.until(async () => (await where()).sides.length === 1, 'the boards again')
+  await b.until(async () => (await where()).sides.length === 2, 'the boards again')
   assert.equal((await where()).board, 'main')
   // A side board whose diagram Mermaid rejects: opened, then taken off with its brief.
   await sleep(500)

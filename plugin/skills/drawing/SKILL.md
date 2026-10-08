@@ -286,8 +286,9 @@ line and open it when they agree; never on your own.
 - **Their decision comes back**: picking an option on the page settles the
   main board's constraint and returns them there. When they decide in words,
   `edit_board` `side_board: { op: 'return', id, choice }`. A question that
-  went away is `park`ed or `drop`ped (with why). Then carry the decision into
-  the main board: its line, its diagram.
+  went away is `park`ed or `drop`ped (with why); a parked one opens again with
+  its id alone. Then carry the decision into the main board: its line, its
+  diagram.
 - Posts and edits go to the board the user is on; name `board` to change
   another.
 

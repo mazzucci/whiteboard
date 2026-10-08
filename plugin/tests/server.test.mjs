@@ -581,3 +581,16 @@ test('a parked side board opens again where it was left; diagrams and notes stay
   assert.deepEqual([notes.noDiagram, notes.board], [true, 'p1'])
   await briefPost({ sideBoardOp: { op: 'drop', id: 'p1' } })
 })
+
+test("an earlier post's side board is never closed by a later post's undo", async () => {
+  // A side board opened with notes but no diagram of its own: the post ends without drawing.
+  const x = await briefPost({ sideBoard: { id: 'leak', title: 'Leak' }, brief: { bottomLine: 'x', sections: [] }, notes: [{ text: 'a note' }] })
+  assert.equal(x.noDiagram, true)
+  // Then a brief and a diagram on the main board, which Mermaid rejects.
+  const posting = briefPost({ board: 'main', isNew: true, title: 'Bad main', mermaid: 'flowchart LR\n  a -->', brief: { bottomLine: 'New main', sections: [] } })
+  await answerDraw('Bad main', 'Parse error')
+  await posting
+  const now = await cardsNow()
+  assert.equal(now.boards.find(b => b.id === 'leak')?.state, 'open', 'the side board from the earlier post is still there')
+  await briefPost({ sideBoardOp: { op: 'drop', id: 'leak' } })
+})

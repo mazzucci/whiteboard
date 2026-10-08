@@ -750,6 +750,8 @@ async function handle(req, res) {
     broadcast({ kind: 'status', state: status })
     return json(200, { ok: true })
   }
+  // Each post starts with nothing to undo: what an earlier one left must not carry over.
+  briefBefore = opened = viewingBefore = undefined
   // A side board for one question, opened from the main board: the rest of the post goes on it.
   if (input.sideBoard) {
     const s = input.sideBoard
@@ -776,6 +778,9 @@ async function handle(req, res) {
     boardChanged({ op: 'open', id })
     input.board = id
     if (parked) input.isNew = input.isNew ?? true
+  }
+  if (input.sideBoard && !input.brief && !input.mermaid && !clip(input.text, 20_000) && !input.notes) {
+    return json(200, { ok: true, viewers: listeners.size, drawn: false, board: viewing })
   }
   // A board named that does not exist is refused, not taken for another.
   if (typeof input.board === 'string' && !boards.has(input.board)) return json(200, { ok: false, viewers: listeners.size, boardError: `no board ${input.board.slice(0, 40)}` })
@@ -850,7 +855,8 @@ async function handle(req, res) {
     const ops = all.slice(0, 50)
     const answer = await ask({ kind: 'ops', diagram: target.id, ops, ...(input.look === false ? { look: false } : {}) })
     const over = all.length > 50 ? [`#51 to #${all.length}: not applied, at most 50 at a time`] : []
-    return json(200, { ok: !answer.error, diagram: target.title ?? '', tab: cards.filter(c => c.kind === 'diagram').indexOf(target) + 1, ...answer, errors: [...(answer.errors ?? []), ...over] })
+    const onItsBoard = cards.filter(c => c.kind === 'diagram' && (c.board ?? 'main') === (target.board ?? 'main'))
+    return json(200, { ok: !answer.error, diagram: target.title ?? '', tab: onItsBoard.indexOf(target) + 1, board: target.board ?? 'main', ...answer, errors: [...(answer.errors ?? []), ...over] })
   }
   if (input.snapshot === true) {
     const target = diagramOf(input.diagram)

@@ -484,8 +484,9 @@ function boardArrived(card, isReplay) {
   }
   if (briefDecision && !boardsMeta.some(b => b.id === briefDecision.board && b.state === 'open')) briefDecision = null
   // A board taken off again (its diagram failed) is gone: back to where the server says the person is.
-  const to = card.viewing === 'main' || boardsMeta.some(b => b.id === card.viewing) ? card.viewing : 'main'
-  if (to !== boardOn || !boardsMeta.some(b => b.id === boardOn || boardOn === 'main')) showBoard(to, false)
+  const isKnown = id => id === 'main' || boardsMeta.some(b => b.id === id)
+  const to = isKnown(card.viewing) ? card.viewing : 'main'
+  if (to !== boardOn || !isKnown(boardOn)) showBoard(to, false)
   else {
     document.body.classList.toggle('has-brief', !!briefNow || boardsMeta.some(b => b.id !== 'main'))
     if (briefNow) renderBrief()

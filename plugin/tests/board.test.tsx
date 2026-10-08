@@ -650,7 +650,12 @@ test('a decision is posted in decide mode, changed with settle and brief_mode, a
 
 test('a side board is opened with its brief and closed with edit_board', async ($, on) => {
   const host1 = host(on, {
-    page: body => (body.sideBoardOp ? ({ ok: true, viewers: 1, viewing: 'main' } as never) : { ok: true, viewers: 1, drawn: true }),
+    page: body =>
+      body.sideBoardOp
+        ? ({ ok: true, viewers: 1, viewing: 'main' } as never)
+        : body.sideBoard && !body.brief
+          ? ({ ok: false, viewers: 1, drawn: false, briefError: 'a side board needs its brief' } as never)
+          : { ok: true, viewers: 1, drawn: true },
   })
   const opened = await $.tool.call({
     tool: 'mcp__whiteboard__post_to_board',
@@ -661,7 +666,8 @@ test('a side board is opened with its brief and closed with edit_board', async (
   })
   expect(host1.posts.at(-1)).toMatchObject({ sideBoard: { id: 'db', for: 'database' }, brief: { options: [{ id: 'rel' }, { id: 'doc' }], sections: [{ id: 'tx', cells: { rel: { mark: 'yes' } } }] } })
   expect(said(opened)).toContain('The side board \\"Relational vs not\\" is open and the user is on it')
-  expect(said(await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', side_board: { id: 'x', title: 'X' }, text: 'hi' }))).toContain('A side board starts with its brief')
+  // A new side board with no brief: the board says so (a parked one would open again as it was).
+  expect(said(await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', side_board: { id: 'x', title: 'X' }, text: 'hi' }))).toContain('The board could not take this brief: a side board needs its brief')
   const back = await $.tool.call({ tool: 'mcp__whiteboard__edit_board', side_board: { op: 'return', id: 'db', choice: 'rel' } })
   expect(host1.posts.at(-1)).toMatchObject({ sideBoardOp: { op: 'return', id: 'db', choice: 'rel' } })
   expect(said(back)).toContain('Side board db: decided on rel, which settles its constraint on the main board; the user is back on the main board.')
@@ -700,5 +706,15 @@ test('a post on a side board says so, and read_board numbers diagrams on their o
   expect(read).toContain('Diagram 1 of 2, \\"Checkout\\"')
   expect(read).toContain('Diagram 1 of 1 on the side board `db`, \\"Fit\\"')
   expect(read).toContain('Diagram 2 of 2, \\"Checkout again\\"')
+  stop()
+})
+
+test('edit_board and read_board pass the board on, for a diagram on another board', async ($, on) => {
+  const { posts, stop } = host(on, { page: body => (body.ops ? ({ ok: true, diagram: 'Fit', tab: 1, board: 'db', done: ['#1'], errors: [] } as never) : { ok: true, viewers: 1, drawn: true }) })
+  await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', text: 'hello' })
+  await $.tool.call({ tool: 'mcp__whiteboard__edit_board', board: 'db', diagram: 1, look: false, ops: [{ op: 'text', id: 'a', text: 'A' }] })
+  expect(posts.at(-1)).toMatchObject({ board: 'db', diagram: 1, ops: [{ op: 'text' }] })
+  await $.tool.call({ tool: 'mcp__whiteboard__read_board', image: true, board: 'db', diagram: 1 })
+  expect(posts.at(-1)).toMatchObject({ snapshot: true, board: 'db', diagram: 1 })
   stop()
 })
