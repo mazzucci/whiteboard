@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.1 (unreleased)
+
+- **Export a diagram.** An Export menu on each diagram: SVG or PNG, or Copy
+  Mermaid source; a diagram you edited downloads as a PNG of the canvas or an
+  `.excalidraw` file that opens, still editable, at excalidraw.com.
+- **Save the board** as one file, from the header or the wrap-up banner (which
+  then stays open): a web page with every diagram (the edited ones as you left
+  them), its legend, sticky notes and source, and the conversation, with no
+  scripts; or Markdown for a pull request or a postmortem: each diagram's
+  latest version open as a `mermaid` block (its colours are its own classDefs,
+  so GitHub, GitLab and Notion show them) with its legend as a line and its
+  sticky notes by box name, the versions it redrew folded under it, then the
+  conversation as written. Nothing is saved unless you ask: these are
+  downloads.
+- Fixed: a line chart's click spots showed as black dots in pictures of the
+  chart (the one Claude reads with `read_board`, and now exports).
+- Fixed: a picture of a very large diagram, or of one with HTML labels, could
+  not be made (for `read_board` too); a huge one is now drawn smaller, within
+  what browsers can draw.
+- The wrap-up banner waits while the pointer is on it, so there is time to
+  save before the tab closes.
+
 ## 0.5.0
 
 - **Charts you can click.** Pie, bar and line (`xychart-beta`) and quadrant

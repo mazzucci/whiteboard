@@ -511,22 +511,24 @@ const dataUrl = blob =>
     r.readAsDataURL(blob)
   })
 
-/** A drawn (Mermaid) diagram as a PNG, at twice its size, on white. */
+/** A drawn (Mermaid) diagram as a PNG on white, at twice its size, or as large as a browser draws a huge one. */
 function svgToPng(d) {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
       const c = document.createElement('canvas')
-      c.width = d.w * 2
-      c.height = d.h * 2
+      // Twice its size, within what browsers draw: 16,384 pixels a side, about 16 million in all (Safari).
+      const scale = Math.min(2, 16_000 / d.w, 16_000 / d.h, Math.sqrt(16_000_000 / (d.w * d.h)))
+      c.width = Math.round(d.w * scale)
+      c.height = Math.round(d.h * scale)
       const g = c.getContext('2d')
       g.fillStyle = '#fff'
       g.fillRect(0, 0, c.width, c.height)
       g.drawImage(img, 0, 0, c.width, c.height)
-      c.toBlob(b => (b ? resolve(b) : reject(new Error('no image'))), 'image/png')
+      c.toBlob(b => (b ? resolve(b) : reject(new Error('too large to draw as an image'))), 'image/png')
     }
     img.onerror = () => reject(new Error('the diagram could not be drawn as an image'))
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(d.svg)}`
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgXmlOf(d.svg))}`
   })
 }
 

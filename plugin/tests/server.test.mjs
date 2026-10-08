@@ -44,7 +44,7 @@ const postJson = (path, body, headers = {}) =>
 const isAlive = async () => (await call('/')).status === 200
 
 test('the page and its files load without the token, with the security headers', async () => {
-  for (const path of ['/', '/app.js', '/editing.js', '/charts.js', '/app.css', '/mermaid.js']) {
+  for (const path of ['/', '/app.js', '/editing.js', '/charts.js', '/export.js', '/app.css', '/mermaid.js']) {
     const res = await call(path)
     assert.equal(res.status, 200, path)
     assert.equal(res.headers.get('referrer-policy'), 'no-referrer')
@@ -194,7 +194,7 @@ test("the page's scripts share no top-level names (a later one would replace the
     const s = readFileSync(new URL(`../board/page/${file}`, import.meta.url), 'utf8')
     return new Set([...s.matchAll(/^(?:async\s+)?function\s+(\w+)|^(?:const|let|var)\s+(\w+)/gm)].map(m => m[1] ?? m[2]))
   }
-  const files = ['app.js', 'editing.js', 'charts.js']
+  const files = ['app.js', 'editing.js', 'charts.js', 'export.js']
   const seen = new Map()
   const shared = []
   for (const file of files) {
