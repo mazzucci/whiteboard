@@ -235,6 +235,8 @@ body.on-chart .hint .chart-keys { display: inline; }
   .controls { gap: 4px; }
   .controls .lbl { display: none; }
   .top .save .lbl { display: none; }
+  /* What a menu choice says back ("Copied", "Failed") shows even where labels are hidden. */
+  .top .save.said .lbl, .controls button.said .lbl { display: inline; }
   .menu { max-width: calc(100vw - 24px); }
   .menu button { white-space: normal; }
   .menu.right { position: fixed; top: 52px; left: 12px; right: 12px; }

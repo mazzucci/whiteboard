@@ -102,7 +102,7 @@ test('the board saves as one web page: every diagram, its notes and source, and 
   assert.match(html, /\(Orders DB\)/)
   assert.match(html, /The <b>request path<\/b>/)
   assert.match(html, /why dogs\?/)
-  assert.match(html, /<a href="#d1">→ Orders<\/a>/)
+  assert.match(html, /<a href="#diagram-1">→ Orders<\/a>/)
   // It opens on its own, from the disk, without errors.
   const saved = await page.browser().newPage()
   const errors = []
@@ -110,7 +110,7 @@ test('the board saves as one web page: every diagram, its notes and source, and 
   saved.on('console', m => m.type() === 'error' && errors.push(m.text()))
   await saved.goto(`file://${path}`)
   assert.equal(await saved.$$eval('section.diagram', s => s.length), 2)
-  assert.ok(await saved.$eval('#d1 img', img => img.complete && img.naturalWidth > 0), 'the canvas picture shows')
+  assert.ok(await saved.$eval('#diagram-1 img', img => img.complete && img.naturalWidth > 0), 'the canvas picture shows')
   assert.deepEqual(errors, [])
   await saved.close()
 })
@@ -123,7 +123,9 @@ test('the board saves as Markdown: Mermaid sources, sticky notes and the convers
   assert.match(md, /```mermaid\nflowchart LR\n {2}api\[Orders API\] --> db\[\(Orders DB\)\]/)
   assert.match(md, /## Pets \(tab 2\)\n\n```mermaid\npie/)
   assert.match(md, /- On `Dogs`: Mostly dogs/)
-  assert.match(md, /\*\*Claude:\*\* \*\*Orders\*\*\n\nThe \*\*request path\*\*\.\n\n→ Diagram 1: Orders/)
+  assert.match(md, /\*\*Claude:\*\* \*\*Orders\*\*\n\nThe \*\*request path\*\*\.\n\n→ Tab 1: Orders/)
+  // A diagram with nothing said is one line.
+  assert.match(md, /\n\*\*Claude\*\* drew tab 2: Pets\n/)
   assert.match(md, /\*\*You:\*\* .*why dogs\?/)
 })
 
@@ -157,6 +159,97 @@ test('a menu closes on Escape or a click elsewhere', async () => {
   await page.click('#export')
   await page.mouse.click(5, 300)
   assert.equal(await page.$eval('#export-menu', m => m.hidden), true)
+})
+
+test('every diagram exports as a well-formed SVG file, a label with a <br> in an HTML label too', async () => {
+  const sources = readdirSync(new URL('../../fixtures/', import.meta.url)).filter(n => n.endsWith('.mmd')).map(n => [n, readFileSync(new URL(`../../fixtures/${n}`, import.meta.url), 'utf8')])
+  sources.push(['html labels', '%%{init: {"flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n  a["one<br>two &amp; three"] --> b["日本語 ラベル"]'])
+  for (const [name, mermaid] of sources) {
+    await b.call('/post', { title: name, mermaid })
+    await b.until(async () => (await look(page)).tab === name, name)
+    const problem = await page.evaluate(() => {
+      const xml = svgFileOf(diagrams[current])
+      const doc = new DOMParser().parseFromString(xml, 'image/svg+xml')
+      return doc.querySelector('parsererror')?.textContent ?? (doc.documentElement.namespaceURI === 'http://www.w3.org/2000/svg' ? null : 'not SVG')
+    })
+    assert.equal(problem, null, name)
+  }
+})
+
+test('a huge diagram still exports as a PNG, smaller than twice its size', async () => {
+  const nodes = Array.from({ length: 60 }, (_, i) => `n${i}[Step number ${i} of a very long pipeline]`).join(' --> ')
+  await b.call('/post', { title: 'Huge', mermaid: `flowchart LR\n  ${nodes}` })
+  await b.until(async () => (await look(page)).tab === 'Huge', 'the huge diagram')
+  const out = await page.evaluate(async () => {
+    const d = diagrams[current]
+    const blob = await svgToPng(d)
+    const img = await createImageBitmap(blob)
+    return { w: d.w, width: img.width, height: img.height }
+  })
+  assert.ok(out.w > 8000, `wide: ${out.w}`)
+  assert.ok(out.width <= 16_000 && out.width * out.height <= 16_000_000, JSON.stringify(out))
+})
+
+test('file names keep words in any script', async () => {
+  assert.equal(await page.evaluate(() => fileNameOf('tests', '17', '注文フロー v2.')), 'tests-17-注文フロー-v2')
+})
+
+test('the saved page: links reach their diagram after a failed one, the page keeps its own font, and a wide diagram fits its column', async () => {
+  // A diagram Mermaid rejects is withdrawn: Mermaid's drawings are then numbered ahead of the tabs.
+  const bad = await b.call('/post', { title: 'Broken', mermaid: 'flowchart LR\n  A --> call' })
+  assert.equal(bad.ok, false)
+  await choose('#save', 'html')
+  const { path } = await downloaded(/^whiteboard-tests-.*\.html$/)
+  const saved = await page.browser().newPage()
+  await saved.setViewport({ width: 1000, height: 800 })
+  await saved.goto(`file://${path}`)
+  const sections = await saved.$$eval('section.diagram', s => s.map(el => el.id))
+  const links = await saved.$$eval('nav a', a => a.map(el => el.getAttribute('href').slice(1)))
+  assert.deepEqual(links, sections)
+  assert.ok(await saved.$$eval('nav a', a => a.every(el => document.getElementById(el.getAttribute('href').slice(1))?.matches('section.diagram'))))
+  assert.doesNotMatch(await saved.$eval('section.diagram h2', el => getComputedStyle(el).fontFamily), /trebuchet/i)
+  const fits = await saved.$eval('section.diagram:has(h2) figure', () => [...document.querySelectorAll('figure')].every(f => f.firstElementChild.getBoundingClientRect().width <= f.clientWidth + 1))
+  assert.ok(fits, 'every diagram fits its column')
+  await saved.close()
+})
+
+test('menus: arrows move between choices, Escape gives the focus back, one menu open at a time, and a message on the button never sticks', async () => {
+  await page.click('#export')
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.act), 'svg')
+  await page.keyboard.press('ArrowDown')
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.act), 'png')
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp')
+  assert.equal(await page.evaluate(() => document.activeElement.dataset.act), 'mermaid')
+  // A board key does nothing while a menu is open.
+  await page.keyboard.press('c')
+  assert.equal(await page.$eval('#source', el => el.hidden), true)
+  await page.keyboard.press('Escape')
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'export')
+  await page.click('#export')
+  await page.click('#save')
+  assert.equal(await page.$eval('#export', el => el.getAttribute('aria-expanded')), 'false')
+  assert.equal(await page.$eval('#export-menu', el => el.hidden), true)
+  await page.keyboard.press('Escape')
+  await choose('#export', 'mermaid')
+  await choose('#export', 'mermaid')
+  await sleep(1500)
+  assert.equal(await page.$eval('#export .lbl', el => el.textContent), 'Export')
+})
+
+test('after a lost connection, the board comes back once: the Markdown has each message once', async () => {
+  // A reconnect: the page starts again from nothing, and the server replays every card, as it does to a new connection.
+  const before = await page.evaluate(() => cardLog.length)
+  const { cards } = await b.call('/cards')
+  await page.evaluate(async cards => {
+    events.onopen()
+    for (const card of cards) onEvent({ data: JSON.stringify(card) })
+    await queue
+  }, cards)
+  await sleep(500)
+  assert.equal(await page.evaluate(() => cardLog.length), before)
+  const md = await page.evaluate(() => boardMarkdown())
+  assert.equal(md.match(/why dogs\?/g).length, 1)
 })
 
 test('after Wrap up, Save board keeps the page open and saves it', async () => {

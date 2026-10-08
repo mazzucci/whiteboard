@@ -15,13 +15,13 @@ function stampOf(date = new Date()) {
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}-${p(date.getHours())}${p(date.getMinutes())}`
 }
 
-/** A file name from words: lower case, dashes, nothing a file system minds. */
+/** A file name from words, in any script: lower case, dashes, nothing a file system minds. */
 const fileNameOf = (...words) =>
   words
     .filter(Boolean)
     .join('-')
     .toLowerCase()
-    .replace(/[^a-z0-9.]+/g, '-')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 90)
 
@@ -38,14 +38,14 @@ function download(name, blob) {
 }
 
 /** A drawn diagram as a standalone SVG file. */
-const svgFileOf = d => `<?xml version="1.0" encoding="UTF-8"?>\n${d.svg}`
+const svgFileOf = d => `<?xml version="1.0" encoding="UTF-8"?>\n${svgXmlOf(d.svg)}`
 
-/** An edited diagram as an .excalidraw file. */
-const excalidrawOf = d =>
+/** An edited diagram as an .excalidraw file (laid out to read, or compact inside a saved page). */
+const excalidrawOf = (d, isCompact = false) =>
   JSON.stringify(
     { type: 'excalidraw', version: 2, source: 'Whiteboard', elements: d.scene.filter(e => !e.isDeleted), appState: { viewBackgroundColor: '#ffffff', gridSize: null }, files: {} },
     null,
-    2,
+    isCompact ? 0 : 2,
   )
 
 /** A diagram as a PNG: the canvas when it was edited, the drawing otherwise. */
@@ -84,7 +84,7 @@ nav ol { padding-left: 20px; }
 section.diagram, section.conversation { margin-top: 28px; padding: 20px; border: 1px solid #e3e6ec; border-radius: 12px; background: #fff; }
 h1 { font-size: 24px; margin: 0 0 4px; } h2 { font-size: 18px; margin: 0 0 4px; }
 figure { margin: 16px 0; overflow: auto; text-align: center; }
-figure svg, figure img { max-width: 100%; height: auto; }
+figure svg, figure img { max-width: 100% !important; height: auto !important; }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: #667085; }
 .legend i { display: inline-block; width: 12px; height: 12px; border: 2px solid; border-radius: 3px; margin-right: 6px; vertical-align: -2px; }
 .legend i.dashed { border-style: dashed; }
@@ -146,7 +146,7 @@ function conversationHtml() {
       const n = diagrams.findIndex(d => String(d.id) === msg.dataset.card)
       for (const chip of body.querySelectorAll('.chip')) {
         if (n < 0) chip.remove()
-        else chip.outerHTML = `<p><a href="#d${n + 1}">→ ${esc(diagrams[n].title)}</a></p>`
+        else chip.outerHTML = `<p><a href="#diagram-${n + 1}">→ ${esc(diagrams[n].title)}</a></p>`
       }
       const isYou = msg.classList.contains('you')
       return `<div class="msg ${isYou ? 'you' : 'claude'}"><div class="who">${isYou ? 'You' : 'Claude'}</div><div class="md">${body.innerHTML}</div></div>`
@@ -173,17 +173,18 @@ async function boardHtml(when = new Date()) {
     }
     const notes = notesOfDiagram(d)
     sections.push(
-      `<section class="diagram" id="d${i + 1}">` +
+      // Not `d1`: Mermaid's drawings are `d1`, `d2`…, and their styles would apply to the section.
+      `<section class="diagram" id="diagram-${i + 1}">` +
         `<h2>${i + 1}. ${esc(d.title)}</h2><div class="meta">${esc(d.kind)}${d.scene ? ' · edited on the board' : ''}</div>` +
         (d.legend?.length ? `<div class="legend">${legendHtml(d.legend)}</div>` : '') +
         `<figure>${picture}</figure>` +
         (notes.length ? `<ul class="notes">${notes.map(n => `<li>${n.on ? `On ${noteTarget(n, t => `<code>${esc(t)}</code>`, t => `<b>${esc(t)}</b>`)}: ` : ''}${inline(n.text)}</li>`).join('')}</ul>` : '') +
         `<details><summary>Mermaid source</summary><pre><code>${esc(d.source)}</code></pre></details>` +
-        (d.scene ? `<details><summary>The canvas (save as a .excalidraw file to open it at excalidraw.com)</summary><pre><code>${esc(excalidrawOf(d))}</code></pre></details>` : '') +
+        (d.scene ? `<details><summary>The canvas (save as a .excalidraw file to open it at excalidraw.com)</summary><pre><code>${esc(excalidrawOf(d, true))}</code></pre></details>` : '') +
         '</section>',
     )
   }
-  const contents = diagrams.length ? `<nav><ol>${diagrams.map((d, i) => `<li><a href="#d${i + 1}">${esc(d.title)}</a></li>`).join('')}</ol></nav>` : ''
+  const contents = diagrams.length ? `<nav><ol>${diagrams.map((d, i) => `<li><a href="#diagram-${i + 1}">${esc(d.title)}</a></li>`).join('')}</ol></nav>` : ''
   const talk = conversationHtml()
   return `<!doctype html>
 <html lang="en">
@@ -304,9 +305,13 @@ function boardMarkdown(when = new Date()) {
         continue
       }
       const n = diagrams.findIndex(d => d.id === c.id)
-      lines.push(`**Claude:**${c.title && c.text ? ` **${c.title}**` : ''}`, '')
-      if (c.text) lines.push(c.text, '')
-      if (n >= 0) lines.push(`→ Diagram ${n + 1}: ${diagrams[n].title}`, '')
+      // A diagram with nothing said: one line.
+      if (!c.text) {
+        if (n >= 0) lines.push(`**Claude** drew tab ${n + 1}: ${diagrams[n].title}`, '')
+        continue
+      }
+      lines.push(`**Claude:**${c.title ? ` **${c.title}**` : ''}`, '', c.text, '')
+      if (n >= 0) lines.push(`→ Tab ${n + 1}: ${diagrams[n].title}`, '')
     }
   }
   return lines.join('\n')
@@ -325,48 +330,80 @@ const SAVES = {
 
 // ---------------------------------------------------------------- menus
 
+/** Every menu's button, so opening one closes the others. */
+const menuButtons = []
+
 /**
- * A button that opens a menu below it; the menu closes on a choice, a click
- * elsewhere or Escape. What a choice says back ("Copied", "Failed") shows on
- * the button for a moment.
+ * A button that opens a menu below it, focused on its first choice: arrows
+ * move between choices, Enter picks one, Escape or a click elsewhere closes it
+ * (focus back on the button). What a choice says back ("Copied", "Failed")
+ * shows on the button for a moment, on a phone too.
  */
 function menuOf(button, menu, act, onOpen = () => {}) {
-  const close = () => {
+  menuButtons.push([button, menu])
+  const items = () => [...menu.querySelectorAll('button[data-act]')].filter(b => !b.hidden)
+  const close = (isFocusBack = false) => {
     menu.hidden = true
     button.setAttribute('aria-expanded', 'false')
+    if (isFocusBack) button.focus()
+  }
+  const shown = button.querySelector('.lbl') ?? button
+  const label = shown.textContent
+  const title = button.title
+  let saying = null
+  const say = (text, ms, why = '') => {
+    clearTimeout(saying)
+    shown.textContent = text
+    button.title = why ? `${title} (${why})` : title
+    button.classList.add('said')
+    saying = setTimeout(() => {
+      shown.textContent = label
+      button.title = title
+      button.classList.remove('said')
+    }, ms)
   }
   button.onclick = e => {
     e.stopPropagation()
-    const isOpen = menu.hidden
-    if (isOpen) onOpen()
-    document.querySelectorAll('.menu').forEach(m => (m.hidden = true))
-    menu.hidden = !isOpen
-    button.setAttribute('aria-expanded', String(isOpen))
+    const isOpening = menu.hidden
+    for (const [b, m] of menuButtons) {
+      m.hidden = true
+      b.setAttribute('aria-expanded', 'false')
+    }
+    if (!isOpening) return
+    onOpen()
+    menu.hidden = false
+    button.setAttribute('aria-expanded', 'true')
+    items()[0]?.focus()
   }
   menu.onclick = async e => {
     const item = e.target.closest('button[data-act]')
     if (!item) return
     e.stopPropagation()
-    close()
-    const shown = button.querySelector('.lbl') ?? button
-    const label = shown.textContent
-    const say = (text, ms) => {
-      shown.textContent = text
-      setTimeout(() => (shown.textContent = label), ms)
-    }
+    close(true)
     try {
       const said = await act(item.dataset.act)
       if (said) say(said, 1200)
     } catch (err) {
-      button.title = `${button.dataset.title ??= button.title} (failed: ${err?.message ?? err})`
-      say('Failed', 2000)
+      say('Failed', 2500, `failed: ${err?.message ?? err}`)
     }
   }
+  menu.addEventListener('keydown', e => {
+    const all = items()
+    const at = all.indexOf(document.activeElement)
+    const go = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: all.length - 1 }[e.key]
+    if (go !== undefined) {
+      e.preventDefault()
+      all.at(((go % all.length) + all.length) % all.length)?.focus()
+    } else if (e.key === 'Escape' || e.key === 'Tab') {
+      if (e.key === 'Escape') e.preventDefault()
+      close(e.key === 'Escape')
+    }
+  })
   document.addEventListener('click', e => {
     if (!menu.hidden && !menu.contains(e.target)) close()
   })
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !menu.hidden) close()
+    if (e.key === 'Escape' && !menu.hidden) close(true)
   })
 }
 

@@ -174,7 +174,7 @@ stage.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   const d = diagrams[current]
   if (e.key !== 'Escape' || !d?.picks?.size || isEditing()) return
-  if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]')) return
+  if (e.target instanceof Element && e.target.closest('textarea, input, [contenteditable], .menu')) return
   d.picks.clear()
   showPicks(d)
 })

@@ -16,6 +16,11 @@
   downloads.
 - Fixed: a line chart's click spots showed as black dots in pictures of the
   chart (the one Claude reads with `read_board`, and now exports).
+- Fixed: a picture of a very large diagram, or of one with HTML labels, could
+  not be made (for `read_board` too); a huge one is now drawn smaller, within
+  what browsers can draw.
+- The wrap-up banner waits while the pointer is on it, so there is time to
+  save before the tab closes.
 
 ## 0.5.0
 

@@ -312,6 +312,13 @@ function natural(svgText) {
   return { svg: holder.innerHTML, w, h }
 }
 
+/** A drawing as a standalone SVG file (XML: a label's `<br>` closed, entities spelled out), for an image or a download. */
+function svgXmlOf(svgText) {
+  const holder = document.createElement('div')
+  holder.innerHTML = svgText
+  return new XMLSerializer().serializeToString(holder.querySelector('svg'))
+}
+
 const typeOf = source =>
   (source.replace(/^---[\s\S]*?\n---\s*\n/, '').replace(/%%\{[\s\S]*?\}%%/g, '').split('\n').map(l => l.trim()).find(l => l && !l.startsWith('%%')) ?? '')
     .split(/[\s:;{]/)[0]
@@ -490,6 +497,7 @@ else events.onopen = () => {
   document.querySelectorAll('.msg').forEach(m => m.remove())
   pending = []
   stickies.clear()
+  cardLog.length = 0
   setConnected(true)
   isReplaying = true
   // Replayed cards arrive at once; anything after a short pause is new.
@@ -686,6 +694,8 @@ stage.addEventListener(
 // Keys, when not typing: arrows pan; i o f zoom; [ ] step; c the source.
 document.addEventListener('keydown', e => {
   if ((e.target instanceof Element && e.target.closest('textarea, input, [contenteditable]')) || e.metaKey || e.ctrlKey || e.altKey) return
+  // An open menu has the keys.
+  if (document.querySelector('.menu:not([hidden])')) return
   // On a canvas, only stepping between diagrams: every other key is the editor's.
   if (isEditing() && e.key !== '[' && e.key !== ']') return
   if (isEditing() && e.target instanceof Element && e.target.closest('.editor')) return
@@ -760,7 +770,14 @@ function wrappedUp(card) {
     '<div class="row"><span id="countdown"></span><span class="buttons"><button type="button" id="save-ended" title="Every diagram, its notes and the conversation, as one web page">Save board</button><button type="button" id="keep">Keep open</button></span></div>'
   document.body.append(banner)
   let left = 5
+  // Not while the person is on the banner: they may be about to save.
+  const isHeld = () => banner.matches(':hover') || banner.contains(document.activeElement)
   const tick = () => {
+    if (isHeld()) {
+      $('countdown').textContent = 'Closing this tab when you move away'
+      left = Math.max(left, 3)
+      return
+    }
     $('countdown').textContent = `Closing this tab in ${left} s`
     if (left-- > 0) return
     clearInterval(timer)
@@ -781,8 +798,12 @@ function wrappedUp(card) {
   // Saving keeps the page open: the save may take a moment, and the person may want another.
   $('save-ended').onclick = async () => {
     $('keep').click()
-    await SAVES.html()
-    $('countdown').textContent = 'Saved. The board is read-only now.'
+    try {
+      await SAVES.html()
+      $('countdown').textContent = 'Saved. The board is read-only now.'
+    } catch (err) {
+      $('countdown').textContent = `Could not save: ${err?.message ?? err}`
+    }
   }
 }
 
