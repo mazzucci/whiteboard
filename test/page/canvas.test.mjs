@@ -110,6 +110,15 @@ test("a state diagram's [*] reads back as its start and end, not as boxes with o
   assert.deepEqual(scene.arrows.map(a => `${a.from}->${a.to}`).sort(), ['Paid->end', 'Pending->Paid', 'start->Pending'])
 })
 
+test("a state of Claude's own named like session_start keeps its name and its colour", async () => {
+  const scene = await canvasOf('Session', 'stateDiagram-v2\n  [*] --> session_start\n  session_start --> payment_end\n  payment_end --> [*]\n  classDef red fill:#fdecea,stroke:#c0392b\n  class session_start red')
+  const boxes = Object.fromEntries(scene.boxes.map(x => [x.ref, x]))
+  assert.deepEqual(Object.keys(boxes).sort(), ['end', 'payment_end', 'session_start', 'start'])
+  assert.notEqual(boxes.session_start.class, 'plain')
+  const out = await b.call('/post', { ops: [{ op: 'class', id: 'payment_end', class: 'fine' }] })
+  assert.deepEqual(out.done, ['#1 (class)'])
+})
+
 test("the hand-drawn font (Excalifont) is the board's own: picking it draws, nothing is missing", async () => {
   const missing = []
   page.on('response', r => r.status() === 404 && missing.push(r.url()))

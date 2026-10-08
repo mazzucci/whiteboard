@@ -26,8 +26,8 @@
 - An edited ER diagram reads back to Claude by its tables' names (`CUSTOMER`,
   not `entity-CUSTOMER-0`), so Claude's amendments find them; a state
   diagram's `[*]` reads back as its start and end, not as odd boxes.
-- In the Markdown save, an xychart or quadrant chart says that GitHub, GitLab
-  or Notion may not draw it yet.
+- In the Markdown save, a newer Mermaid type (charts, architecture, block…)
+  says that some viewers may not draw it yet.
 
 ## 0.5.0
 

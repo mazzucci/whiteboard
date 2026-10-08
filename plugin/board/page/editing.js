@@ -115,7 +115,8 @@ function summaryOf(elements, selectedIds = []) {
   const box = e => ({
     ref: refOf(e),
     text: label(e) || (point[e.customData?.kind] ?? ''),
-    class: point[e.customData?.kind] ? 'plain' : classOf(e),
+    // A start or end point is black as Mermaid draws it: that is no colour of Claude's.
+    class: point[e.customData?.kind] && e.backgroundColor === '#000000' ? 'plain' : classOf(e),
     x: Math.round(e.x),
     y: Math.round(e.y),
     w: Math.round(e.width),
@@ -348,10 +349,14 @@ const EDITABLE = /^(flowchart|graph|sequenceDiagram|classDiagram|erDiagram|state
  * Refs as Claude wrote them. The converter names an ER entity
  * `entity-CUSTOMER-0`, and a state diagram's `[*]` `root_start` and `root_end`
  * (its dot `root_end__inner`; in a composite state, `Paying_start`): Claude
- * knows them as `CUSTOMER`, and as `start` and `end` (`Paying-start`).
+ * knows them as `CUSTOMER`, and as `start` and `end` (`Paying-start`). A
+ * diagram with states of its own named `start` or `end` keeps the converter's
+ * names for its `[*]`.
  */
 function plainRefs(elements, type) {
   const used = new Set(elements.map(e => e.customData?.ref).filter(Boolean))
+  // A `[*]` has no words in it; a state of Claude's (`session_start`) does, and keeps its name.
+  const isWordless = e => !elements.some(t => t.type === 'text' && t.containerId === e.id)
   const plain = e => {
     const ref = e.customData?.ref
     if (!ref) return null
@@ -359,7 +364,7 @@ function plainRefs(elements, type) {
       const m = /^entity-(.+)-\d+$/.exec(ref)
       return m && { ref: m[1] }
     }
-    if (!/^stateDiagram/.test(type)) return null
+    if (!/^stateDiagram/.test(type) || !isWordless(e)) return null
     const m = /^(.*?)_(start|end)(__inner)?$/.exec(ref)
     if (!m) return null
     const name = m[1] === 'root' ? m[2] : `${m[1]}-${m[2]}`

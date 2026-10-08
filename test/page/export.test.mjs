@@ -124,7 +124,7 @@ test('the board saves as Markdown: Mermaid sources, sticky notes and the convers
   assert.match(md, /## Pets \(tab 2\)\n\n```mermaid\npie/)
   assert.match(md, /- On `Dogs`: Mostly dogs/)
   assert.match(md, /\*\*Claude:\*\* \*\*Orders\*\*\n\nThe \*\*request path\*\*\.\n\n→ Tab 1: Orders/)
-  assert.doesNotMatch(md, /_A chart:/, 'a pie needs no warning')
+  assert.doesNotMatch(md, /_A newer Mermaid type/, 'a pie needs no warning')
   // A diagram with nothing said is one line.
   assert.match(md, /\n\*\*Claude\*\* drew tab 2: Pets\n/)
   assert.match(md, /\*\*You:\*\* .*why dogs\?/)
@@ -191,10 +191,10 @@ test('a huge diagram still exports as a PNG, smaller than twice its size', async
   assert.ok(out.width <= 16_000 && out.width * out.height <= 16_000_000, JSON.stringify(out))
 })
 
-test('in Markdown, a newer chart type says where it may not be drawn', async () => {
+test('in Markdown, a newer Mermaid type says where it may not be drawn', async () => {
   await b.call('/post', { title: 'Latency', mermaid: 'xychart-beta\n  x-axis [a, b]\n  bar [1, 2]' })
   await b.until(async () => (await look(page)).tab === 'Latency', 'the chart')
-  assert.match(await page.evaluate(() => boardMarkdown()), /## Latency \(tab \d+\)\n\n_A chart: GitHub, GitLab or Notion may run an older Mermaid/)
+  assert.match(await page.evaluate(() => boardMarkdown()), /## Latency \(tab \d+\)\n\n_A newer Mermaid type: some viewers/)
 })
 
 test('file names keep words in any script', async () => {
