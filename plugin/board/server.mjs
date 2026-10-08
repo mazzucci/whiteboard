@@ -473,7 +473,8 @@ async function handle(req, res) {
     // A question about a section of the brief waits there for Claude's answer.
     const section = brief?.sections.find(s => s.id === input.about)
     publish({ kind: 'you', text: clip(input.asked, 4000)?.trim() || text, ...(section ? { about: section.id } : {}) })
-    if (section) {
+    // More detail is asked for in the section's body, not answered under it.
+    if (section && input.isMore !== true) {
       section.asks = [...section.asks, { question: clip(input.asked, 1000)?.trim() || text.slice(0, 1000) }].slice(-6)
       briefChanged([{ op: 'ask', id: section.id }], 'you')
     }

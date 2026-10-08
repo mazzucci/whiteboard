@@ -14,6 +14,11 @@ const briefSeen = new Map()
 
 const briefPane = $('brief')
 
+/** Claude started or finished a turn: a question still without an answer says where to look. */
+function briefTurnChanged() {
+  if (briefNow?.sections.some(s => s.asks?.some(a => a.question && !a.answer))) renderBrief()
+}
+
 /** A reconnect replays the brief from its first card: start from nothing. */
 function resetBrief() {
   briefNow = null
@@ -115,7 +120,11 @@ function renderBrief(fresh = []) {
     const asks = (s.asks ?? [])
       .map(a =>
         `<div class="qa">${a.question ? `<div class="q">You asked: <b>${esc(a.question)}</b></div>` : ''}` +
-        (a.answer ? `<div class="a md">${markdown(a.answer)}</div>` : '<div class="a waiting"><span class="dots"><i></i><i></i><i></i></span> Waiting for Claude…</div>') +
+        (a.answer
+          ? `<div class="a md">${markdown(a.answer)}</div>`
+          : claudeState === 'working' || waitingCount()
+            ? '<div class="a waiting"><span class="dots"><i></i><i></i><i></i></span> Waiting for Claude…</div>'
+            : '<div class="a unanswered">Not answered here: Claude may have answered in the chat.</div>') +
         '</div>',
       )
       .join('')
@@ -247,7 +256,7 @@ briefPane.addEventListener('click', e => {
   }
   if (act === 'more') {
     const s = briefNow.sections.find(x => x.id === li.dataset.id)
-    send('More detail, please.', true, { ...briefAboutOf(s), asked: 'More detail, please.' })
+    send('More detail, please.', true, { ...briefAboutOf(s), asked: 'More detail, please.', isMore: true })
     return
   }
   if (e.target.closest('.qa, .body')) return

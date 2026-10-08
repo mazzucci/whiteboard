@@ -123,6 +123,24 @@ test('More detail asks Claude for it, about that section', async () => {
   await page.click(`${section('pkce')} [data-act="more"]`)
   await b.until(() => b.said.at(-1)?.endsWith('More detail, please.'), 'asked for more')
   assert.equal(b.said.at(-1), 'About the brief\'s section `pkce` ("PKCE": A secret the app keeps protects the code.):\nMore detail, please.')
+  // Asked for, not a question: nothing waits under the section, the detail comes as its body.
+  await sleep(300)
+  assert.deepEqual((await brief()).sections.find(s => s.id === 'pkce').asks, [])
+})
+
+test('a question Claude did not answer under its section says so once Claude is done', async () => {
+  await page.click(section('roles'))
+  await send(page, 'Which one is mine?')
+  await b.until(async () => (await brief()).sections.find(s => s.id === 'roles').asks.length === 1, 'the question under roles')
+  assert.match((await brief()).sections.find(s => s.id === 'roles').asks[0], /Waiting for Claude…/)
+  // Claude's turn reads it...
+  await b.call('/post', { status: 'working' })
+  await sleep(300)
+  assert.match((await brief()).sections.find(s => s.id === 'roles').asks[0], /Waiting for Claude…/)
+  // The turn ends with no answer under the section (Claude answered in the conversation).
+  await b.call('/post', { status: 'idle' })
+  await b.until(async () => /Not answered here/.test((await brief()).sections.find(s => s.id === 'roles').asks[0]), 'not waiting any more')
+  assert.equal((await brief()).sections.find(s => s.id === 'roles').asks[0], 'You asked: Which one is mine? Not answered here: Claude may have answered in the chat.')
 })
 
 test("a section lights up a sequence diagram's participants: their boxes and lifelines", async () => {
@@ -145,7 +163,7 @@ test('a page opened again shows the brief as it is, with nothing marked new', as
   assert.equal(now.bottomLine, 'OAuth lets an app use your data without your password.')
   assert.deepEqual(now.sections.map(s => [s.id, s.was]), [['roles', null], ['flow', null], ['pkce', null]])
   assert.deepEqual(now.dropped, ['Tokens not needed here'])
-  assert.equal((await brief()).sections.find(s => s.id === 'pkce').asks.length, 1)
+  assert.equal((await brief()).sections.find(s => s.id === 'flow').asks.length, 1)
   assert.deepEqual(page.errors, [])
 })
 

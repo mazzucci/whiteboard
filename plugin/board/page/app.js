@@ -387,6 +387,7 @@ function showTyping() {
   // On a narrow screen the conversation may be hidden: the Chat button shows it too.
   document.querySelector('.views [data-view="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
   document.querySelector('.panes [data-pane="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
+  briefTurnChanged()
   typing.hidden = !isWorking && !waiting
   $('typing-text').textContent = isWorking
     ? waiting > 1 ? `Claude is working… your ${waiting} messages are queued` : 'Claude is working…'
@@ -743,7 +744,8 @@ async function send(text, isTyped = true, about = isTyped ? briefAbout() : null)
   text = withChanges(text.trim(), isTyped)
   // A question about a section of the brief says which, so the answer lands under it.
   if (about && asked && text.endsWith(asked)) text = `${text.slice(0, -asked.length)}${about.said}\n${asked}`
-  if (text) await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked } : {}) })
+  // More detail is asked for, not a question: nothing waits under the section for an answer.
+  if (text) await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}) })
   if (about) briefSent()
 }
 $('form').onsubmit = e => {
