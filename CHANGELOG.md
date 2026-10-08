@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 (unreleased)
+
+- **A brief beside the diagrams.** When Claude explains a concept, briefs you
+  on a document or sums up an investigation, it can write a brief next to the
+  diagram: the bottom line first, then up to nine sections of one line each.
+  It sits where the conversation is, with a Brief / Chat switch.
+  - Point at a section and the boxes it is about light up on the diagram.
+  - Click a section to ask about it: your question, and Claude's answer, land
+    under that section. **More detail** asks Claude to expand it.
+  - The brief changes as you talk: a rewritten line shows the old one struck
+    through until you have seen it, new ideas become new sections, and dropped
+    ones are listed with why. The conversation notes each change.
+  - Sources show as § links: the spec, the doc, or the file and line.
+  - Save board puts the brief first, in the web page and in Markdown.
+
 ## 0.5.1
 
 - **Export a diagram.** An Export menu on each diagram: SVG or PNG, or Copy

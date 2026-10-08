@@ -44,7 +44,7 @@ const postJson = (path, body, headers = {}) =>
 const isAlive = async () => (await call('/')).status === 200
 
 test('the page and its files load without the token, with the security headers', async () => {
-  for (const path of ['/', '/app.js', '/editing.js', '/charts.js', '/export.js', '/app.css', '/mermaid.js']) {
+  for (const path of ['/', '/app.js', '/editing.js', '/charts.js', '/export.js', '/brief.js', '/app.css', '/mermaid.js']) {
     const res = await call(path)
     assert.equal(res.status, 200, path)
     assert.equal(res.headers.get('referrer-policy'), 'no-referrer')
@@ -197,7 +197,7 @@ test("the page's scripts share no top-level names (a later one would replace the
     const s = readFileSync(new URL(`../board/page/${file}`, import.meta.url), 'utf8')
     return new Set([...s.matchAll(/^(?:async\s+)?function\s+(\w+)|^(?:const|let|var)\s+(\w+)/gm)].map(m => m[1] ?? m[2]))
   }
-  const files = ['app.js', 'editing.js', 'charts.js', 'export.js']
+  const files = ['app.js', 'editing.js', 'charts.js', 'export.js', 'brief.js']
   const seen = new Map()
   const shared = []
   for (const file of files) {
@@ -207,4 +207,146 @@ test("the page's scripts share no top-level names (a later one would replace the
     }
   }
   assert.deepEqual(shared, [])
+})
+
+// ---------------------------------------------------------------- the brief
+
+const cardsNow = async () => (await call('/cards', { headers: { 'x-board-token': ready.token } })).json()
+const briefPost = async body => (await postJson('/post', body)).json()
+
+test('a brief is checked, posted once, and refused again unless it is new', async () => {
+  const bad = await briefPost({ brief: { bottomLine: 'OAuth in short', sections: [{ id: 'has space', line: 'x' }] } })
+  assert.match(bad.briefError, /not a section id/)
+  assert.match((await briefPost({ brief: { sections: [{ id: 'a', line: 'x' }] } })).briefError, /bottom line/)
+  const tooMany = Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, line: 'x' }))
+  assert.match((await briefPost({ brief: { bottomLine: 'b', sections: tooMany } })).briefError, /at most 9/)
+  assert.equal((await cardsNow()).brief, null, 'nothing on the board after a refusal')
+
+  const posted = await briefPost({
+    brief: {
+      bottomLine: 'OAuth lets an app use your data **without your password**.',
+      sections: [
+        { id: 'roles', title: 'Four roles', line: 'You, the app, the login service, the API.', focus: ['U', 'A', 'C', 'R'] },
+        { id: 'flow', title: 'The main flow', line: 'The app swaps a one-time code for a token.', cites: [{ label: 'RFC 6749 §4.1', url: 'https://www.rfc-editor.org/rfc/rfc6749#section-4.1' }, { label: 'src/a.ts:3', url: 'javascript:alert(1)' }] },
+      ],
+    },
+  })
+  assert.equal(posted.ok, true)
+  assert.equal(posted.sections, 2)
+  const { brief } = await cardsNow()
+  assert.deepEqual(brief.sections.map(s => s.id), ['roles', 'flow'])
+  // Only web addresses are links: anything else is a label.
+  assert.deepEqual(brief.sections[1].cites, [{ label: 'RFC 6749 §4.1', url: 'https://www.rfc-editor.org/rfc/rfc6749#section-4.1' }, { label: 'src/a.ts:3' }])
+  assert.equal((await briefPost({ brief: { bottomLine: 'Another', sections: [] } })).briefError, 'a brief is on the board already')
+  assert.equal((await cardsNow()).brief.bottomLine, brief.bottomLine)
+})
+
+test('changes to the brief apply in order; those that fail are said and the rest stand', async () => {
+  const out = await briefPost({
+    bottomLine: 'OAuth: a limited, revocable key instead of your password.',
+    briefOps: [
+      { op: 'update', id: 'flow', line: 'The app swaps a one-time code for a token over a back channel.' },
+      { op: 'add', id: 'pkce', title: 'PKCE', line: 'A secret only the app knows protects the code.', after: 'flow' },
+      { op: 'add', id: 'flow', line: 'again' },
+      { op: 'drop', id: 'roles', why: 'covered by the diagram' },
+      { op: 'update', id: 'roles', line: 'x' },
+      { op: 'shuffle', id: 'pkce' },
+      { op: 'answer', id: 'pkce', text: 'An answer with no question before it.' },
+    ],
+  })
+  assert.equal(out.done, 5)
+  assert.equal(out.errors.length, 3)
+  assert.match(out.errors[0], /#3 flow: already in the brief/)
+  assert.match(out.errors[1], /#5 roles: no section by that id \(it was dropped: restore it first\)/)
+  assert.match(out.errors[2], /#6 pkce: unknown change "shuffle"/)
+  const { brief } = await cardsNow()
+  assert.equal(brief.bottomLine, 'OAuth: a limited, revocable key instead of your password.')
+  assert.equal(brief.wasBottomLine, 'OAuth lets an app use your data **without your password**.')
+  assert.deepEqual(brief.sections.map(s => s.id), ['flow', 'pkce'])
+  assert.equal(brief.sections[0].was, 'The app swaps a one-time code for a token.')
+  assert.deepEqual(brief.sections[1].asks, [{ answer: 'An answer with no question before it.' }])
+  assert.deepEqual(brief.dropped.map(s => [s.id, s.why]), [['roles', 'covered by the diagram']])
+
+  const back = await briefPost({ briefOps: [{ op: 'restore', id: 'roles' }] })
+  assert.equal(back.done, 1)
+  assert.deepEqual((await cardsNow()).brief.sections.map(s => s.id), ['flow', 'pkce', 'roles'])
+  // No more than nine at a time: a tenth is refused, with what to do.
+  const adds = Array.from({ length: 7 }, (_, i) => ({ op: 'add', id: `more${i}`, line: 'x' }))
+  const full = await briefPost({ briefOps: adds })
+  assert.equal(full.done, 6)
+  assert.match(full.errors[0], /9 sections already; merge or drop one first/)
+})
+
+test('a question about a section waits under it until Claude answers there', async () => {
+  const before = lines.length
+  assert.equal((await postJson('/say', { text: "About the brief's section `flow`:\nWhy a back channel?", about: 'flow', asked: 'Why a back channel?' })).status, 200)
+  // Claude gets the whole message; the board keeps the question under the section.
+  await new Promise(r => setTimeout(r, 50))
+  assert.deepEqual(lines.slice(before).map(m => m.say), ["About the brief's section `flow`:\nWhy a back channel?"])
+  let flow = (await cardsNow()).brief.sections.find(s => s.id === 'flow')
+  assert.deepEqual(flow.asks, [{ question: 'Why a back channel?' }])
+  const you = (await cardsNow()).cards.findLast(c => c.kind === 'you')
+  assert.deepEqual([you.text, you.about], ['Why a back channel?', 'flow'])
+
+  await briefPost({ briefOps: [{ op: 'answer', id: 'flow', text: 'So the token never passes through the browser.' }] })
+  flow = (await cardsNow()).brief.sections.find(s => s.id === 'flow')
+  assert.deepEqual(flow.asks, [{ question: 'Why a back channel?', answer: 'So the token never passes through the browser.' }])
+  // About no section of the brief: an ordinary message.
+  await postJson('/say', { text: 'hello', about: 'nope', asked: 'hello' })
+  assert.equal((await cardsNow()).cards.findLast(c => c.kind === 'you').about, undefined)
+})
+
+test('a page that connects gets every change to the brief, in order, after the cards before it', async () => {
+  const res = await call(`/events?t=${ready.token}`)
+  const reader = res.body.getReader()
+  let text = ''
+  const until = Date.now() + 2000
+  while (Date.now() < until && !text.includes('"kind":"status"')) text += new TextDecoder().decode((await reader.read()).value)
+  await reader.cancel()
+  const briefs = text.split('\n\n').filter(l => l.includes('"kind":"brief"')).map(l => JSON.parse(l.replace(/^data: /, '')))
+  assert.ok(briefs.length >= 4)
+  assert.deepEqual(briefs[0].changes, [{ op: 'new' }])
+  assert.deepEqual(briefs.at(-1).brief.sections.find(s => s.id === 'flow').asks.at(-1).answer, 'So the token never passes through the browser.')
+  // Read back by Claude, the brief is there once, not each change.
+  assert.equal((await cardsNow()).cards.filter(c => c.kind === 'brief').length, 0)
+})
+
+test('answers go to the oldest question still waiting, so two questions keep their own answers', async () => {
+  for (const asked of ['First?', 'Second?']) await postJson('/say', { text: asked, about: 'pkce', asked })
+  await briefPost({ briefOps: [{ op: 'answer', id: 'pkce', text: 'A1' }, { op: 'answer', id: 'pkce', text: 'A2' }] })
+  const pkce = (await cardsNow()).brief.sections.find(s => s.id === 'pkce')
+  assert.deepEqual(pkce.asks.slice(-2), [{ question: 'First?', answer: 'A1' }, { question: 'Second?', answer: 'A2' }])
+})
+
+test('only a new line shows what it replaced; an update that changes nothing is refused', async () => {
+  await briefPost({ briefOps: [{ op: 'update', id: 'pkce', line: 'PKCE: a secret the app keeps.' }] })
+  let pkce = (await cardsNow()).brief.sections.find(s => s.id === 'pkce')
+  const lineV = pkce.lineV
+  assert.equal(lineV, pkce.v)
+  // The body changes: the line, and what it replaced, stay as they were.
+  await briefPost({ briefOps: [{ op: 'update', id: 'pkce', body: 'More on PKCE.' }] })
+  pkce = (await cardsNow()).brief.sections.find(s => s.id === 'pkce')
+  assert.equal(pkce.lineV, lineV)
+  assert.ok(pkce.v > lineV)
+  const same = await briefPost({ briefOps: [{ op: 'update', id: 'pkce', line: 'PKCE: a secret the app keeps.' }, { op: 'update', id: 'pkce' }], bottomLine: (await cardsNow()).brief.bottomLine })
+  assert.equal(same.done, 0)
+  assert.deepEqual(same.errors, ['bottom_line: nothing to change (it already says that)', '#1 pkce: nothing to change (it already says that)', '#2 pkce: nothing to change (it already says that)'])
+  // One-line fields stay one line.
+  await briefPost({ briefOps: [{ op: 'update', id: 'pkce', title: 'Two\nlines', line: 'One\n## Not a heading' }] })
+  pkce = (await cardsNow()).brief.sections.find(s => s.id === 'pkce')
+  assert.deepEqual([pkce.title, pkce.line], ['Two lines', 'One ## Not a heading'])
+})
+
+test('a brief posted with a diagram Mermaid rejects is taken off with it', async () => {
+  const before = (await cardsNow()).brief
+  const posting = briefPost({ title: 'Broken', mermaid: 'flowchart LR\n  a --> ', brief: { bottomLine: 'A new one', sections: [] }, isNew: true, waitForPage: true })
+  let card
+  for (let i = 0; i < 50 && !card; i++) {
+    await new Promise(r => setTimeout(r, 50))
+    card = (await cardsNow()).cards.find(c => c.title === 'Broken')
+  }
+  assert.equal((await cardsNow()).brief.bottomLine, 'A new one')
+  await postJson('/rendered', { id: card.id, error: 'Parse error' })
+  assert.equal((await posting).error, 'Parse error')
+  assert.deepEqual((await cardsNow()).brief, before)
 })

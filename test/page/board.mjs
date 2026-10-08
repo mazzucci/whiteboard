@@ -47,13 +47,15 @@ export async function board() {
       body: body && JSON.stringify(body),
     }).then(r => r.json())
   const pages = []
-  /** A page of the board, as the person opens it; its errors are kept. */
-  async function open() {
+  /** A page of the board, as the person opens it; its errors are kept. `prepare` runs before it loads. */
+  async function open(prepare) {
     const page = await browser.newPage()
     page.errors = []
     page.on('pageerror', e => page.errors.push(String(e)))
+    if (prepare) await prepare(page)
     await page.goto(ready.url)
-    await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 10_000 })
+    // A fresh CI runner's first Chrome page can take longer than ten seconds.
+    await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 30_000 })
     pages.push(page)
     return page
   }

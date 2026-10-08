@@ -176,6 +176,8 @@ function select(i) {
   keepInView(d)
   renderTabs()
   showEditor(d)
+  // The brief's section being pointed at lights up its boxes on whichever diagram is in front.
+  showFocus()
 }
 
 /** Whether the diagram on screen is a canvas being edited: then the canvas has the pointer and the keys. */
@@ -339,7 +341,10 @@ function addMessage(card, html, isReplay = false) {
   messages.insertBefore(el, $('typing'))
   if (isYou && !isReplay) pending.push({ at: card._at ?? 0, el })
   if (!isYou) answered()
-  if (!isYou && !isReplay) countUnread()
+  if (!isYou && !isReplay) {
+    countUnread()
+    countChatUnread()
+  }
   showTyping()
   if (isAtBottom || isYou) messages.scrollTop = messages.scrollHeight
   return el
@@ -381,10 +386,13 @@ function showTyping() {
   const waiting = waitingCount()
   // On a narrow screen the conversation may be hidden: the Chat button shows it too.
   document.querySelector('.views [data-view="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
+  document.querySelector('.panes [data-pane="chat"]')?.classList.toggle('busy', isWorking || waiting > 0)
   typing.hidden = !isWorking && !waiting
   $('typing-text').textContent = isWorking
     ? waiting > 1 ? `Claude is working… your ${waiting} messages are queued` : 'Claude is working…'
     : 'Sent. Claude Code picks it up in a moment…'
+  // The brief says it too, from what was just set.
+  briefTurnChanged(typing.hidden ? null : $('typing-text').textContent)
   const messages = $('messages')
   if (!typing.hidden && messages.scrollHeight - messages.scrollTop - messages.clientHeight < 120) messages.scrollTop = messages.scrollHeight
 }
@@ -403,7 +411,8 @@ async function add(card, isReplay) {
   }
   if (card.kind === 'you') {
     cardLog.push(card)
-    addMessage(card, markdown(card.text), isReplay)
+    const section = card.about && briefNow?.sections.find(s => s.id === card.about)
+    addMessage(card, markdown(card.text) + (section ? `<div class="about-tag">About “${esc(section.title)}” in the brief</div>` : ''), isReplay)
     return
   }
   if (card.kind === 'sticky') {
@@ -481,30 +490,38 @@ async function add(card, isReplay) {
 
 let queue = Promise.resolve()
 let isReplaying = false
-// Without the token this page cannot reach the session (a bookmark, a copied
-// address): it says how to open the board instead of trying.
-const events = token ? new EventSource(`/events?t=${encodeURIComponent(token)}&c=${pageId}`) : null
-// (After the whole script has run: showLost uses state declared further down.)
-if (!events) setTimeout(() => showLost('no-token'))
-else events.onopen = () => {
-  // A reconnect replays every card: start again from nothing.
-  diagrams = []
-  current = -1
-  $('tabs').innerHTML = ''
-  canvas.innerHTML = ''
-  $('toolbar').hidden = true
-  $('stage-empty').hidden = false
-  document.querySelectorAll('.msg').forEach(m => m.remove())
-  pending = []
-  stickies.clear()
-  cardLog.length = 0
-  document.body.classList.remove('on-chart')
-  setConnected(true)
-  isReplaying = true
-  // Replayed cards arrive at once; anything after a short pause is new.
-  setTimeout(() => (isReplaying = false), 400)
-}
-if (events) {
+/** The connection to the session's board, once it is open. */
+let events = null
+// It opens once every script on the page has run (DOMContentLoaded): a
+// reconnect or a replayed card may need any of them, and on a slow first load
+// the connection could otherwise open between two scripts.
+addEventListener('DOMContentLoaded', connect)
+
+function connect() {
+  // Without the token this page cannot reach the session (a bookmark, a copied
+  // address): it says how to open the board instead of trying.
+  if (!token) return showLost('no-token')
+  events = new EventSource(`/events?t=${encodeURIComponent(token)}&c=${pageId}`)
+  events.onopen = () => {
+    // A reconnect replays every card: start again from nothing.
+    diagrams = []
+    current = -1
+    $('tabs').innerHTML = ''
+    canvas.innerHTML = ''
+    $('toolbar').hidden = true
+    $('stage-empty').hidden = false
+    document.querySelectorAll('.msg').forEach(m => m.remove())
+    pending = []
+    stickies.clear()
+    cardLog.length = 0
+    document.body.classList.remove('on-chart')
+    document.querySelectorAll('.brief-event').forEach(el => el.remove())
+    resetBrief()
+    setConnected(true)
+    isReplaying = true
+    // Replayed cards arrive at once; anything after a short pause is new.
+    setTimeout(() => (isReplaying = false), 400)
+  }
   events.onerror = () => {
     if (isEnded) return
     setConnected(false)
@@ -604,7 +621,7 @@ function onEvent(e) {
   card._at = at
   const replay = isReplaying
   // A canvas, Claude's amendments to one, or a request for a picture: after the cards before them.
-  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card), mode: () => setMode(card.mode, false, replay) }[card.kind]
+  const act = { scene: () => sceneArrived(card, replay), ops: () => opsArrived(card), snapshot: () => snapshotAsked(card), mode: () => setMode(card.mode, false, replay), brief: () => briefArrived(card, replay) }[card.kind]
   queue = queue.then(() => (act ? act() : add(card, replay))).catch(err => console.error(err))
 }
 
@@ -728,10 +745,15 @@ new ResizeObserver(() => {
 // ---------------------------------------------------------------- composer
 
 const box = $('text')
-async function send(text, isTyped = true) {
+async function send(text, isTyped = true, about = isTyped ? briefAbout() : null) {
+  const asked = about?.asked ?? text.trim()
   // Changes made on a canvas go first, in words (and what is selected, for what they typed).
   text = withChanges(text.trim(), isTyped)
-  if (text) await post('/say', { page: pageId, text })
+  // A question about a section of the brief says which, so the answer lands under it.
+  if (about && asked && text.endsWith(asked)) text = `${text.slice(0, -asked.length)}${about.said}\n${asked}`
+  // More detail is asked for, not a question: nothing waits under the section for an answer.
+  if (text) await post('/say', { page: pageId, text, ...(about && asked ? { about: about.id, asked, ...(about.isMore ? { isMore: true } : {}) } : {}) })
+  if (about && asked && text) briefSent()
 }
 $('form').onsubmit = e => {
   e.preventDefault()

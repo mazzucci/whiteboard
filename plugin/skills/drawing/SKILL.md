@@ -1,6 +1,6 @@
 ---
 name: drawing
-description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser, also to answer 'how does X work?' questions about protocols and systems outside the project. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, fixing a diagram Mermaid rejects, and amending a diagram the user edited on the page (edit_board)."
+description: "Read before calling the whiteboard's post_to_board tool (mcp__whiteboard__post_to_board), which draws Mermaid diagrams and notes on the whiteboard page in the user's browser, also to answer 'how does X work?' questions about protocols and systems outside the project. Covers picking the diagram type and direction, keeping diagrams legible, the Mermaid syntax traps that fail or render badly, a C4 style that lays out cleanly, showing what is confirmed versus assumed, colouring a diagram by any lens (evidence, risk, progress) and redrawing it as things change, walking from the big picture to detail across several diagrams, writing a brief beside them (a bottom line and sections the user can question) and changing it in place, fixing a diagram Mermaid rejects, and amending a diagram the user edited on the page (edit_board)."
 ---
 
 # Drawing on the whiteboard
@@ -199,6 +199,39 @@ When someone is exploring a system, give one diagram per answer, each one level
 closer: context, then containers, then the components of the part they ask
 about, then a sequence for a key flow, then its states or data. Keep names and
 colours consistent between levels, so the cards read as one zoom.
+
+## Briefs
+
+A brief is the story beside the diagrams: a bottom line, then a few sections
+of one line each, which the user opens, questions and steers. Post one with
+the first diagram when the conversation will be read and returned to, not
+skimmed: explaining a concept (OAuth, a consensus algorithm), briefing the user
+on a document or a codebase before they review it, or summing up an
+investigation. A one-off answer needs no brief.
+
+- **Bottom line first**: the answer or verdict in one or two sentences, as you
+  would say it if you had ten seconds.
+- **Up to nine sections**, each one line under 160 characters with a short
+  title and a stable `id` (`flow`, `risks`). Detail goes in `body` only when
+  the user asks for it ("More detail" on the page sends that) or the line
+  cannot stand alone.
+- **Point at the picture**: `focus` lists what a section is about, as named
+  in the Mermaid: a flowchart's node ids, a sequence diagram's participant ids,
+  or a chart's labels. They light up when the user points at the section
+  (other diagram types do not light up yet). If no section can point at the
+  diagram, the diagram is decoration.
+- **Cite** where a claim comes from: the spec or doc with its address, or the
+  file as `src/auth.ts:42`. Never cite what you did not read.
+- **Change it in place, never post it again.** With `edit_board`:
+  - a question about a section ("About the brief's section `flow`") is
+    answered under it: `{ op: 'answer', id: 'flow', text }`;
+  - when what you learned changes a line, update it (`{ op: 'update', id,
+    line }`): the user sees the old line struck through, so say what changed;
+    the bottom line too (`bottom_line`), when the answer changes;
+  - a new idea is a new section (`add`, with `after`); one that no longer
+    matters is dropped with `why`. At nine, merge or drop before adding.
+- Keep the diagram and the brief in step: when a section's line changes what
+  the diagram should show, amend or redraw the diagram as well.
 
 ## Sticky notes
 

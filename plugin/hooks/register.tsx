@@ -215,7 +215,10 @@ const FROM_BOARD = '(on the whiteboard)'
 /** Said beside each of them: they are looking at the page, not here. */
 const BOARD_NOTE =
   `The user typed this on the whiteboard page and is watching the page, not this conversation: answer there with ${TOOL} ` +
-  '(a note, a diagram, sticky notes), and keep what you write here to a line.'
+  '(a note, a diagram, sticky notes), and keep what you write here to a line. When it is about a section of the brief ' +
+  `("About the brief's section \`id\`"), answer under that section with ${EDIT_TOOL} ` +
+  "(sections: [{ op: 'answer', id, text }]), and update the section's line, or the bottom line, if the answer changes it. " +
+  "When it asks for more detail, write it as that section's body (sections: [{ op: 'update', id, body }])."
 /** Said when the person, after talking on the page, types in the conversation again. */
 const BACK_NOTE =
   'The user is back in this conversation: they typed this here, not on the whiteboard. Focus mode, if it was on, ' +
@@ -355,7 +358,7 @@ async function boardOpen($: EngineInterface, isAsked = false): Promise<Started> 
 
 type Legend = { label: string; stroke?: string; isDashed: boolean }
 type Note = { on?: string; text: string }
-type Card = { title?: string; text?: string; mermaid?: string; legend?: Legend[]; notes?: Note[]; mode?: Mode }
+type Card = { title?: string; text?: string; mermaid?: string; legend?: Legend[]; notes?: Note[]; mode?: Mode; brief?: BriefInput; isNew?: boolean }
 type Mode = 'diagrams' | 'canvas'
 
 /** Claude's sticky notes (`sticky_notes`), as the page takes them: text, and the node id each is pinned to. */
@@ -367,7 +370,37 @@ function notesOf(value: unknown): Note[] | undefined {
   return notes.length ? notes : undefined
 }
 /** How the page drew a diagram: drawn, Mermaid's error, or not seen (no page open, or it did not answer). */
-type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; noDiagram?: boolean; noteError?: string; noteErrors?: string[] }
+type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; noDiagram?: boolean; noteError?: string; noteErrors?: string[]; briefError?: string }
+
+// ---------------------------------------------------------------- the brief
+
+/** A section of the brief, as Claude writes it. */
+type SectionInput = { id: string; title?: string; line: string; body?: string; focus?: string[]; cites?: { label: string; url?: string }[] }
+type BriefInput = { bottomLine: string; sections: SectionInput[] }
+/** A section as the board holds it: with the person's questions and Claude's answers, and the line it had before. */
+type Section = SectionInput & { was?: string; asks: { question?: string; answer?: string }[]; why?: string }
+type Brief = { bottomLine: string; wasBottomLine?: string; sections: Section[]; dropped: Section[] }
+
+/** Sections as given, kept to what the board takes; the server checks the rest. */
+function sectionsOf(value: unknown): SectionInput[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((s): s is SectionInput => !!s && typeof s === 'object' && typeof s.id === 'string' && typeof s.line === 'string')
+}
+
+/** The brief as Claude reads it back: the bottom line and each section's line, never the bodies. */
+function briefText(b: Brief): string {
+  const open = (s: Section) => s.asks.filter(a => a.question && !a.answer).length
+  const lines = [
+    `The brief beside the diagrams (each section by id: its line; bodies and answers left out):`,
+    `Bottom line: ${b.bottomLine}`,
+    ...b.sections.map(s => {
+      const waiting = open(s)
+      return `- \`${s.id}\` ${s.title && s.title !== s.id ? `${s.title}: ` : ''}${s.line}${s.focus?.length ? ` (on ${s.focus.join(', ')})` : ''}${waiting ? ` — ${waiting} question${waiting === 1 ? '' : 's'} from the user waiting for an answer` : ''}`
+    }),
+  ]
+  if (b.dropped.length) lines.push(`Dropped: ${b.dropped.map(s => `\`${s.id}\`${s.why ? ` (${s.why})` : ''}`).join(', ')}`)
+  return lines.join('\n')
+}
 
 async function postToBoard($: EngineInterface, card: Card): Promise<{ started: Started; posted: Posted }> {
   const started = await boardOpen($)
@@ -475,7 +508,12 @@ type BoardCard = {
 const noteLine = (n: Note) => `- sticky note${n.on ? ` on ${n.on}` : ''}: ${n.text}`
 
 /** The board as Claude reads it back: every card in order, diagrams with their source and sticky notes. */
-function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scenes: Record<string, Scene> = {}, mode: Mode = 'diagrams'): string {
+function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scenes: Record<string, Scene> = {}, mode: Mode = 'diagrams', brief: Brief | null = null): string {
+  const said = boardCardsText(viewers, cards, isLatest, scenes, mode)
+  return brief ? `${said}\n\n${briefText(brief)}` : said
+}
+
+function boardCardsText(viewers: number, cards: BoardCard[], isLatest: boolean, scenes: Record<string, Scene>, mode: Mode): string {
   const diagrams = cards.filter(c => c.kind === 'diagram')
   const stickiesOf = (id: number) => cards.filter(c => c.kind === 'sticky' && c.diagram === id).map(c => noteLine({ on: c.on, text: c.text ?? '' }))
   const diagramText = (c: BoardCard) => {
@@ -585,6 +623,10 @@ export const register: Register = on => {
         'change to propose, pin it as a sticky note on the box it changes and ask on the board (in `text`) whether ' +
         'the user wants to see it; redraw the diagram with the change only once they say so. With a `mermaid` notes ' +
         'go on that diagram; without one, on the latest diagram. ' +
+        'A brief (`bottom_line` and `sections`) sits beside the diagrams: the answer first, then up to nine ' +
+        'one-line sections the user can open, question and steer, each pointing at the boxes it is about (`focus`). ' +
+        `Post it once, with the diagram it explains, then change it in place with ${EDIT_TOOL} as the conversation ` +
+        'goes on (see the drawing skill, "Briefs"). ' +
         'Messages that begin "(on the whiteboard)" were typed by the user on the page: answer them there with ' +
         'this tool, and keep what you write in the conversation to a line. When they wrap up, write the summary in ' +
         'the conversation itself, then call this tool with end: true: the page says the discussion is over and closes.',
@@ -596,7 +638,39 @@ export const register: Register = on => {
           mermaid: { type: 'string', description: 'A Mermaid diagram, starting with the diagram type' },
           as_new: {
             type: 'boolean',
-            description: `On a canvas board: true to post a diagram as a new one even though it shares most boxes with one already there (otherwise amend that one with ${EDIT_TOOL})`,
+            description:
+              `true to post a diagram as a new one even though it shares most boxes with one on a canvas (otherwise amend that one with ${EDIT_TOOL}), ` +
+              `or a brief on another subject when one is on the board (otherwise change that one with ${EDIT_TOOL})`,
+          },
+          bottom_line: {
+            type: 'string',
+            description: 'A brief: the answer or verdict first, in one or two sentences of inline Markdown. With `sections`.',
+          },
+          sections: {
+            type: 'array',
+            maxItems: 9,
+            description: "A brief's sections, in reading order: each one line the user can open, question or have you change",
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: 'A short, stable id (letters, digits, - and _): how you and the user name it later' },
+                title: { type: 'string', description: 'A label of one to three words' },
+                line: { type: 'string', description: 'The section in one line of inline Markdown (under 160 characters)' },
+                body: { type: 'string', description: 'More detail, in simple Markdown: only when asked for, or when the line cannot stand alone' },
+                focus: { type: 'array', items: { type: 'string' }, description: "What on the diagram this section is about: flowchart node ids, sequence participant ids, or chart labels. They light up when the user points at it" },
+                cites: {
+                  type: 'array',
+                  maxItems: 4,
+                  description: 'Where it comes from: a spec, a doc, a file',
+                  items: {
+                    type: 'object',
+                    properties: { label: { type: 'string', description: 'e.g. "RFC 7636" or "src/auth.ts:42"' }, url: { type: 'string', description: 'A web address, when there is one' } },
+                    required: ['label'],
+                  },
+                },
+              },
+              required: ['id', 'line'],
+            },
           },
           mode: {
             type: 'string',
@@ -676,10 +750,45 @@ export const register: Register = on => {
         `sticky note. Text on the canvas is plain, no Markdown. Boxes are named by their ref: the node id from the ` +
         `Mermaid, or the ref ${READ_TOOL} shows for a ` +
         'box the user drew. A diagram that has not been edited yet becomes editable on the board when you amend it. ' +
-        `Draw a new diagram with ${TOOL} when the picture changes as a whole.`,
+        `Draw a new diagram with ${TOOL} when the picture changes as a whole. ` +
+        'It also changes the brief in place (`sections`, `bottom_line`): answer a question the user asked about a ' +
+        'section under that section, rewrite a line when what you learned changes it (the user sees the old one ' +
+        'struck through), add a section for a new idea, drop one that no longer matters, with why.',
       inputSchema: {
         type: 'object',
         properties: {
+          sections: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 30,
+            description: 'Changes to the brief, applied in order; each one that fails is reported and the rest still apply',
+            items: {
+              type: 'object',
+              properties: {
+                op: {
+                  type: 'string',
+                  enum: ['add', 'update', 'drop', 'restore', 'answer'],
+                  description:
+                    'add: a new section `id` with `line` (title, body, focus, cites; `after`: the id it goes after). ' +
+                    'update: new `line`, `title`, `body`, `focus` or `cites` for section `id` (give only what changes; an empty ' +
+                    'body, focus or cites clears it). drop: take section `id` out, saying `why`; it is listed as dropped. ' +
+                    'restore: bring a dropped one back, at the end. ' +
+                    "answer: `text` under section `id`, answering the user's oldest unanswered question there (a note under it when there is none).",
+                },
+                id: { type: 'string' },
+                title: { type: 'string' },
+                line: { type: 'string' },
+                body: { type: 'string' },
+                focus: { type: 'array', items: { type: 'string' } },
+                cites: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, url: { type: 'string' } }, required: ['label'] } },
+                after: { type: 'string', description: 'add: the id of the section it goes after (default: last)' },
+                why: { type: 'string', description: 'drop: why it no longer matters, in a few words' },
+                text: { type: 'string', description: 'answer: the answer, in simple Markdown' },
+              },
+              required: ['op', 'id'],
+            },
+          },
+          bottom_line: { type: 'string', description: "The brief's new bottom line, when what you learned changes it" },
           diagram: { type: 'integer', description: 'Which diagram, by its number on the board (1 is the first); default: the latest edited one, else the latest' },
           look: { type: 'boolean', description: 'false: no picture of the result (one comes back by default, small)' },
           ops: {
@@ -716,7 +825,6 @@ export const register: Register = on => {
             },
           },
         },
-        required: ['ops'],
       },
     })
     return next(e)
@@ -776,7 +884,16 @@ export const register: Register = on => {
       }
     }
     const notes = notesOf(e.sticky_notes)
-    if (!text && !mermaid && !notes && !e.mode) return { deny: 'Nothing posted: give `text`, `mermaid`, `sticky_notes`, or a mix.' }
+    const sections = sectionsOf(e.sections)
+    const given = Array.isArray(e.sections) ? e.sections.length : 0
+    if (sections.length < given) {
+      const bad = (e.sections as unknown[]).findIndex(s => !sectionsOf([s]).length) + 1
+      return { deny: `Each section needs an \`id\` and a \`line\`: section #${bad} does not. Nothing was posted.` }
+    }
+    const bottomLine = typeof e.bottom_line === 'string' ? e.bottom_line.trim() : ''
+    if (sections.length && !bottomLine) return { deny: 'A brief starts with its bottom line: give `bottom_line` with the sections.' }
+    const brief = bottomLine ? { bottomLine, sections } : undefined
+    if (!text && !mermaid && !notes && !e.mode && !brief) return { deny: 'Nothing posted: give `text`, `mermaid`, `sticky_notes`, a brief, or a mix.' }
     if (!(await $.session.surfaces()).length) {
       return { deny: 'Nobody can see the whiteboard from this session (it has no screen attached). Explain in prose instead.' }
     }
@@ -790,23 +907,33 @@ export const register: Register = on => {
     let out: Awaited<ReturnType<typeof postToBoard>>
     try {
       const mode = e.mode === 'canvas' || e.mode === 'diagrams' ? e.mode : undefined
-      out = await postToBoard($, { title, text: text || undefined, mermaid: mermaid || undefined, legend, notes, mode })
+      out = await postToBoard($, { title, text: text || undefined, mermaid: mermaid || undefined, legend, notes, mode, brief, ...(e.as_new === true ? { isNew: true } : {}) })
     } catch (error) {
       return { deny: failed(error) }
     }
+    if (out.posted.briefError === 'a brief is on the board already') {
+      return {
+        deny:
+          `A brief is on the board already: change it in place with ${EDIT_TOOL} (sections: add, update, drop, restore, ` +
+          'answer; bottom_line), which keeps what the user has read and asked there. Post with as_new: true only for a ' +
+          'brief on another subject. Nothing was posted.',
+      }
+    }
+    if (out.posted.briefError) return { deny: `The board could not take this brief: ${out.posted.briefError}. Nothing was posted.` }
     if (out.posted.error) {
       return {
-        deny: `Mermaid could not draw this diagram:\n${mermaidError(out.posted.error)}\nIt was taken off the page. Fix the source and post again.`,
+        deny: `Mermaid could not draw this diagram:\n${mermaidError(out.posted.error)}\nIt was taken off the page${brief ? ', and the brief with it' : ''}. Fix the source and post again${brief ? ', brief and all' : ''}.`,
       }
     }
     if (out.posted.noDiagram) return { deny: 'No diagram on the board to pin these sticky notes to: post the diagram with them.' }
     if (out.posted.noteError) return { deny: `The board could not pin these sticky notes: ${out.posted.noteError}.` }
-    if (!text && !mermaid && !notes) return { result: `The whiteboard is in ${e.mode} mode now.` }
+    if (!text && !mermaid && !notes && !brief) return { result: `The whiteboard is in ${e.mode} mode now.` }
     if (boardTurn) boardTurn.isPosted = true
     // Notes whose box is not on the canvas: the rest of the post is on the board.
     const notPinned = out.posted.noteErrors?.length ? ` Not pinned: ${out.posted.noteErrors.join('; ')}.` : ''
     const unknownNote = unknown.length ? ` The legend names classes with no classDef: ${unknown.join(', ')}.` : ''
-    return { result: `${postedWhere(out, Boolean(mermaid))}${notPinned}${unknownNote}` }
+    const briefNote = brief ? ` The brief is beside the diagrams with ${sections.length} section${sections.length === 1 ? '' : 's'}: from now on change it in place with ${EDIT_TOOL}.` : ''
+    return { result: `${postedWhere(out, Boolean(mermaid))}${briefNote}${notPinned}${unknownNote}` }
   })
 
   on('tool.call', { tool: `mcp__whiteboard__${READ_TOOL}` }, async ($, e) => {
@@ -815,8 +942,8 @@ export const register: Register = on => {
     let open: Board
     try {
       open = await board
-      const { viewers, cards, scenes, mode } = await boardGet<{ viewers: number; cards: BoardCard[]; scenes?: Record<string, Scene>; mode?: Mode }>($, open, '/cards')
-      text = boardText(viewers, cards, e.latest === true, scenes, mode)
+      const { viewers, cards, scenes, mode, brief } = await boardGet<{ viewers: number; cards: BoardCard[]; scenes?: Record<string, Scene>; mode?: Mode; brief?: Brief | null }>($, open, '/cards')
+      text = boardText(viewers, cards, e.latest === true, scenes, mode, brief ?? null)
     } catch (error) {
       return { result: `The whiteboard page has stopped (${error instanceof Error ? error.message : String(error)}): nothing to read.` }
     }
@@ -837,8 +964,26 @@ export const register: Register = on => {
 
   on('tool.call', { tool: `mcp__whiteboard__${EDIT_TOOL}` }, async ($, e) => {
     const ops = Array.isArray(e.ops) ? e.ops.filter((op): op is Record<string, unknown> => !!op && typeof op === 'object') : []
-    if (!ops.length) return { deny: 'Nothing to amend: give `ops`.' }
+    const briefOps = Array.isArray(e.sections) ? e.sections.filter((op): op is Record<string, unknown> => !!op && typeof op === 'object') : []
+    const bottomLine = typeof e.bottom_line === 'string' && e.bottom_line.trim() ? e.bottom_line.trim() : undefined
+    if (!ops.length && !briefOps.length && !bottomLine) return { deny: 'Nothing to amend: give `ops` for a diagram, or `sections` or `bottom_line` for the brief.' }
     if (!board) return { deny: `There is no whiteboard page in this session yet: draw the diagram with ${TOOL} first.` }
+    let briefSaid = ''
+    if (briefOps.length || bottomLine) {
+      let changed: { ok: boolean; done?: number; errors?: string[]; briefError?: string }
+      try {
+        const started = await boardOpen($)
+        changed = await boardPost($, started.open, { briefOps, ...(bottomLine ? { bottomLine } : {}) })
+      } catch (error) {
+        return { deny: failed(error) }
+      }
+      if (changed.briefError) return { deny: `There is no brief on the board yet: post one with ${TOOL} (bottom_line and sections).` }
+      // An answer under a section is Claude answering on the board: nothing more is posted for the turn.
+      if (boardTurn && briefOps.some(op => op.op === 'answer') && (changed.done ?? 0) > 0) boardTurn.isPosted = true
+      const errors = changed.errors?.length ? ` Not applied: ${changed.errors.join('; ')}.` : ''
+      briefSaid = `Changed the brief: ${changed.done ?? 0} of ${briefOps.length + (bottomLine ? 1 : 0)} applied.${errors}`
+      if (!ops.length) return { result: briefSaid }
+    }
     let out: { ok: boolean; diagram?: string; tab?: number; done?: string[]; errors?: string[]; error?: string; look?: string }
     try {
       // A closed tab opens again, so the amendment is seen.
@@ -850,7 +995,7 @@ export const register: Register = on => {
     if (out.error) return { deny: `The board could not apply it: ${out.error}.` }
     // Not counted as an answer on the board: what Claude then writes still goes there.
     const errors = out.errors?.length ? ` Not applied: ${out.errors.join('; ')}.` : ''
-    const said = `Amended diagram ${out.tab ?? ''} "${out.diagram ?? ''}" on the board: ${out.done?.length ?? 0} of ${ops.length} applied.${errors}`
+    const said = `${briefSaid ? `${briefSaid} ` : ''}Amended diagram ${out.tab ?? ''} "${out.diagram ?? ''}" on the board: ${out.done?.length ?? 0} of ${ops.length} applied.${errors}`
     if (!out.look) return { result: said }
     // A small picture of the result: worth a glance for crowded labels or arrows across boxes.
     return {

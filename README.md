@@ -92,6 +92,11 @@ evidence shows, then a proposed fix.
   a bar or line chart, or a quadrant chart. Click a slice, a bar or a point
   (Shift+click for more) and it goes with your next message: "why is this one
   so big?" means that slice. Claude can drill into it with the next chart.
+- **A brief beside the diagrams.** For an explanation or a review, Claude can
+  write a brief next to the diagram: the bottom line, then a few one-line
+  sections. Point at one and its boxes light up; click it to ask about it, and
+  the answer lands under it. The brief changes as you talk: rewritten lines
+  show what they replaced, new ideas become sections, dropped ones are listed.
 - **Sticky notes.** Claude pins a proposal, a question or a gotcha beside the
   box it is about (in a flowchart, or on a chart's slice, bar or point; beside
   the diagram in other types), without
@@ -411,6 +416,8 @@ goes into your Claude Code session as your own words. So:
   (otherwise the address goes last).
 - The board is on 127.0.0.1, so it opens only on the machine running Claude
   Code, not on a phone or another computer.
+- A brief has at most nine sections at a time, so it fits one screen. It is
+  made for a desktop window; on a phone it shares the Chat view.
 - Sticky notes sit beside a box in flowcharts; in other diagram types they line
   up beside the diagram.
 - An exported diagram is the diagram alone: its sticky notes are in the saved
