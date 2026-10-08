@@ -64,6 +64,15 @@ arrives in the terminal session and gets a diagram of its own.
 
 <sub>Both halves are real Claude Code sessions. The first is snapshots of the Terminal window as the answer streamed in; the second is a recording of the board, with snapshots of the same session's Terminal, and the follow-up typed by a script standing in for the user.</sub>
 
+## Charts you can click
+
+When the numbers are the point, Claude draws a chart. Click a bar, a slice or a
+point and ask: your question goes to Claude with what you selected.
+
+![Claude charts where the 3,400 ms of a slow checkout request go, as horizontal bars with a sticky note on inventory.check; the user clicks the inventory.check bar and asks "Why is this one so big?", and Claude answers on the board; then the user Shift+clicks two bars and asks which to fix first, and Claude weighs the two](media/whiteboard-charts.gif)
+
+<sub>A recording of a real Claude Code session on the same simulated investigation, sped up while Claude works; the clicks and questions on the board were made by a script standing in for the user.</sub>
+
 ## What the board does
 
 Claude puts a picture on the board whenever a picture says it better, and
