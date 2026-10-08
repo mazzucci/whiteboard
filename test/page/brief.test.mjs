@@ -149,6 +149,8 @@ test("a section lights up a sequence diagram's participants: their boxes and lif
   await b.call('/post', { title: 'The flow', mermaid: 'sequenceDiagram\n  participant U as Browser\n  participant App as Your app\n  participant AS as Login service\n  U->>App: Log in\n  App->>AS: code + verifier' })
   await b.until(async () => (await look(page)).tab === 'The flow', 'the sequence diagram')
   await b.call('/post', { briefOps: [{ op: 'update', id: 'pkce', focus: ['App', 'AS'] }] })
+  // Hover once the change is on the page: the brief is drawn again when it arrives.
+  await b.until(() => page.evaluate(() => briefNow.sections.find(s => s.id === 'pkce')?.focus?.length === 2), 'the new focus')
   await page.hover(section('pkce'))
   const lit = () => page.$$eval('#canvas .is-focus', els => els.map(el => `${el.tagName.toLowerCase()} ${el.getAttribute('name')}`).sort())
   await b.until(async () => (await lit()).length === 6, 'two participants lit')
