@@ -247,7 +247,9 @@ constraints that decide it, then your proposal once they are settled.
 - **Draw the design as it stands** beside it, with each constraint's `focus`
   on the boxes it decides: open ones show dashed on the diagram, settled ones
   green, so the picture says what is still undecided. Redraw it as choices
-  come in, keeping box ids.
+  come in, keeping box ids. On a canvas (a diagram being edited) the board
+  cannot mark the boxes: recolour them yourself with `edit_board` (`class`) as
+  constraints settle.
 - **The user settles on the page**: their clicks arrive as "My choices on the
   board: Accounts: Guest checkout; …" and are settled already. When they
   decide in words instead, settle it yourself (`settle`, with `choice`).
