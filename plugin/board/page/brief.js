@@ -11,11 +11,16 @@ let briefNow = null
 let briefPick = null
 /** Each section's version the person has seen: a newer line shows what it replaced until then. */
 const briefSeen = new Map()
+/** The pane the person chose, kept through a reconnect: Brief unless they went to Chat. */
+let paneChosen = 'brief'
 
 const briefPane = $('brief')
 
-/** Claude started or finished a turn: a question still without an answer says where to look. */
-function briefTurnChanged() {
+/** Claude started or finished a turn: the brief says so, and a question still without an answer says where to look. */
+function briefTurnChanged(text) {
+  const status = $('brief-status')
+  status.hidden = !text
+  $('brief-status-text').textContent = text ?? ''
   if (briefNow?.sections.some(s => s.asks?.some(a => a.question && !a.answer))) renderBrief()
 }
 
@@ -25,8 +30,8 @@ function resetBrief() {
   briefPick = null
   briefSeen.clear()
   briefPane.innerHTML = ''
-  document.body.classList.remove('has-brief')
-  showPane('chat')
+  document.body.classList.remove('has-brief', 'pane-brief')
+  showBriefPick()
   showFocus()
 }
 
@@ -41,7 +46,13 @@ function showPane(pane) {
     messages.scrollTop = messages.scrollHeight
   }
 }
-document.querySelectorAll('.panes [data-pane]').forEach(b => (b.onclick = () => showPane(b.dataset.pane)))
+document.querySelectorAll('.panes [data-pane]').forEach(
+  b =>
+    (b.onclick = () => {
+      paneChosen = b.dataset.pane
+      showPane(b.dataset.pane)
+    }),
+)
 
 /** A message from Claude while the brief is in front: counted on the Chat switch. */
 function countChatUnread() {
@@ -68,6 +79,12 @@ function briefChangeLine(change) {
 
 /** A brief from the server: shown, with what changed marked, and said in the conversation. */
 function briefArrived(card, isReplay) {
+  // Taken off again (its diagram failed to draw), back to the brief before it, or none.
+  if (!card.brief) {
+    resetBrief()
+    showPane('chat')
+    return
+  }
   const isFirst = !briefNow
   briefNow = card.brief
   document.body.classList.add('has-brief')
@@ -75,7 +92,10 @@ function briefArrived(card, isReplay) {
   if (card.changes.some(c => c.op === 'new')) briefSeen.clear()
   if (isReplay) for (const s of briefNow.sections) briefSeen.set(s.id, s.v)
   if (isReplay) briefSeen.set('bottom line', briefNow.v)
-  if (briefPick && !briefNow.sections.some(s => s.id === briefPick)) briefPick = null
+  if (briefPick && !briefNow.sections.some(s => s.id === briefPick)) {
+    briefPick = null
+    showBriefPick()
+  }
   renderBrief(isReplay ? [] : card.changes.map(c => c.op === 'bottomLine' ? 'bottom line' : c.id))
   for (const change of card.changes) {
     const said = briefChangeLine(change)
@@ -85,7 +105,7 @@ function briefArrived(card, isReplay) {
     answered()
     showTyping()
   }
-  if (isFirst) showPane('brief')
+  if (isFirst) showPane(paneChosen)
 }
 
 /** A line in the conversation saying what changed in the brief; it opens the brief at that section. */
@@ -116,7 +136,7 @@ function renderBrief(fresh = []) {
   const keep = briefPane.scrollTop
   const isNewBottom = b.wasBottomLine && (briefSeen.get('bottom line') ?? 0) < b.v
   const sectionHtml = s => {
-    const isNewLine = s.was && (briefSeen.get(s.id) ?? 0) < s.v
+    const isNewLine = s.was && (briefSeen.get(s.id) ?? 0) < (s.lineV ?? 0)
     const asks = (s.asks ?? [])
       .map(a =>
         `<div class="qa">${a.question ? `<div class="q">You asked: <b>${esc(a.question)}</b></div>` : ''}` +
@@ -246,7 +266,7 @@ function briefSent() {
 }
 
 briefPane.addEventListener('click', e => {
-  if (e.target.closest('a')) return
+  if (e.target.closest('a') || isEnded) return
   const li = e.target.closest('.sec')
   if (!li) return
   const act = e.target.closest('[data-act]')?.dataset.act
@@ -256,7 +276,7 @@ briefPane.addEventListener('click', e => {
   }
   if (act === 'more') {
     const s = briefNow.sections.find(x => x.id === li.dataset.id)
-    send('More detail, please.', true, { ...briefAboutOf(s), asked: 'More detail, please.', isMore: true })
+    send('More detail, please.', false, { ...briefAboutOf(s), asked: 'More detail, please.', isMore: true })
     return
   }
   if (e.target.closest('.qa, .body')) return

@@ -210,14 +210,18 @@ function notesOf(value) {
 /** At most this many sections at a time: the brief fits one screen. */
 const MAX_SECTIONS = 9
 let brief = null
+/** The brief before the one just posted, until its diagram has drawn. */
+let briefBefore
 const SECTION_ID = /^[A-Za-z0-9][\w-]{0,31}$/
 
 const textOf = (value, max) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined)
+/** A one-line field (a title, a line, a label): its line breaks become spaces. */
+const lineOf = (value, max) => textOf(typeof value === 'string' ? value.replace(/\s*[\r\n]+\s*/g, ' ') : value, max)
 /** Sources: a label, with a web address when there is one (a file:line has none). */
 function citesOf(value) {
   if (!Array.isArray(value)) return undefined
   const cites = value
-    .map(c => ({ label: textOf(c?.label, 60), url: /^https?:\/\/[^\s"<>]{1,500}$/.test(c?.url ?? '') ? c.url : undefined }))
+    .map(c => ({ label: lineOf(c?.label, 60), url: /^https?:\/\/[^\s"<>]{1,500}$/.test(c?.url ?? '') ? c.url : undefined }))
     .filter(c => c.label)
     .slice(0, 4)
   return cites.length ? cites : undefined
@@ -233,16 +237,16 @@ function focusOf(value) {
 function sectionOf(input) {
   const id = String(input?.id ?? '').trim()
   if (!SECTION_ID.test(id)) return { error: `"${id.slice(0, 40)}" is not a section id (letters, digits, - and _, up to 32)` }
-  const line = textOf(input.line, 300)
+  const line = lineOf(input.line, 300)
   if (!line) return { error: `section ${id} has no line` }
   return {
-    section: { id, title: textOf(input.title, 40) ?? id, line, body: textOf(input.body, 4000), focus: focusOf(input.focus), cites: citesOf(input.cites), v: 1, asks: [] },
+    section: { id, title: lineOf(input.title, 40) ?? id, line, body: textOf(input.body, 4000), focus: focusOf(input.focus), cites: citesOf(input.cites), v: 1, asks: [] },
   }
 }
 
 /** A new brief: { brief } or { error }. */
 function briefOf(input) {
-  const bottomLine = textOf(input?.bottomLine, 600)
+  const bottomLine = lineOf(input?.bottomLine, 600)
   if (!bottomLine) return { error: 'a brief needs a bottom line' }
   const given = Array.isArray(input.sections) ? input.sections : []
   if (given.length > MAX_SECTIONS) return { error: `at most ${MAX_SECTIONS} sections, so the brief fits one screen: merge some` }
@@ -283,18 +287,21 @@ function briefOp(op) {
   }
   if (!section) return { error: `${id}: no section by that id${brief.dropped.some(s => s.id === id) ? ' (it was dropped: restore it first)' : ''}` }
   if (kind === 'update') {
-    const line = textOf(op.line, 300)
-    // A new line keeps the one before it, shown struck through until the person has seen it.
+    const before = JSON.stringify(section)
+    const line = lineOf(op.line, 300)
     const isNewLine = Boolean(line && line !== section.line)
-    if (isNewLine) {
-      section.was = section.line
-      section.line = line
-    }
-    if (typeof op.title === 'string') section.title = textOf(op.title, 40) ?? section.title
+    if (typeof op.title === 'string') section.title = lineOf(op.title, 40) ?? section.title
     if (typeof op.body === 'string') section.body = textOf(op.body, 4000)
     if (Array.isArray(op.focus)) section.focus = focusOf(op.focus)
     if (Array.isArray(op.cites)) section.cites = citesOf(op.cites)
+    if (!isNewLine && JSON.stringify(section) === before) return { error: `${id}: nothing to change (it already says that)` }
     section.v++
+    // A new line keeps the one before it, shown struck through until the person has seen it.
+    if (isNewLine) {
+      section.was = section.line
+      section.line = line
+      section.lineV = section.v
+    }
     return { change: { op: 'update', id, isNewLine } }
   }
   if (kind === 'drop') {
@@ -305,8 +312,8 @@ function briefOp(op) {
   if (kind === 'answer') {
     const text = textOf(op.text, 4000)
     if (!text) return { error: `${id}: an answer needs text` }
-    // The person's latest question there that has no answer yet, or an answer on its own.
-    const ask = section.asks.findLast(a => !a.answer)
+    // The person's oldest question there that has no answer yet (answered in order), or an answer on its own.
+    const ask = section.asks.find(a => a.question && !a.answer)
     if (ask) ask.answer = text
     else section.asks.push({ answer: text })
     section.asks = section.asks.slice(-6)
@@ -317,7 +324,7 @@ function briefOp(op) {
 
 /** Sends the brief as it now is, with what changed and who changed it. */
 function briefChanged(changes, by = 'claude') {
-  publish({ kind: 'brief', brief: structuredClone(brief), changes, by })
+  publish({ kind: 'brief', brief: brief && structuredClone(brief), changes, by })
 }
 
 /** Waits for the page to draw a card: { drawn: true }, { error }, or { drawn: false } with nobody looking. */
@@ -506,6 +513,7 @@ async function handle(req, res) {
     if (brief && input.isNew !== true) return json(200, { ok: false, viewers: listeners.size, briefError: 'a brief is on the board already' })
     const out = briefOf(input.brief)
     if (out.error) return json(200, { ok: false, viewers: listeners.size, briefError: out.error })
+    briefBefore = brief
     brief = out.brief
     briefChanged([{ op: 'new' }])
     if (!input.mermaid && !clip(input.text, 20_000) && !input.notes) return json(200, { ok: true, viewers: listeners.size, drawn: false, sections: brief.sections.length })
@@ -515,7 +523,8 @@ async function handle(req, res) {
     if (!brief) return json(200, { ok: false, viewers: listeners.size, briefError: 'there is no brief on the board yet' })
     const changes = []
     const errors = []
-    const bottomLine = textOf(input.bottomLine, 600)
+    const bottomLine = lineOf(input.bottomLine, 600)
+    if (bottomLine && bottomLine === brief.bottomLine) errors.push('bottom_line: nothing to change (it already says that)')
     if (bottomLine && bottomLine !== brief.bottomLine) {
       brief.wasBottomLine = brief.bottomLine
       brief.bottomLine = bottomLine
@@ -589,6 +598,12 @@ async function handle(req, res) {
   }
   const outcome = await drawn(card.id)
   if (outcome.error) withdraw(card.id)
+  // A brief posted with a diagram Mermaid rejects goes with it: Claude posts both again.
+  if (outcome.error && input.brief && briefBefore !== undefined) {
+    brief = briefBefore
+    briefChanged([{ op: 'undo' }])
+  }
+  briefBefore = undefined
   return json(200, { ok: !outcome.error, id: card.id, viewers: listeners.size, ...outcome })
 }
 

@@ -310,3 +310,43 @@ test('a page that connects gets every change to the brief, in order, after the c
   // Read back by Claude, the brief is there once, not each change.
   assert.equal((await cardsNow()).cards.filter(c => c.kind === 'brief').length, 0)
 })
+
+test('answers go to the oldest question still waiting, so two questions keep their own answers', async () => {
+  for (const asked of ['First?', 'Second?']) await postJson('/say', { text: asked, about: 'pkce', asked })
+  await briefPost({ briefOps: [{ op: 'answer', id: 'pkce', text: 'A1' }, { op: 'answer', id: 'pkce', text: 'A2' }] })
+  const pkce = (await cardsNow()).brief.sections.find(s => s.id === 'pkce')
+  assert.deepEqual(pkce.asks.slice(-2), [{ question: 'First?', answer: 'A1' }, { question: 'Second?', answer: 'A2' }])
+})
+
+test('only a new line shows what it replaced; an update that changes nothing is refused', async () => {
+  await briefPost({ briefOps: [{ op: 'update', id: 'pkce', line: 'PKCE: a secret the app keeps.' }] })
+  let pkce = (await cardsNow()).brief.sections.find(s => s.id === 'pkce')
+  const lineV = pkce.lineV
+  assert.equal(lineV, pkce.v)
+  // The body changes: the line, and what it replaced, stay as they were.
+  await briefPost({ briefOps: [{ op: 'update', id: 'pkce', body: 'More on PKCE.' }] })
+  pkce = (await cardsNow()).brief.sections.find(s => s.id === 'pkce')
+  assert.equal(pkce.lineV, lineV)
+  assert.ok(pkce.v > lineV)
+  const same = await briefPost({ briefOps: [{ op: 'update', id: 'pkce', line: 'PKCE: a secret the app keeps.' }, { op: 'update', id: 'pkce' }], bottomLine: (await cardsNow()).brief.bottomLine })
+  assert.equal(same.done, 0)
+  assert.deepEqual(same.errors, ['bottom_line: nothing to change (it already says that)', '#1 pkce: nothing to change (it already says that)', '#2 pkce: nothing to change (it already says that)'])
+  // One-line fields stay one line.
+  await briefPost({ briefOps: [{ op: 'update', id: 'pkce', title: 'Two\nlines', line: 'One\n## Not a heading' }] })
+  pkce = (await cardsNow()).brief.sections.find(s => s.id === 'pkce')
+  assert.deepEqual([pkce.title, pkce.line], ['Two lines', 'One ## Not a heading'])
+})
+
+test('a brief posted with a diagram Mermaid rejects is taken off with it', async () => {
+  const before = (await cardsNow()).brief
+  const posting = briefPost({ title: 'Broken', mermaid: 'flowchart LR\n  a --> ', brief: { bottomLine: 'A new one', sections: [] }, isNew: true, waitForPage: true })
+  let card
+  for (let i = 0; i < 50 && !card; i++) {
+    await new Promise(r => setTimeout(r, 50))
+    card = (await cardsNow()).cards.find(c => c.title === 'Broken')
+  }
+  assert.equal((await cardsNow()).brief.bottomLine, 'A new one')
+  await postJson('/rendered', { id: card.id, error: 'Parse error' })
+  assert.equal((await posting).error, 'Parse error')
+  assert.deepEqual((await cardsNow()).brief, before)
+})

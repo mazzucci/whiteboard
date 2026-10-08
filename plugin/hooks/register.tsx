@@ -769,9 +769,10 @@ export const register: Register = on => {
                   enum: ['add', 'update', 'drop', 'restore', 'answer'],
                   description:
                     'add: a new section `id` with `line` (title, body, focus, cites; `after`: the id it goes after). ' +
-                    'update: new `line`, `title`, `body`, `focus` or `cites` for section `id` (give only what changes). ' +
-                    'drop: take section `id` out, saying `why`; it is listed as dropped. restore: bring a dropped one back. ' +
-                    "answer: `text` under section `id`, answering the user's latest question there.",
+                    'update: new `line`, `title`, `body`, `focus` or `cites` for section `id` (give only what changes; an empty ' +
+                    'body, focus or cites clears it). drop: take section `id` out, saying `why`; it is listed as dropped. ' +
+                    'restore: bring a dropped one back, at the end. ' +
+                    "answer: `text` under section `id`, answering the user's oldest unanswered question there (a note under it when there is none).",
                 },
                 id: { type: 'string' },
                 title: { type: 'string' },
@@ -883,6 +884,11 @@ export const register: Register = on => {
     }
     const notes = notesOf(e.sticky_notes)
     const sections = sectionsOf(e.sections)
+    const given = Array.isArray(e.sections) ? e.sections.length : 0
+    if (sections.length < given) {
+      const bad = (e.sections as unknown[]).findIndex(s => !sectionsOf([s]).length) + 1
+      return { deny: `Each section needs an \`id\` and a \`line\`: section #${bad} does not. Nothing was posted.` }
+    }
     const bottomLine = typeof e.bottom_line === 'string' ? e.bottom_line.trim() : ''
     if (sections.length && !bottomLine) return { deny: 'A brief starts with its bottom line: give `bottom_line` with the sections.' }
     const brief = bottomLine ? { bottomLine, sections } : undefined
@@ -915,7 +921,7 @@ export const register: Register = on => {
     if (out.posted.briefError) return { deny: `The board could not take this brief: ${out.posted.briefError}. Nothing was posted.` }
     if (out.posted.error) {
       return {
-        deny: `Mermaid could not draw this diagram:\n${mermaidError(out.posted.error)}\nIt was taken off the page. Fix the source and post again.`,
+        deny: `Mermaid could not draw this diagram:\n${mermaidError(out.posted.error)}\nIt was taken off the page${brief ? ', and the brief with it' : ''}. Fix the source and post again${brief ? ', brief and all' : ''}.`,
       }
     }
     if (out.posted.noDiagram) return { deny: 'No diagram on the board to pin these sticky notes to: post the diagram with them.' }

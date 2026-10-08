@@ -329,7 +329,7 @@ function boardMarkdown(when = new Date()) {
 // ---------------------------------------------------------------- the brief, saved
 
 /** A section's sources, for a reader: a link where there is one. */
-const citesMarkdown = s => (s.cites ?? []).map(c => (c.url ? `[§ ${c.label}](${c.url})` : `§ ${c.label}`)).join(' ')
+const citesMarkdown = s => (s.cites ?? []).map(c => (c.url ? `[§ ${c.label.replace(/[[\]]/g, '\\$&')}](<${c.url}>)` : `§ ${c.label}`)).join(' ')
 
 /** The brief in Markdown: the bottom line, each section with its detail and the questions answered there, what was dropped. */
 function briefSavedMarkdown() {

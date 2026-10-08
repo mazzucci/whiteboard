@@ -154,6 +154,39 @@ test("a section lights up a sequence diagram's participants: their boxes and lif
   await page.mouse.move(5, 5)
 })
 
+test('an empty send keeps the pick; a picked section that is dropped takes the composer tag with it', async () => {
+  await page.click(section('roles'))
+  await page.click('#form [type=submit]')
+  await sleep(300)
+  assert.equal((await brief()).sections.find(s => s.id === 'roles').picked, true)
+  assert.equal(await page.$eval('#about', el => el.hidden), false)
+  await b.call('/post', { briefOps: [{ op: 'drop', id: 'roles', why: 'merged' }] })
+  await b.until(async () => !(await brief()).sections.some(s => s.id === 'roles'), 'roles dropped')
+  assert.equal(await page.$eval('#about', el => el.hidden), true)
+  await b.call('/post', { briefOps: [{ op: 'restore', id: 'roles' }] })
+  await b.until(async () => (await brief()).sections.some(s => s.id === 'roles'), 'roles back')
+})
+
+test('a reconnect keeps the pane the person chose', async () => {
+  await page.click('.panes [data-pane="chat"]')
+  const { brief: now } = await b.call('/cards')
+  await page.evaluate(now => {
+    events.onopen()
+    onEvent({ data: JSON.stringify({ kind: 'brief', brief: now, changes: [{ op: 'new' }], by: 'claude' }) })
+  }, now)
+  await b.until(async () => (await brief()).sections.length > 0, 'the brief replayed')
+  assert.equal((await brief()).isShown, false)
+  await page.reload()
+  await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 10_000 })
+})
+
+test('a brief posted with a diagram Mermaid rejects is taken off with it, and the one before comes back', async () => {
+  const before = (await brief()).bottomLine
+  await b.call('/post', { title: 'Broken', mermaid: 'flowchart LR\n  a --> ', brief: { bottomLine: 'A brand new brief', sections: [] }, isNew: true, waitForPage: true })
+  await b.until(async () => (await brief()).bottomLine === before, 'the brief before it')
+  assert.deepEqual(page.errors, [])
+})
+
 test('a page opened again shows the brief as it is, with nothing marked new', async () => {
   await page.reload()
   await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 10_000 })
@@ -161,7 +194,7 @@ test('a page opened again shows the brief as it is, with nothing marked new', as
   const now = await brief()
   assert.equal(now.isShown, true)
   assert.equal(now.bottomLine, 'OAuth lets an app use your data without your password.')
-  assert.deepEqual(now.sections.map(s => [s.id, s.was]), [['roles', null], ['flow', null], ['pkce', null]])
+  assert.deepEqual(now.sections.map(s => [s.id, s.was]), [['flow', null], ['pkce', null], ['roles', null]])
   assert.deepEqual(now.dropped, ['Tokens not needed here'])
   assert.equal((await brief()).sections.find(s => s.id === 'flow').asks.length, 1)
   assert.deepEqual(page.errors, [])
@@ -171,7 +204,7 @@ test('the board saved as Markdown or a web page starts with the brief', async ()
   const md = await page.evaluate(() => boardMarkdown())
   assert.ok(md.indexOf('## The brief') < md.indexOf('## OAuth'), 'the brief before the diagrams')
   assert.match(md, /> \*\*Bottom line:\*\* OAuth lets an app use your data \*\*without your password\*\*\./)
-  assert.match(md, /### The main flow\n\nThe app swaps a one-time code for a token \*\*over a back channel\*\*\. \[§ RFC 6749 §4\.1\]\(https:\/\/www\.rfc-editor\.org\/rfc\/rfc6749#section-4\.1\)/)
+  assert.match(md, /### The main flow\n\nThe app swaps a one-time code for a token \*\*over a back channel\*\*\. \[§ RFC 6749 §4\.1\]\(<https:\/\/www\.rfc-editor\.org\/rfc\/rfc6749#section-4\.1>\)/)
   assert.match(md, /\*\*You asked:\*\* Why not return the token directly\?\n\n\*\*Claude:\*\* That was the \*\*implicit flow\*\*/)
   assert.match(md, /_Dropped: Tokens \(not needed here\)\._/)
   const html = await page.evaluate(() => boardHtml())

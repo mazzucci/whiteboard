@@ -300,6 +300,11 @@ a.cite:hover { color: var(--accent); border-color: var(--accent); }
 .brief .dropped .k { color: var(--muted); margin-bottom: 4px; }
 .brief .dropped s { color: var(--ink); opacity: .7; }
 .brief-hint { margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+.brief-status { display: none; align-items: center; gap: 8px; padding: 6px 16px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); }
+body.pane-brief .brief-status:not([hidden]) { display: flex; }
+.brief-status .dots { display: inline-flex; gap: 3px; }
+.brief-status .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite ease-in-out; }
+.brief-status .dots i:nth-child(2) { animation-delay: .15s; } .brief-status .dots i:nth-child(3) { animation-delay: .3s; }
 .brief-event { align-self: center; max-width: 92%; padding: 3px 10px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
 .brief-event::before { content: "◆ "; color: var(--accent); }
 .brief-event:hover { color: var(--accent); }

@@ -598,3 +598,12 @@ test('read_board gives Claude the brief as it is: the bottom line, each line by 
   expect(read).not.toContain('A long body')
   stop()
 })
+
+test('a section without an id or a line is named, not dropped quietly; a rejected diagram takes its brief with it', async ($, on) => {
+  const { stop } = host(on, { page: body => (body.brief && body.mermaid ? ({ ok: false, viewers: 1, drawn: false, error: 'Parse error on line 2' } as never) : { ok: true, viewers: 1, drawn: true }) })
+  const bad = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', bottom_line: 'B', sections: [{ id: 'a', line: 'x' }, { id: 'b' }] })
+  expect(said(bad)).toContain('Each section needs an `id` and a `line`: section #2 does not')
+  const broken = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: 'flowchart LR\n  a -->', bottom_line: 'B', sections: [{ id: 'a', line: 'x' }] })
+  expect(said(broken)).toContain('It was taken off the page, and the brief with it. Fix the source and post again, brief and all.')
+  stop()
+})
