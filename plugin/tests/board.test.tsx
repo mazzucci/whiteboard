@@ -686,3 +686,19 @@ test('read_board with side boards: the one the user is on, the main board in lin
   expect(read).toContain('Side boards: `rl` \\"Rate limiters\\" (parked)')
   stop()
 })
+
+test('a post on a side board says so, and read_board numbers diagrams on their own board', async ($, on) => {
+  const cards = [
+    { id: 1, kind: 'diagram', board: 'main', title: 'Checkout', mermaid: SOURCE },
+    { id: 2, kind: 'diagram', board: 'db', title: 'Fit', mermaid: SOURCE },
+    { id: 3, kind: 'diagram', board: 'main', title: 'Checkout again', mermaid: SOURCE },
+  ]
+  const { stop } = host(on, { cards, page: () => ({ ok: true, viewers: 1, drawn: true, board: 'db' }) as never })
+  const out = await $.tool.call({ tool: 'mcp__whiteboard__post_to_board', mermaid: SOURCE })
+  expect(said(out)).toContain('It went on the side board `db`.')
+  const read = said(await $.tool.call({ tool: 'mcp__whiteboard__read_board' }))
+  expect(read).toContain('Diagram 1 of 2, \\"Checkout\\"')
+  expect(read).toContain('Diagram 1 of 1 on the side board `db`, \\"Fit\\"')
+  expect(read).toContain('Diagram 2 of 2, \\"Checkout again\\"')
+  stop()
+})

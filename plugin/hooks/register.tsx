@@ -376,7 +376,7 @@ function notesOf(value: unknown): Note[] | undefined {
   return notes.length ? notes : undefined
 }
 /** How the page drew a diagram: drawn, Mermaid's error, or not seen (no page open, or it did not answer). */
-type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; noDiagram?: boolean; noteError?: string; noteErrors?: string[]; briefError?: string; boardError?: string }
+type Posted = { ok: boolean; viewers: number; drawn: boolean; error?: string; noDiagram?: boolean; noteError?: string; noteErrors?: string[]; briefError?: string; boardError?: string; board?: string }
 
 // ---------------------------------------------------------------- the brief
 
@@ -547,6 +547,7 @@ function sceneText(s: Scene): string[] {
 
 type BoardCard = {
   id: number
+  board?: string
   kind: 'diagram' | 'note' | 'sticky' | 'you' | 'end'
   title?: string
   text?: string
@@ -567,14 +568,17 @@ function boardText(viewers: number, cards: BoardCard[], isLatest: boolean, scene
 
 function boardCardsText(viewers: number, cards: BoardCard[], isLatest: boolean, scenes: Record<string, Scene>, mode: Mode): string {
   const diagrams = cards.filter(c => c.kind === 'diagram')
+  // Diagrams are numbered on their own board, as the page's tabs are.
+  const boardOf = (c: BoardCard) => c.board ?? 'main'
+  const onItsBoard = (c: BoardCard) => diagrams.filter(d => boardOf(d) === boardOf(c))
   const stickiesOf = (id: number) => cards.filter(c => c.kind === 'sticky' && c.diagram === id).map(c => noteLine({ on: c.on, text: c.text ?? '' }))
   const diagramText = (c: BoardCard) => {
-    const n = diagrams.indexOf(c) + 1
+    const n = onItsBoard(c).indexOf(c) + 1
     const scene = scenes[String(c.id)]
     // An edited diagram's notes are on its canvas.
     const notes = scene ? [] : [...(c.notes ?? []).map(noteLine), ...stickiesOf(c.id)]
     return [
-      `Diagram ${n} of ${diagrams.length}${c.title ? `, "${c.title}"` : ''}:`,
+      `Diagram ${n} of ${onItsBoard(c).length}${boardOf(c) !== 'main' ? ` on the side board \`${boardOf(c)}\`` : ''}${c.title ? `, "${c.title}"` : ''}:`,
       ...(c.text ? [c.text] : []),
       '```mermaid',
       c.mermaid ?? '',
@@ -1031,7 +1035,7 @@ export const register: Register = on => {
       }
     }
     if (out.posted.briefError) return { deny: `The board could not take this brief: ${out.posted.briefError}. Nothing was posted.` }
-    if (out.posted.boardError) return { deny: `The board could not open that side board: ${out.posted.boardError}. Nothing was posted.` }
+    if (out.posted.boardError) return { deny: `The board could not do that: ${out.posted.boardError}. Nothing was posted.` }
     if (out.posted.error) {
       return {
         deny: `Mermaid could not draw this diagram:\n${mermaidError(out.posted.error)}\nIt was taken off the page${brief ? ', and the brief with it' : ''}. Fix the source and post again${brief ? ', brief and all' : ''}.`,
@@ -1049,7 +1053,9 @@ export const register: Register = on => {
         ? ` The side board "${sideBoard.title ?? sideBoard.id}" is open and the user is on it: answer there; when it is decided (the user picks an option on the page, or you ${EDIT_TOOL} side_board return), they are back on the main board.`
         : ` The brief is beside the diagrams with ${sections.length} section${sections.length === 1 ? '' : 's'}: from now on change it in place with ${EDIT_TOOL}.`
       : ''
-    return { result: `${postedWhere(out, Boolean(mermaid))}${briefNote}${notPinned}${unknownNote}` }
+    // Where it went: the board the user is on, unless named.
+    const onSide = out.posted.board && out.posted.board !== 'main' ? ` It went on the side board \`${out.posted.board}\`.` : ''
+    return { result: `${postedWhere(out, Boolean(mermaid))}${onSide}${briefNote}${notPinned}${unknownNote}` }
   })
 
   on('tool.call', { tool: `mcp__whiteboard__${READ_TOOL}` }, async ($, e) => {
@@ -1105,18 +1111,20 @@ export const register: Register = on => {
     if (!board) return { deny: `There is no whiteboard page in this session yet: draw the diagram with ${TOOL} first.` }
     let briefSaid = ''
     if (briefOps.length || bottomLine || briefMode) {
-      let changed: { ok: boolean; done?: number; errors?: string[]; briefError?: string }
+      let changed: { ok: boolean; done?: number; errors?: string[]; briefError?: string; boardError?: string; board?: string }
       try {
         const started = await boardOpen($)
         changed = await boardPost($, started.open, { briefOps, ...(bottomLine ? { bottomLine } : {}), ...(briefMode ? { briefMode } : {}), ...(onBoard ? { board: onBoard } : {}) })
       } catch (error) {
         return { deny: failed(error) }
       }
-      if (changed.briefError) return { deny: `There is no brief on the board yet: post one with ${TOOL} (bottom_line and sections).` }
+      if (changed.boardError) return { deny: `The board could not do that: ${changed.boardError}.` }
+      const where = changed.board && changed.board !== 'main' ? ` on the side board \`${changed.board}\`` : ''
+      if (changed.briefError) return { deny: `There is no brief${where || ' on the board'} yet: post one with ${TOOL} (bottom_line and sections).` }
       // An answer under a section is Claude answering on the board: nothing more is posted for the turn.
       if (boardTurn && briefOps.some(op => op.op === 'answer') && (changed.done ?? 0) > 0) boardTurn.isPosted = true
       const errors = changed.errors?.length ? ` Not applied: ${changed.errors.join('; ')}.` : ''
-      briefSaid = `Changed the brief: ${changed.done ?? 0} of ${briefOps.length + (bottomLine ? 1 : 0) + (briefMode ? 1 : 0)} applied.${errors}`
+      briefSaid = `Changed the brief${where}: ${changed.done ?? 0} of ${briefOps.length + (bottomLine ? 1 : 0) + (briefMode ? 1 : 0)} applied.${errors}`
       if (!ops.length) return { result: briefSaid }
     }
     let out: { ok: boolean; diagram?: string; tab?: number; done?: string[]; errors?: string[]; error?: string; look?: string }

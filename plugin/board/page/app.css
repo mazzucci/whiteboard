@@ -370,13 +370,14 @@ body.has-banner .stage .hint { display: none; }
 .brief .pill.decided { color: #17733d; background: #e3f6ea; }
 .brief .pill.parked, .brief .pill.dropped { color: var(--muted); background: var(--soft); }
 .brief .cmp-wrap { overflow-x: auto; margin: 12px 0 4px; }
-.brief .cmp { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.4; }
+.brief .cmp { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.4; table-layout: fixed; }
 .brief .cmp th { text-align: left; vertical-align: bottom; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
 .brief .cmp th small { display: block; font-weight: 400; }
 .brief .cmp td { vertical-align: top; padding: 7px 8px; border-bottom: 1px solid var(--line); }
 .brief .cmp td.crit { font-weight: 600; width: 28%; }
 .brief .cmp td.crit small { display: block; margin-top: 2px; font-weight: 400; color: var(--muted); }
-.brief .cmp tr.crit-row { cursor: pointer; }
+.brief .cmp tr.crit-row { cursor: pointer; outline: none; }
+.brief .cmp tr.crit-row:focus-visible td { box-shadow: inset 0 0 0 2px var(--accent); }
 .brief .cmp tr.crit-row:hover td { background: color-mix(in srgb, var(--soft) 60%, transparent); }
 .brief .cmp tr.crit-row.picked td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .brief .mk { display: inline-grid; place-items: center; width: 17px; height: 17px; margin-right: 6px; border-radius: 50%; font-size: 10.5px; font-weight: 700; vertical-align: 1px; }

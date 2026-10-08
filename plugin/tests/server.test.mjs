@@ -471,17 +471,30 @@ test('an update refused on a settled constraint changes nothing; choices are nev
 
 // ---------------------------------------------------------------- side boards
 
+/** Answers for the page that the diagram titled so has drawn (or failed, with `error`). */
+async function answerDraw(title, error) {
+  let card
+  for (let i = 0; i < 50 && !card; i++) {
+    await new Promise(r => setTimeout(r, 40))
+    card = (await cardsNow()).cards.findLast(c => c.title === title)
+  }
+  await postJson('/rendered', { id: card.id, ...(error ? { error } : {}) })
+}
+
 test('a side board: opened for a constraint, posts go where the person is, and its decision settles the main board', async () => {
   await briefPost({ isNew: true, board: 'main', brief: { mode: 'decide', bottomLine: 'Main.', sections: [{ id: 'database', kind: 'constraint', title: 'Database', line: 'Where do orders live?', choices: [{ id: 'rel', label: 'Relational' }] }, { id: 'note', line: 'A point.' }] } })
   // Only a main-board constraint can be decided by a side board; ids are checked.
   assert.match((await briefPost({ sideBoard: { id: 'x', title: 'X', for: 'note' }, brief: { bottomLine: 'b', sections: [] } })).boardError, /no constraint note/)
   assert.match((await briefPost({ sideBoard: { id: 'main', title: 'X' }, brief: { bottomLine: 'b', sections: [] } })).boardError, /not a board id/)
-  const opened = await briefPost({
+  const opening = briefPost({
     sideBoard: { id: 'db', title: 'Relational vs not', for: 'database' },
     title: 'Fit', mermaid: 'flowchart LR\n  a --> b',
     brief: { bottomLine: 'Relational is safer.', options: [{ id: 'rel', label: 'Relational' }, { id: 'doc', label: 'Documents' }], sections: [{ id: 'tx', title: 'Together', line: 'One step.', cells: { rel: { mark: 'yes', text: 'Transactions.' }, doc: { mark: 'odd', text: 'Some.\nmore' }, 'bad id': { mark: 'no' } } }] },
   })
-  assert.equal(opened.ok, true)
+  // A page from an earlier test is listening: it draws the diagram.
+  await answerDraw('Fit')
+  const opened = await opening
+  assert.deepEqual([opened.ok, opened.board], [true, 'db'])
   let now = await cardsNow()
   assert.equal(now.viewing, 'db')
   const db = now.boards.find(b => b.id === 'db')
@@ -500,7 +513,7 @@ test('a side board: opened for a constraint, posts go where the person is, and i
   await new Promise(r => setTimeout(r, 50))
   const said = lines.slice(before).at(-1).say
   assert.match(said, /^\(On the side board `db`, "Relational vs not":\)\nI decide: Documents\./)
-  assert.match(said, /back on the main board, where "Database" is settled on Documents/)
+  assert.match(said, /Decided on the side board: Documents\. Back on the main board, where "Database" is settled on it\./)
   now = await cardsNow()
   const database = now.brief.sections.find(s => s.id === 'database')
   assert.deepEqual([database.status, database.chosen, database.settledBy, database.choices.map(c => c.id)], ['settled', 'doc', 'you', ['rel', 'doc']])
@@ -531,4 +544,40 @@ test('side boards are parked, dropped or returned by Claude; three open at most;
   assert.equal((await cardsNow()).brief.bottomLine, 'Main, changed.')
   await briefPost({ sideBoardOp: { op: 'return', id: 's3' } })
   assert.equal((await cardsNow()).viewing, 'main')
+})
+
+test('a side board whose diagram Mermaid rejects closes again, and the undo touches only its own board, whatever came in meanwhile', async () => {
+  const mainBefore = (await cardsNow()).brief
+  const posting = briefPost({ sideBoard: { id: 'bad', title: 'Bad' }, title: 'Broken', mermaid: 'flowchart LR\n  a -->', brief: { bottomLine: 'Side.', sections: [] } })
+  // The person types on the main board while the page draws.
+  await postJson('/view', { board: 'main' })
+  await postJson('/say', { text: 'meanwhile', board: 'main' })
+  await answerDraw('Broken', 'Parse error')
+  assert.equal((await posting).error, 'Parse error')
+  const now = await cardsNow()
+  assert.deepEqual(now.brief, mainBefore, 'the main brief is as it was')
+  assert.equal(now.boards.some(b => b.id === 'bad'), false, 'the side board closed again')
+  // Posted again, it opens.
+  const again = briefPost({ sideBoard: { id: 'bad', title: 'Bad' }, title: 'Fixed', mermaid: 'flowchart LR\n  a --> b', brief: { bottomLine: 'Side.', sections: [] } })
+  await answerDraw('Fixed')
+  assert.equal((await again).ok, true)
+  // A side board with a brief that does not hold is not opened at all; a board that does not exist is refused.
+  assert.match((await briefPost({ sideBoard: { id: 'empty', title: 'E' }, brief: { sections: [] } })).briefError, /bottom line/)
+  assert.equal((await cardsNow()).boards.some(b => b.id === 'empty'), false)
+  assert.match((await briefPost({ board: 'nope', bottomLine: 'x' })).boardError, /no board nope/)
+  await briefPost({ sideBoardOp: { op: 'drop', id: 'bad' } })
+})
+
+test('a parked side board opens again where it was left; diagrams and notes stay on their own board', async () => {
+  assert.equal((await briefPost({ sideBoardOp: { op: 'park', id: 's3' } })).ok, false, 's3 was returned (decided) already')
+  await briefPost({ sideBoard: { id: 'p1', title: 'P1' }, brief: { bottomLine: 'Parked one.', sections: [] } })
+  await briefPost({ sideBoardOp: { op: 'park', id: 'p1' } })
+  const back = await briefPost({ sideBoard: { id: 'p1', title: 'P1' } })
+  assert.equal(back.ok, true)
+  let now = await cardsNow()
+  assert.deepEqual([now.viewing, now.boards.find(b => b.id === 'p1').state, now.boards.find(b => b.id === 'p1').brief.bottomLine], ['p1', 'open', 'Parked one.'])
+  // No diagram on this board yet: notes are not pinned to another board's diagram.
+  const notes = await briefPost({ notes: [{ text: 'a note' }] })
+  assert.deepEqual([notes.noDiagram, notes.board], [true, 'p1'])
+  await briefPost({ sideBoardOp: { op: 'drop', id: 'p1' } })
 })

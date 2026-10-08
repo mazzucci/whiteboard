@@ -87,3 +87,30 @@ test('saved as Markdown: the main brief, then each side board with its compariso
   assert.match(md, /\| \| Relational \| Documents \|\n\|---\|---\|---\|\n\| \*\*Together\*\* \| ✓ Transactions\. \| ~ Sometimes\. \|/)
   assert.deepEqual(page.errors, [])
 })
+
+test('a reopened page goes to the board the person was last on, and a side board taken off again sends it back to the main board', async () => {
+  // On the main board now (after the decision); a reload must land there, not on the last board opened.
+  await page.reload()
+  await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 10_000 })
+  await b.until(async () => (await where()).sides.length === 1, 'the boards again')
+  assert.equal((await where()).board, 'main')
+  // A side board whose diagram Mermaid rejects: opened, then taken off with its brief.
+  await sleep(500)
+  await b.call('/post', { sideBoard: { id: 'bad', title: 'Bad one' }, title: 'Broken', mermaid: 'flowchart LR\n  a -->', brief: { bottomLine: 'Side.', sections: [] }, waitForPage: true })
+  await b.until(async () => (await where()).board === 'main' && !(await where()).sides.some(s => s.includes('Bad one')), 'back on the main board')
+  assert.deepEqual(page.errors, [])
+})
+
+test('with no brief on the main board, its side boards are still one click away', async () => {
+  const other = await board()
+  try {
+    const p = await other.open()
+    await sleep(500)
+    await other.call('/post', { sideBoard: { id: 'q', title: 'A question' }, brief: { bottomLine: 'Side.', sections: [] } })
+    await other.until(() => p.evaluate(() => boardOn === 'q'), 'on the side board')
+    await p.click('.brief .crumbs .back')
+    await other.until(() => p.evaluate(() => boardOn === 'main' && document.body.classList.contains('pane-brief') && !!document.querySelector('.brief .side')), 'the list on the main board')
+  } finally {
+    await other.close()
+  }
+})

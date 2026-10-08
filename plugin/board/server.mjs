@@ -138,7 +138,8 @@ async function ask(event, waitMs = 15_000) {
  * drawing board, the latest edited one, else the latest.
  */
 function diagramOf(tab) {
-  const diagrams = cards.filter(c => c.kind === 'diagram')
+  // Numbered on the board in hand, as its tabs are on the page.
+  const diagrams = cards.filter(c => c.kind === 'diagram' && (c.board ?? 'main') === briefBoard.id)
   if (Number.isInteger(tab)) return diagrams[tab - 1]
   if (mode === 'canvas') return diagrams.at(-1)
   return diagrams.findLast(c => scenes.has(c.id)) ?? diagrams.at(-1)
@@ -249,6 +250,9 @@ function boardChanged(change) {
  * post with both a brief and a diagram uses it, and each such post sets it.
  */
 let briefBefore
+/** A side board the post being handled opened, and the board the person was on before: closed again if its diagram fails. */
+let opened
+let viewingBefore
 const SECTION_ID = /^[A-Za-z0-9][\w-]{0,31}$/
 
 const textOf = (value, max) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined)
@@ -499,7 +503,7 @@ function decideSideBoard(side, choice, by) {
     brief = was.brief
   }
   closeSideBoard(side, 'decided')
-  return { constraint: target?.title ?? side.title, label: option.label }
+  return { constraint: target?.title, label: option.label }
 }
 
 /** Waits for the page to draw a card: { drawn: true }, { error }, or { drawn: false } with nobody looking. */
@@ -585,6 +589,8 @@ async function handle(req, res) {
     for (const card of cards) res.write(`data: ${JSON.stringify(card)}\n\n`)
     // Edited diagrams as they now are, after the cards they belong to.
     for (const [diagram, scene] of scenes) res.write(`data: ${JSON.stringify({ kind: 'scene', diagram, elements: scene.elements })}\n\n`)
+    // The boards as they are now, and the one the person was last on (a /view publishes nothing).
+    if (boards.size > 1) res.write(`data: ${JSON.stringify({ kind: 'board', boards: [...boards.values()].map(boardMeta), viewing })}\n\n`)
     // The mode last, so a canvas board makes editable only the diagram on screen.
     res.write(`data: ${JSON.stringify({ kind: 'mode', mode })}\n\n`)
     res.write(`data: ${JSON.stringify({ kind: 'status', state: status })}\n\n`)
@@ -715,7 +721,10 @@ async function handle(req, res) {
       brief.isProposal = brief.isProposal && !openOf(brief).length
       briefChanged(chosen, 'you')
     }
-    if (decided.length) text = `${text}\n\n(Decided on the side board: back on the main board, where "${decided[0].constraint}" is settled on ${decided[0].label}.)`
+    if (decided.length) {
+      const d = decided[0]
+      text = `${text}\n\n(Decided on the side board: ${d.label}. Back on the main board${d.constraint ? `, where "${d.constraint}" is settled on it` : '; no constraint there was waiting on it'}.)`
+    }
     // Claude hears what the board could not settle, after what they wrote.
     if (unsettled.length) text = `${text}\n\n(Not settled on the board: ${unsettled.join('; ')}.)`
     say(text)
@@ -746,23 +755,37 @@ async function handle(req, res) {
     const s = input.sideBoard
     const id = String(s?.id ?? '').trim()
     if (!SECTION_ID.test(id) || id === 'main') return json(200, { ok: false, viewers: listeners.size, boardError: `"${id.slice(0, 40)}" is not a board id` })
-    if (boards.has(id)) return json(200, { ok: false, viewers: listeners.size, boardError: `a side board called ${id} is open already` })
+    // A parked side board opens again where it was left.
+    const parked = boards.get(id)
+    if (parked && parked.state !== 'parked') return json(200, { ok: false, viewers: listeners.size, boardError: `a side board called ${id} is ${parked.state} already` })
+    // Its brief is checked first: a side board never opens empty.
+    const checked = input.brief ? briefOf(input.brief) : parked?.brief ? { brief: parked.brief } : { error: 'a side board needs its brief' }
+    if (checked.error) return json(200, { ok: false, viewers: listeners.size, briefError: checked.error })
     const open = [...boards.values()].filter(b => b.id !== 'main' && b.state === 'open')
     if (open.length >= MAX_SIDE_BOARDS) return json(200, { ok: false, viewers: listeners.size, boardError: `${MAX_SIDE_BOARDS} side boards are open: return to, park or drop one first` })
     const forId = typeof s.for === 'string' ? s.for : undefined
     const main = boards.get('main').brief
     if (forId && !main?.sections.some(x => x.id === forId && x.kind === 'constraint')) return json(200, { ok: false, viewers: listeners.size, boardError: `the main board has no constraint ${forId}` })
-    boards.set(id, { id, title: lineOf(s.title, 60) ?? id, for: forId, state: 'open', brief: null })
+    viewingBefore = viewing
+    if (parked) {
+      parked.state = 'open'
+      delete parked.why
+    } else boards.set(id, { id, title: lineOf(s.title, 60) ?? id, for: forId, state: 'open', brief: null })
+    opened = parked ? null : id
     viewing = id
     boardChanged({ op: 'open', id })
     input.board = id
+    if (parked) input.isNew = input.isNew ?? true
   }
+  // A board named that does not exist is refused, not taken for another.
+  if (typeof input.board === 'string' && !boards.has(input.board)) return json(200, { ok: false, viewers: listeners.size, boardError: `no board ${input.board.slice(0, 40)}` })
   useBoard(typeof input.board === 'string' ? input.board : undefined)
   // Closing a side board: decided (its decision settles the main board's constraint), parked or dropped.
   if (input.sideBoardOp) {
     const o = input.sideBoardOp
     const side = boards.get(o?.id)
     if (!side || side.id === 'main') return json(200, { ok: false, viewers: listeners.size, boardError: `no side board ${String(o?.id).slice(0, 40)}` })
+    if (side.state === 'decided' || side.state === 'dropped') return json(200, { ok: false, viewers: listeners.size, boardError: `the side board ${side.id} is ${side.state} already` })
     if (o.op === 'return') {
       if (o.choice !== undefined) {
         const out = decideSideBoard(side, o.choice, 'claude')
@@ -781,11 +804,14 @@ async function handle(req, res) {
     brief = out.brief
     keepBrief()
     briefChanged([{ op: 'new' }])
-    if (!input.mermaid && !clip(input.text, 20_000) && !input.notes) return json(200, { ok: true, viewers: listeners.size, drawn: false, sections: brief.sections.length })
+    if (!input.mermaid && !clip(input.text, 20_000) && !input.notes) {
+      opened = viewingBefore = undefined
+      return json(200, { ok: true, viewers: listeners.size, drawn: false, sections: brief.sections.length, board: briefBoard.id })
+    }
   }
   // Changes to the brief: each checked and applied in order; those that fail are said, the rest stand.
   if (Array.isArray(input.briefOps) || typeof input.bottomLine === 'string' || typeof input.briefMode === 'string') {
-    if (!brief) return json(200, { ok: false, viewers: listeners.size, briefError: 'there is no brief on the board yet' })
+    if (!brief) return json(200, { ok: false, viewers: listeners.size, briefError: 'there is no brief on the board yet', board: briefBoard.id })
     const changes = []
     const errors = []
     if (input.briefMode === 'brief' || input.briefMode === 'decide') {
@@ -815,7 +841,7 @@ async function handle(req, res) {
     if (brief.mode === 'decide' && changes.some(c => c.op === 'bottomLine') && !isOpen) brief.isProposal = true
     if (isOpen || brief.mode !== 'decide') brief.isProposal = false
     if (changes.length) briefChanged(changes)
-    return json(200, { ok: true, viewers: listeners.size, done: changes.length, errors, sections: brief.sections.map(s => s.id) })
+    return json(200, { ok: true, viewers: listeners.size, done: changes.length, errors, sections: brief.sections.map(s => s.id), board: briefBoard.id })
   }
   if (Array.isArray(input.ops)) {
     const target = diagramOf(input.diagram)
@@ -846,8 +872,8 @@ async function handle(req, res) {
   let noteErrors = []
   // Notes without a diagram go on the latest one, which stays as it is.
   if (notes && !mermaid) {
-    const latest = cards.findLast(c => c.kind === 'diagram')
-    if (!latest) return json(200, { ok: false, viewers: listeners.size, drawn: false, noDiagram: true })
+    const latest = cards.findLast(c => c.kind === 'diagram' && (c.board ?? 'main') === briefBoard.id)
+    if (!latest) return json(200, { ok: false, viewers: listeners.size, drawn: false, noDiagram: true, board: briefBoard.id })
     // On a diagram being edited, a note goes on its canvas, as an amendment.
     if (scenes.has(latest.id)) {
       const ops = notes.map((n, i) => ({ op: 'note', id: `note-${Date.now().toString(36)}-${i}`, on: n.on, text: n.text }))
@@ -871,18 +897,28 @@ async function handle(req, res) {
   // A diagram is answered once a page has drawn it, so Mermaid's errors reach
   // Claude. With no page open, wait only when one is opening (a new board).
   if (!mermaid || (!listeners.size && input.waitForPage !== true)) {
-    return json(200, { ok: true, id: card.id, viewers: listeners.size, drawn: false, ...(noteErrors.length ? { noteErrors } : {}) })
+    briefBefore = opened = viewingBefore = undefined
+    return json(200, { ok: true, id: card.id, viewers: listeners.size, drawn: false, board: briefBoard.id, ...(noteErrors.length ? { noteErrors } : {}) })
   }
+  // Other requests may come in while the page draws: what to undo is kept with its board.
+  const undo = input.brief && briefBefore !== undefined ? { board: briefBoard, brief: briefBefore, opened, viewing: viewingBefore } : null
+  const postedOn = briefBoard.id
+  briefBefore = opened = viewingBefore = undefined
   const outcome = await drawn(card.id)
   if (outcome.error) withdraw(card.id)
-  // A brief posted with a diagram Mermaid rejects goes with it: Claude posts both again.
-  if (outcome.error && input.brief && briefBefore !== undefined) {
-    brief = briefBefore
+  // A brief posted with a diagram Mermaid rejects goes with it, and a side board opened with them closes: Claude posts them again.
+  if (outcome.error && undo) {
+    useBoard(undo.board.id)
+    brief = undo.brief
     keepBrief()
     briefChanged([{ op: 'undo' }])
+    if (undo.opened) {
+      boards.delete(undo.opened)
+      if (viewing === undo.opened) viewing = boards.has(undo.viewing) ? undo.viewing : 'main'
+      boardChanged({ op: 'undo', id: undo.opened })
+    }
   }
-  briefBefore = undefined
-  return json(200, { ok: !outcome.error, id: card.id, viewers: listeners.size, ...outcome })
+  return json(200, { ok: !outcome.error, id: card.id, viewers: listeners.size, board: postedOn, ...outcome })
 }
 
 let port = 0

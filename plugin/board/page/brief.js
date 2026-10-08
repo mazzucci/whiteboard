@@ -40,7 +40,8 @@ function resetBrief() {
 
 /** The Brief / Chat switch, beside the board. */
 function showPane(pane) {
-  document.body.classList.toggle('pane-brief', pane === 'brief' && !!briefNow)
+  // The Brief pane shows a brief, or (on a main board without one) the way to its side boards.
+  document.body.classList.toggle('pane-brief', pane === 'brief' && (!!briefNow || boardsMeta.some(b => b.id !== 'main')))
   document.querySelectorAll('.panes [data-pane]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pane === (document.body.classList.contains('pane-brief') ? 'brief' : 'chat'))))
   if (pane === 'chat') {
     $('chat-unread').hidden = true
@@ -302,8 +303,8 @@ function focusIn(root, id) {
   return [...root.querySelectorAll('[name]')].filter(el => el.getAttribute('name') === id && el.matches('rect.actor, line.actor-line, g.actor-man'))
 }
 
-/** The latest diagram that has any of these boxes, chart labels or participants. */
-const diagramWith = ids => diagrams.findLast(d => ids.some(id => focusIn(drawingOf(d), id).length))
+/** The latest diagram on this board that has any of these boxes, chart labels or participants. */
+const diagramWith = ids => onBoard().findLast(d => ids.some(id => focusIn(drawingOf(d), id).length))
 
 /** Lights up the boxes the pointed-at section is about, on the diagram on screen. */
 function showFocus() {
@@ -441,7 +442,7 @@ briefPane.addEventListener('click', e => {
   pickSection(li.dataset.id)
 })
 briefPane.addEventListener('keydown', e => {
-  const li = e.target.closest?.('.sec')
+  const li = e.target.closest?.('.sec, .crit-row')
   if (li && (e.key === 'Enter' || e.key === ' ') && e.target === li) {
     e.preventDefault()
     pickSection(li.dataset.id)
@@ -482,8 +483,14 @@ function boardArrived(card, isReplay) {
     briefEvent(`“${meta?.title ?? card.change.id}” ${card.change.op}${meta?.why ? `: ${meta.why}` : ''}`, null, 'main')
   }
   if (briefDecision && !boardsMeta.some(b => b.id === briefDecision.board && b.state === 'open')) briefDecision = null
-  if (card.viewing !== boardOn) showBoard(card.viewing, false)
-  else renderBrief()
+  // A board taken off again (its diagram failed) is gone: back to where the server says the person is.
+  const to = card.viewing === 'main' || boardsMeta.some(b => b.id === card.viewing) ? card.viewing : 'main'
+  if (to !== boardOn || !boardsMeta.some(b => b.id === boardOn || boardOn === 'main')) showBoard(to, false)
+  else {
+    document.body.classList.toggle('has-brief', !!briefNow || boardsMeta.some(b => b.id !== 'main'))
+    if (briefNow) renderBrief()
+    else briefPane.innerHTML = crumbsHtml() + sideBoardsHtml()
+  }
   showBriefPick()
 }
 
@@ -499,11 +506,13 @@ function showBoard(id, isAsked, diagram) {
   boardOn = id
   briefNow = briefByBoard.get(id) ?? null
   briefPick = null
-  document.body.classList.toggle('has-brief', !!briefNow || id !== 'main')
+  // The Brief pane holds the way to the side boards, so it is there whenever any exists.
+  const hasSides = boardsMeta.some(b => b.id !== 'main')
+  document.body.classList.toggle('has-brief', !!briefNow || hasSides)
   document.body.classList.toggle('comparing', !!briefNow?.options?.length)
   if (briefNow) renderBrief()
   else briefPane.innerHTML = crumbsHtml() + sideBoardsHtml()
-  showPane(briefNow || id !== 'main' ? 'brief' : 'chat')
+  showPane(briefNow || hasSides ? 'brief' : 'chat')
   showBriefPick()
   if (isAsked) post('/view', { board: id })
   const own = onBoard()
@@ -555,10 +564,10 @@ function compareHtml(b) {
     rows
       .map(
         s =>
-          `<tr class="crit-row${briefPick === s.id ? ' picked' : ''}" data-id="${esc(s.id)}"><td class="crit">${esc(s.title)}<small>${inline(s.line)}</small></td>` +
+          `<tr class="crit-row${briefPick === s.id ? ' picked' : ''}" data-id="${esc(s.id)}" tabindex="0"><td class="crit">${esc(s.title)}<small>${inline(s.line)}</small></td>` +
           b.options
             .map(o => {
-              const c = s.cells?.[o.id]
+              const c = s.cells && Object.hasOwn(s.cells, o.id) ? s.cells[o.id] : null
               return c ? `<td><span class="mk ${esc(c.mark)}">${MARK_ICON[c.mark] ?? '?'}</span>${c.text ? esc(c.text) : ''}</td>` : '<td><span class="mk unknown">?</span></td>'
             })
             .join('') +
