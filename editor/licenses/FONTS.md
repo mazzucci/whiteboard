@@ -7,6 +7,7 @@ Shipped unmodified, as Excalidraw publishes them.
 | Assistant | Copyright 2010 The Assistant Project Authors (https://github.com/hafontia/Assistant) | SIL Open Font License 1.1 |
 | Cascadia Code | Copyright (c) 2019 - Present, Microsoft Corporation, with Reserved Font Name Cascadia Code | SIL Open Font License 1.1 |
 | Comic Shanns | Copyright (c) 2018 Shannon Miwa | MIT (below) |
+| Excalifont | Copyright (c) 2024 by Excalidraw; Ján Filípek / DizajnDesign, based on Virgil (Your Own Font Foundry). Excalifont is a trademark of Excalidraw. | SIL Open Font License 1.1 ([Excalidraw](https://plus.excalidraw.com/excalifont); the licence field of the original font, in Excalidraw's `packages/excalidraw/fonts/Excalifont/index.ts`) |
 | Liberation Sans | Digitized data copyright (c) 2010 Google Corporation, with Reserved Font Arimo; Copyright (c) 2012 Red Hat, Inc., with Reserved Font Name Liberation | SIL Open Font License 1.1 |
 | Lilita One | Copyright (c) 2011 Juan Montoreano, with Reserved Font Name Lilita | SIL Open Font License 1.1 |
 | Nunito | Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito) | SIL Open Font License 1.1 |

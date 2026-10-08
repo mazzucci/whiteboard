@@ -94,6 +94,30 @@ test('a flowchart keeps its own top and bottom boxes apart', async () => {
   assert.deepEqual(scene.boxes.map(x => x.ref).sort(), ['body', 'nav-bottom', 'nav-top'])
 })
 
+test('an ER table reads back by its name, and Claude amends it by that name', async () => {
+  const scene = await canvasOf('Shop', 'erDiagram\n  CUSTOMER ||--o{ ORDER : places\n  ORDER ||--|{ LINE_ITEM : contains')
+  assert.deepEqual(scene.boxes.map(x => x.ref).sort(), ['CUSTOMER', 'LINE_ITEM', 'ORDER'])
+  assert.deepEqual(scene.arrows.map(a => `${a.from}->${a.to}`), ['CUSTOMER->ORDER', 'ORDER->LINE_ITEM'])
+  const out = await b.call('/post', { ops: [{ op: 'class', id: 'CUSTOMER', class: 'fine' }] })
+  assert.deepEqual(out.done, ['#1 (class)'])
+})
+
+test("a state diagram's [*] reads back as its start and end, not as boxes with odd names", async () => {
+  const scene = await canvasOf('States', 'stateDiagram-v2\n  [*] --> Pending\n  Pending --> Paid: charge ok\n  Paid --> [*]')
+  const boxes = Object.fromEntries(scene.boxes.map(x => [x.ref, x]))
+  assert.deepEqual(Object.keys(boxes).sort(), ['Paid', 'Pending', 'end', 'start'])
+  assert.deepEqual([boxes.start.text, boxes.start.class, boxes.end.text, boxes.end.class], ['[*] start', 'plain', '[*] end', 'plain'])
+  assert.deepEqual(scene.arrows.map(a => `${a.from}->${a.to}`).sort(), ['Paid->end', 'Pending->Paid', 'start->Pending'])
+})
+
+test("the hand-drawn font (Excalifont) is the board's own: picking it draws, nothing is missing", async () => {
+  const missing = []
+  page.on('response', r => r.status() === 404 && missing.push(r.url()))
+  const faces = await page.evaluate(async () => (await document.fonts.load('20px Excalifont', 'Hand-drawn')).length)
+  assert.ok(faces > 0, 'Excalifont loaded')
+  assert.deepEqual(missing, [])
+})
+
 test('no page error along the way', () => {
   assert.deepEqual(page.errors, [])
 })

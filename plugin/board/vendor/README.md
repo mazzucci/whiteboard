@@ -68,11 +68,11 @@ The fonts Excalidraw draws text with, unmodified:
 | Assistant | SIL Open Font License 1.1 |
 | Cascadia Code | SIL Open Font License 1.1 |
 | Comic Shanns | MIT (c) 2018 Shannon Miwa |
+| Excalifont | SIL Open Font License 1.1 (https://plus.excalidraw.com/excalifont) |
 | Liberation Sans | SIL Open Font License 1.1 |
 | Lilita One | SIL Open Font License 1.1 |
 | Nunito | SIL Open Font License 1.1 |
 | Virgil | SIL Open Font License 1.1 (https://github.com/excalidraw/virgil) |
 
-Excalifont and Xiaolai are left out: the canvas writes in Helvetica, and a
-font the board does not have is not fetched from anywhere else (the page
-allows fonts from the board only).
+Xiaolai (Chinese, 12 MB) is left out: a font the board does not have is not
+fetched from anywhere else (the page allows fonts from the board only).

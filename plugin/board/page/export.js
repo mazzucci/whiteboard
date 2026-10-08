@@ -269,6 +269,8 @@ function diagramMarkdown(d, heading) {
     '',
     ...(d.scene ? ["_Edited on the board: this is Claude's Mermaid; the edited canvas is in the board saved as a web page, or exported as .excalidraw._", ''] : []),
     ...(legendLine(d) ? [legendLine(d), ''] : []),
+    // Newer chart types are not drawn everywhere yet.
+    ...(/^(xychart|quadrantChart)/.test(d.kind) ? ['_A chart: GitHub, GitLab or Notion may run an older Mermaid that does not draw it; the board saved as a web page, or a PNG export, keeps it as drawn._', ''] : []),
     `${fence}mermaid`,
     d.source.trim(),
     fence,
