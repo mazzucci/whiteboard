@@ -8,8 +8,12 @@
 - **Save the board** as one file, from the header or the wrap-up banner (which
   then stays open): a web page with every diagram (the edited ones as you left
   them), its legend, sticky notes and source, and the conversation, with no
-  scripts; or Markdown, each diagram a `mermaid` block, then the conversation as
-  written. Nothing is saved unless you ask: these are downloads.
+  scripts; or Markdown for a pull request or a postmortem: each diagram's
+  latest version open as a `mermaid` block (its colours are its own classDefs,
+  so GitHub, GitLab and Notion show them) with its legend as a line and its
+  sticky notes by box name, the versions it redrew folded under it, then the
+  conversation as written. Nothing is saved unless you ask: these are
+  downloads.
 - Fixed: a line chart's click spots showed as black dots in pictures of the
   chart (the one Claude reads with `read_board`, and now exports).
 

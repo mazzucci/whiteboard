@@ -130,8 +130,9 @@ evidence shows, then a proposed fix.
   excalidraw.com. **Save board** (top right, and on the wrap-up banner)
   downloads the whole board as one file: a web page with every diagram, its
   sticky notes and source, and the conversation, which opens anywhere without
-  the plugin; or Markdown, with each diagram as a `mermaid` block, to paste
-  into an issue, a pull request or your notes.
+  the plugin; or Markdown, to paste into an issue, a pull request or a
+  postmortem: each diagram as a `mermaid` block with its colours, legend and
+  sticky notes, its latest version open and the ones before it folded away.
 - **Wrap up.** One button asks Claude to summarise what you concluded in the
   conversation; then the page says so and closes its tab (or, if the browser
   does not let a page close itself, tells you it is done).

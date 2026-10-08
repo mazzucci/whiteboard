@@ -101,11 +101,42 @@ table { border-collapse: collapse; } td, th { border: 1px solid #e3e6ec; padding
 footer { margin-top: 32px; color: #98a2b3; font-size: 12px; text-align: center; }
 `
 
-/** Each diagram's sticky notes, as { on, text }: Claude's on a drawing, everyone's on a canvas. */
-function notesOfDiagram(d) {
-  if (d.scene) return (summaryOf(d.scene).notes ?? []).map(n => ({ on: n.on, text: n.text }))
-  return (stickies.get(d.id) ?? []).map(n => ({ on: n.on, text: n.text }))
+/** A diagram's drawing as elements to look into (made once). */
+const drawingOf = d => {
+  if (!d.drawing) {
+    d.drawing = document.createElement('div')
+    d.drawing.innerHTML = d.svg
+  }
+  return d.drawing
 }
+
+/** What a box says, its lines joined: what a reader knows it by. */
+function labelOfBox(el) {
+  if (el.dataset?.label) return el.dataset.label
+  const lines = [...el.querySelectorAll('tspan')].filter(t => !t.querySelector('tspan')).map(t => t.textContent.trim()).filter(Boolean)
+  return (lines.length ? lines.join(' ') : el.textContent).replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Each diagram's sticky notes, as { on, label, text }: Claude's on a drawing,
+ * everyone's on a canvas; `label` is what the box they sit on says, so a
+ * reader without the source knows which box (`inv` is "inventory.check").
+ */
+function notesOfDiagram(d) {
+  if (d.scene) {
+    const summary = summaryOf(d.scene)
+    const text = new Map((summary.boxes ?? []).map(b => [b.ref, b.text]))
+    return (summary.notes ?? []).map(n => ({ on: n.on, label: (text.get(n.on) ?? '').replace(/\s+/g, ' ').trim(), text: n.text }))
+  }
+  return (stickies.get(d.id) ?? []).map(n => {
+    const box = n.on && boxIn(drawingOf(d), n.on)
+    return { on: n.on, label: box ? labelOfBox(box) : '', text: n.text }
+  })
+}
+
+/** Where a note sits, for a reader: the box's words, with its id when that says something else. */
+const noteTarget = (n, code = t => `\`${t}\``, bold = t => `**${t}**`) =>
+  !n.on ? '' : n.label && n.label !== n.on ? `${bold(n.label)} (${code(n.on)})` : code(n.on)
 
 /** The conversation as the page shows it: Claude's notes and the person's replies, a diagram's chip a link to it. */
 function conversationHtml() {
@@ -146,7 +177,7 @@ async function boardHtml(when = new Date()) {
         `<h2>${i + 1}. ${esc(d.title)}</h2><div class="meta">${esc(d.kind)}${d.scene ? ' · edited on the board' : ''}</div>` +
         (d.legend?.length ? `<div class="legend">${legendHtml(d.legend)}</div>` : '') +
         `<figure>${picture}</figure>` +
-        (notes.length ? `<ul class="notes">${notes.map(n => `<li>${n.on ? `<code>${esc(n.on)}</code>: ` : ''}${inline(n.text)}</li>`).join('')}</ul>` : '') +
+        (notes.length ? `<ul class="notes">${notes.map(n => `<li>${n.on ? `On ${noteTarget(n, t => `<code>${esc(t)}</code>`, t => `<b>${esc(t)}</b>`)}: ` : ''}${inline(n.text)}</li>`).join('')}</ul>` : '') +
         `<details><summary>Mermaid source</summary><pre><code>${esc(d.source)}</code></pre></details>` +
         (d.scene ? `<details><summary>The canvas (save as a .excalidraw file to open it at excalidraw.com)</summary><pre><code>${esc(excalidrawOf(d))}</code></pre></details>` : '') +
         '</section>',
@@ -179,16 +210,90 @@ ${talk ? `<section class="conversation"><h2>The conversation on the board</h2>\n
 /** A Markdown code fence that the text inside cannot close. */
 const fenceFor = text => '`'.repeat(Math.max(3, ...[...String(text).matchAll(/`+/g)].map(m => m[0].length + 1)))
 
-/** The board as Markdown: each diagram's Mermaid source and sticky notes, then the conversation, as written. */
+/** A legend colour as the coloured square nearest it, for Markdown: grey, red, orange, yellow, green, blue or purple. */
+function squareOf(css) {
+  paintKit.fillStyle = '#000000'
+  paintKit.fillStyle = css || '#888888'
+  const hex = paintKit.fillStyle
+  const [r, g, b] = /^#/.test(hex) ? [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255) : [0.5, 0.5, 0.5]
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  if (max - min < 0.12) return '⬜'
+  const h = (max === r ? ((g - b) / (max - min) + 6) % 6 : max === g ? (b - r) / (max - min) + 2 : (r - g) / (max - min) + 4) * 60
+  return h < 15 || h >= 335 ? '🟥' : h < 40 ? '🟧' : h < 70 ? '🟨' : h < 170 ? '🟩' : h < 250 ? '🟦' : '🟪'
+}
+const paintKit = document.createElement('canvas').getContext('2d')
+
+/** A diagram's legend as one Markdown line: what each colour means. */
+const legendLine = d =>
+  d.legend?.length ? `> **Legend:** ${d.legend.map(e => `${squareOf(e.stroke)} ${e.label}${e.isDashed ? ' (dashed)' : ''}`).join(' · ')}` : ''
+
+/** A diagram's node ids (a flowchart's boxes, a chart's labels), to tell a redraw from a new diagram. */
+const idsOf = d =>
+  new Set([
+    ...[...drawingOf(d).querySelectorAll('g.node[id]')].map(g => g.id.replace(/^.*?flowchart-/, '').replace(/-\d+$/, '')),
+    ...[...drawingOf(d).querySelectorAll('[data-mark]')].map(el => el.dataset.label),
+  ])
+
+/**
+ * The diagrams as threads: a diagram that redraws an earlier one (the same
+ * kind, and the same title or most of its boxes) joins that one's thread, as
+ * an investigation redraws its picture step by step; a new picture starts its
+ * own. Threads in the order they started, each its diagrams in order.
+ */
+function threadsOf() {
+  const threads = []
+  for (const d of diagrams) {
+    const ids = idsOf(d)
+    const thread = threads.findLast(t => {
+      const last = t.at(-1)
+      if (last.kind !== d.kind) return false
+      if (last.title === d.title) return true
+      const before = idsOf(last)
+      const common = [...ids].filter(id => before.has(id)).length
+      return ids.size > 0 && before.size > 0 && common >= 0.6 * Math.max(ids.size, before.size)
+    })
+    if (thread) thread.push(d)
+    else threads.push([d])
+  }
+  return threads.sort((a, b) => diagrams.indexOf(a[0]) - diagrams.indexOf(b[0]))
+}
+
+/** One diagram in Markdown: its legend, its Mermaid, its sticky notes. */
+function diagramMarkdown(d, heading) {
+  const fence = fenceFor(d.source)
+  const notes = notesOfDiagram(d)
+  return [
+    heading,
+    '',
+    ...(d.scene ? ["_Edited on the board: this is Claude's Mermaid; the edited canvas is in the board saved as a web page, or exported as .excalidraw._", ''] : []),
+    ...(legendLine(d) ? [legendLine(d), ''] : []),
+    `${fence}mermaid`,
+    d.source.trim(),
+    fence,
+    '',
+    ...(notes.length ? ['Sticky notes:', '', ...notes.map(n => `- ${n.on ? `On ${noteTarget(n)}: ` : ''}${n.text.replace(/\s*\n\s*/g, ' ')}`), ''] : []),
+  ]
+}
+
+/**
+ * The board as Markdown, for a pull request or a postmortem: each diagram's
+ * latest version open, with its legend, Mermaid (its colours are its own
+ * classDefs, so GitHub, GitLab and Notion show them) and sticky notes; the
+ * versions before it folded away under it; then the conversation, as written.
+ */
 function boardMarkdown(when = new Date()) {
   const lines = [`# Whiteboard · ${boardLabel()}`, '', `Saved ${when.toLocaleString()} · ${diagrams.length} diagram${diagrams.length === 1 ? '' : 's'}`, '']
-  for (const [i, d] of diagrams.entries()) {
-    const fence = fenceFor(d.source)
-    lines.push(`## ${i + 1}. ${d.title}`, '')
-    if (d.scene) lines.push('_Edited on the board: this is Claude\'s Mermaid; the edited canvas is in the board saved as a web page, or exported as .excalidraw._', '')
-    lines.push(`${fence}mermaid`, d.source.trim(), fence, '')
-    const notes = notesOfDiagram(d)
-    if (notes.length) lines.push('Sticky notes:', '', ...notes.map(n => `- ${n.on ? `on \`${n.on}\`: ` : ''}${n.text.replace(/\s*\n\s*/g, ' ')}`), '')
+  const tab = d => diagrams.indexOf(d) + 1
+  for (const thread of threadsOf()) {
+    const latest = thread.at(-1)
+    const earlier = thread.slice(0, -1)
+    lines.push(...diagramMarkdown(latest, `## ${latest.title}${earlier.length ? ` (tab ${tab(latest)}, the latest of ${thread.length})` : ` (tab ${tab(latest)})`}`))
+    if (earlier.length) {
+      lines.push('<details>', `<summary>How it got here: ${earlier.map(d => `tab ${tab(d)}, ${esc(d.title)}`).join('; ')}</summary>`, '')
+      for (const d of earlier) lines.push(...diagramMarkdown(d, `### Tab ${tab(d)}: ${d.title}`))
+      lines.push('</details>', '')
+    }
   }
   const said = cardLog.filter(c => c.kind === 'you' || c.text || c.mermaid)
   if (said.length) {

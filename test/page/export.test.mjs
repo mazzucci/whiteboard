@@ -98,7 +98,7 @@ test('the board saves as one web page: every diagram, its notes and source, and 
   // The edited diagram as its canvas's picture, the drawing as its SVG.
   assert.match(html, /<img alt="Orders, as edited on the board" src="data:image\/png;base64,/)
   assert.match(html, /<figure><svg/)
-  assert.match(html, /<li><code>Dogs<\/code>: Mostly dogs<\/li>/)
+  assert.match(html, /<li>On <code>Dogs<\/code>: Mostly dogs<\/li>/)
   assert.match(html, /\(Orders DB\)/)
   assert.match(html, /The <b>request path<\/b>/)
   assert.match(html, /why dogs\?/)
@@ -119,12 +119,34 @@ test('the board saves as Markdown: Mermaid sources, sticky notes and the convers
   await choose('#save', 'md')
   const md = (await downloaded(/^whiteboard-tests-.*\.md$/)).data.toString()
   assert.match(md, /^# Whiteboard · tests\n/)
-  assert.match(md, /## 1\. Orders\n\n_Edited on the board/)
+  assert.match(md, /## Orders \(tab 1\)\n\n_Edited on the board/)
   assert.match(md, /```mermaid\nflowchart LR\n {2}api\[Orders API\] --> db\[\(Orders DB\)\]/)
-  assert.match(md, /## 2\. Pets\n\n```mermaid\npie/)
-  assert.match(md, /- on `Dogs`: Mostly dogs/)
+  assert.match(md, /## Pets \(tab 2\)\n\n```mermaid\npie/)
+  assert.match(md, /- On `Dogs`: Mostly dogs/)
   assert.match(md, /\*\*Claude:\*\* \*\*Orders\*\*\n\nThe \*\*request path\*\*\.\n\n→ Diagram 1: Orders/)
   assert.match(md, /\*\*You:\*\* .*why dogs\?/)
+})
+
+test('in Markdown, a redrawn diagram shows its latest version with its legend, the earlier ones folded under it, and notes by box name', async () => {
+  const classes = '\n  classDef unverified fill:#f4f4f4,stroke:#888888,stroke-dasharray:5 4\n  classDef fine fill:#e6f4ea,stroke:#1e7e34\n  classDef problem fill:#fdecea,stroke:#c0392b'
+  const legend = [{ label: 'Not measured', class: 'unverified', stroke: '#888888', isDashed: true }, { label: 'No problem', class: 'fine', stroke: '#1e7e34' }, { label: 'The problem', class: 'problem', stroke: '#c0392b' }]
+  const path = cls => `flowchart LR\n  req[POST /checkout]:::${cls[0]} --> quote[pricing.quote]:::${cls[1]} --> inv[inventory.check]:::${cls[2]}${classes}`
+  await b.call('/post', { title: 'Hypothesis', mermaid: path(['unverified', 'unverified', 'unverified']), legend })
+  await b.call('/post', { title: 'Detail: the loop', mermaid: 'sequenceDiagram\n  quote->>inv: check (x1,240)' })
+  await b.call('/post', { title: 'What the trace shows', mermaid: path(['fine', 'problem', 'problem']), legend, notes: [{ on: 'inv', text: '1,240 calls' }] })
+  await b.until(async () => (await look(page)).tab === 'What the trace shows', 'the redraw')
+  await choose('#save', 'md')
+  const md = (await downloaded(/^whiteboard-tests-.*\.md$/)).data.toString()
+  // The redraw is open, the hypothesis folded under it; the sequence diagram is its own.
+  const latest = md.indexOf('## What the trace shows (tab 5, the latest of 2)')
+  assert.ok(latest > 0, md)
+  assert.ok(md.indexOf('## Detail: the loop (tab 4)') > latest, 'threads in the order they started: the trace thread began at tab 3')
+  assert.match(md, /<details>\n<summary>How it got here: tab 3, Hypothesis<\/summary>\n\n### Tab 3: Hypothesis\n/)
+  assert.equal(md.match(/^## Hypothesis/m), null)
+  assert.match(md, /> \*\*Legend:\*\* ⬜ Not measured \(dashed\) · 🟩 No problem · 🟥 The problem/)
+  assert.match(md, /- On \*\*inventory\.check\*\* \(`inv`\): 1,240 calls/)
+  // The colours are the diagram's own classDefs, so GitHub shows them.
+  assert.match(md, /```mermaid\nflowchart LR\n {2}req\[POST \/checkout\]:::fine[\s\S]*classDef problem fill:#fdecea,stroke:#c0392b\n```/)
 })
 
 test('a menu closes on Escape or a click elsewhere', async () => {
