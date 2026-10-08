@@ -490,32 +490,38 @@ async function add(card, isReplay) {
 
 let queue = Promise.resolve()
 let isReplaying = false
-// Without the token this page cannot reach the session (a bookmark, a copied
-// address): it says how to open the board instead of trying.
-const events = token ? new EventSource(`/events?t=${encodeURIComponent(token)}&c=${pageId}`) : null
-// (After the whole script has run: showLost uses state declared further down.)
-if (!events) setTimeout(() => showLost('no-token'))
-else events.onopen = () => {
-  // A reconnect replays every card: start again from nothing.
-  diagrams = []
-  current = -1
-  $('tabs').innerHTML = ''
-  canvas.innerHTML = ''
-  $('toolbar').hidden = true
-  $('stage-empty').hidden = false
-  document.querySelectorAll('.msg').forEach(m => m.remove())
-  pending = []
-  stickies.clear()
-  cardLog.length = 0
-  document.body.classList.remove('on-chart')
-  document.querySelectorAll('.brief-event').forEach(el => el.remove())
-  resetBrief()
-  setConnected(true)
-  isReplaying = true
-  // Replayed cards arrive at once; anything after a short pause is new.
-  setTimeout(() => (isReplaying = false), 400)
-}
-if (events) {
+/** The connection to the session's board, once it is open. */
+let events = null
+// It opens once every script on the page has run (DOMContentLoaded): a
+// reconnect or a replayed card may need any of them, and on a slow first load
+// the connection could otherwise open between two scripts.
+addEventListener('DOMContentLoaded', connect)
+
+function connect() {
+  // Without the token this page cannot reach the session (a bookmark, a copied
+  // address): it says how to open the board instead of trying.
+  if (!token) return showLost('no-token')
+  events = new EventSource(`/events?t=${encodeURIComponent(token)}&c=${pageId}`)
+  events.onopen = () => {
+    // A reconnect replays every card: start again from nothing.
+    diagrams = []
+    current = -1
+    $('tabs').innerHTML = ''
+    canvas.innerHTML = ''
+    $('toolbar').hidden = true
+    $('stage-empty').hidden = false
+    document.querySelectorAll('.msg').forEach(m => m.remove())
+    pending = []
+    stickies.clear()
+    cardLog.length = 0
+    document.body.classList.remove('on-chart')
+    document.querySelectorAll('.brief-event').forEach(el => el.remove())
+    resetBrief()
+    setConnected(true)
+    isReplaying = true
+    // Replayed cards arrive at once; anything after a short pause is new.
+    setTimeout(() => (isReplaying = false), 400)
+  }
   events.onerror = () => {
     if (isEnded) return
     setConnected(false)

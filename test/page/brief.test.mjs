@@ -213,3 +213,17 @@ test('the board saved as Markdown or a web page starts with the brief', async ()
   assert.match(html, /<section class="brief" id="brief"><h2>The brief<\/h2><blockquote><b>Bottom line:<\/b> OAuth lets an app use your data <b>without your password<\/b>\.<\/blockquote>/)
   assert.doesNotMatch(html, /<script/)
 })
+
+test('a page whose last script is slow to arrive still connects, and shows the brief', async () => {
+  // As on a cold first load: the connection must not open before every script has run.
+  const slow = await b.open(async p => {
+    await p.setRequestInterception(true)
+    p.on('request', async r => {
+      if (r.url().endsWith('/brief.js')) await sleep(1500)
+      r.continue()
+    })
+  })
+  await b.until(() => slow.evaluate(() => document.querySelectorAll('.brief .sec').length > 0), 'the brief on the slow page')
+  assert.deepEqual(slow.errors, [])
+  await slow.close()
+})
