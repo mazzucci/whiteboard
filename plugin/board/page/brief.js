@@ -517,6 +517,8 @@ function showBoard(id, isAsked, diagram) {
   showBriefPick()
   if (isAsked) post('/view', { board: id })
   const own = onBoard()
+  // A side board with no diagram: its brief takes the whole page.
+  document.body.classList.toggle('board-empty', id !== 'main' && !own.length)
   const d = diagram !== undefined && diagrams[diagram]?.board === id ? diagrams[diagram] : own.at(-1)
   if (d) select(diagrams.indexOf(d))
   else {

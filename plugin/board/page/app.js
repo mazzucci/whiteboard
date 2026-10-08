@@ -488,8 +488,11 @@ async function add(card, isReplay) {
       el.querySelector('.body').append(chip)
     }
   }
-  // A diagram on another board waits there; one on this board comes up.
-  if (drawn && diagrams.at(-1).board === boardOn) select(diagrams.length - 1)
+  // A diagram on another board waits there; one on this board comes up (and the board has room for it again).
+  if (drawn && diagrams.at(-1).board === boardOn) {
+    document.body.classList.remove('board-empty')
+    select(diagrams.length - 1)
+  }
   else if (drawn) renderTabs()
 }
 

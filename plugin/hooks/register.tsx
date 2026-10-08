@@ -37,7 +37,8 @@ const INTRO =
   `whiteboard:drawing skill before the first diagram. ${READ_TOOL} reads back what is on the page, Mermaid source ` +
   'and sticky notes included, when the user talks about something there you did not draw in this conversation. ' +
   `The board has two modes: diagrams (yours, as drawn; each new one a tab) for explaining and investigating, and ` +
-  'canvas (every diagram editable by both of you) for designing or brainstorming together; pick one with `mode` ' +
+  'canvas (every diagram editable by both of you) for sketching together; a decision stays in diagrams mode, where the ' +
+  'board marks what is open and settled. Pick one with `mode` ' +
   `when you post, or the user switches. On a canvas, ${EDIT_TOOL} amends a diagram in place (add, connect, ` +
   'recolour, rename, remove boxes) instead of drawing it again.'
 let isIntroduced = false
@@ -771,9 +772,10 @@ export const register: Register = on => {
             enum: ['diagrams', 'canvas'],
             description:
               'How the board works from now on: diagrams (yours, as drawn; each new one a tab: for explaining and ' +
-              'investigating) or canvas (every diagram editable by both of you, amended in place: for designing or ' +
-              'brainstorming together). Set it with your first post when the conversation calls for one; the user ' +
-              'can switch it on the page.',
+              'investigating) or canvas (every diagram editable by both of you, amended in place: for sketching ' +
+              'together, when the user wants to move boxes themselves). A decision (brief_mode decide) stays in diagrams ' +
+              'mode: the board marks each constraint on drawn diagrams, and you redraw as choices settle. Set it with ' +
+              'your first post when the conversation calls for one; the user can switch it on the page.',
           },
           sticky_notes: {
             type: 'array',

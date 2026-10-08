@@ -246,10 +246,13 @@ constraints that decide it, then your proposal once they are settled.
   confirms or changes it. Five or six constraints is plenty.
 - **Draw the design as it stands** beside it, with each constraint's `focus`
   on the boxes it decides: open ones show dashed on the diagram, settled ones
-  green, so the picture says what is still undecided. Redraw it as choices
-  come in, keeping box ids. On a canvas (a diagram being edited) the board
-  cannot mark the boxes: recolour them yourself with `edit_board` (`class`) as
-  constraints settle.
+  green, so the picture says what is still undecided. Stay in diagrams mode
+  (the default) and redraw it as choices come in, keeping box ids, so each
+  redraw is a tab that shows what changed. If the user moves to a canvas, the
+  board cannot mark the boxes: recolour them yourself with `edit_board`
+  (`class`) as constraints settle.
+- **A side board can have a picture of its own** (a schema, a flow per
+  option); without one, its brief takes the whole page.
 - **The user settles on the page**: their clicks arrive as "My choices on the
   board: Accounts: Guest checkout; …" and are settled already. When they
   decide in words instead, settle it yourself (`settle`, with `choice`).

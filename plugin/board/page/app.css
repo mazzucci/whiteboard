@@ -384,3 +384,8 @@ body.has-banner .stage .hint { display: none; }
 .brief .mk.yes { background: #dcf3e4; color: #17733d; } .brief .mk.part { background: #fff1d6; color: #8a5a00; }
 .brief .mk.no { background: #fde2e1; color: #b42318; } .brief .mk.unknown { border: 1.5px dashed #d97706; color: #b45309; }
 .brief .decide { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+@media (min-width: 901px) {
+  body.board-empty.has-brief .layout { grid-template-columns: 0 minmax(0, 1fr); }
+  body.board-empty .layout > .board { visibility: hidden; }
+  body.board-empty .brief { max-width: 1100px; margin: 0 auto; width: 100%; }
+}

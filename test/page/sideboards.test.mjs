@@ -119,3 +119,13 @@ test('with no brief on the main board, its side boards are still one click away'
     await other.close()
   }
 })
+
+test('a side board with no diagram gives its brief the whole page, until a diagram arrives', async () => {
+  await b.call('/post', { sideBoard: { id: 'plain', title: 'No picture' }, brief: { bottomLine: 'Words only.', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], sections: [{ id: 'c', title: 'C', line: 'c', cells: { a: { mark: 'yes', text: 'yes' } } }] } })
+  await b.until(() => page.evaluate(() => boardOn === 'plain' && document.body.classList.contains('board-empty')), 'the brief takes the page')
+  const width = () => page.$eval('aside.chat', el => el.getBoundingClientRect().width)
+  assert.ok((await width()) > 1000, `the brief is ${await width()} px wide`)
+  await b.call('/post', { title: 'Now a picture', mermaid: 'flowchart LR\n  a --> b' })
+  await b.until(() => page.evaluate(() => !document.body.classList.contains('board-empty')), 'room for the diagram')
+  assert.ok((await width()) < 900)
+})
