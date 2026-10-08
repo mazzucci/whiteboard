@@ -656,7 +656,7 @@ export const register: Register = on => {
                 title: { type: 'string', description: 'A label of one to three words' },
                 line: { type: 'string', description: 'The section in one line of inline Markdown (under 160 characters)' },
                 body: { type: 'string', description: 'More detail, in simple Markdown: only when asked for, or when the line cannot stand alone' },
-                focus: { type: 'array', items: { type: 'string' }, description: "The node ids (or chart labels) on the diagram that this section is about: they light up when the user points at it" },
+                focus: { type: 'array', items: { type: 'string' }, description: "What on the diagram this section is about: flowchart node ids, sequence participant ids, or chart labels. They light up when the user points at it" },
                 cites: {
                   type: 'array',
                   maxItems: 4,

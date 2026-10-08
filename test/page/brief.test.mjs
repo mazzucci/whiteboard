@@ -125,6 +125,17 @@ test('More detail asks Claude for it, about that section', async () => {
   assert.equal(b.said.at(-1), 'About the brief\'s section `pkce` ("PKCE": A secret the app keeps protects the code.):\nMore detail, please.')
 })
 
+test("a section lights up a sequence diagram's participants: their boxes and lifelines", async () => {
+  await b.call('/post', { title: 'The flow', mermaid: 'sequenceDiagram\n  participant U as Browser\n  participant App as Your app\n  participant AS as Login service\n  U->>App: Log in\n  App->>AS: code + verifier' })
+  await b.until(async () => (await look(page)).tab === 'The flow', 'the sequence diagram')
+  await b.call('/post', { briefOps: [{ op: 'update', id: 'pkce', focus: ['App', 'AS'] }] })
+  await page.hover(section('pkce'))
+  const lit = () => page.$$eval('#canvas .is-focus', els => els.map(el => `${el.tagName.toLowerCase()} ${el.getAttribute('name')}`).sort())
+  await b.until(async () => (await lit()).length === 6, 'two participants lit')
+  assert.deepEqual(await lit(), ['line AS', 'line App', 'rect AS', 'rect AS', 'rect App', 'rect App'])
+  await page.mouse.move(5, 5)
+})
+
 test('a page opened again shows the brief as it is, with nothing marked new', async () => {
   await page.reload()
   await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 10_000 })

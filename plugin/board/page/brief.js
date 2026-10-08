@@ -152,8 +152,19 @@ function renderBrief(fresh = []) {
 /** The section being pointed at (hovered, or picked), whose boxes light up. */
 let briefHover = null
 
-/** The latest diagram that has any of these boxes or chart labels. */
-const diagramWith = ids => diagrams.findLast(d => ids.some(id => boxIn(drawingOf(d), id)))
+/**
+ * What a section points at in a drawing: a flowchart box or a chart's mark (as
+ * sticky notes find them), else a sequence diagram's participant, its boxes
+ * and lifeline.
+ */
+function focusIn(root, id) {
+  const box = boxIn(root, id)
+  if (box) return [box]
+  return [...root.querySelectorAll('[name]')].filter(el => el.getAttribute('name') === id && el.matches('rect.actor, line.actor-line, g.actor-man'))
+}
+
+/** The latest diagram that has any of these boxes, chart labels or participants. */
+const diagramWith = ids => diagrams.findLast(d => ids.some(id => focusIn(drawingOf(d), id).length))
 
 /** Lights up the boxes the pointed-at section is about, on the diagram on screen. */
 function showFocus() {
@@ -162,7 +173,7 @@ function showFocus() {
   const id = briefHover ?? briefPick
   const s = briefNow?.sections.find(x => x.id === id)
   if (!s?.focus?.length) return
-  const lit = s.focus.map(on => boxOf(on)).filter(Boolean)
+  const lit = s.focus.flatMap(on => focusIn(canvas, on))
   if (!lit.length) return
   canvas.classList.add('brief-focus')
   for (const el of lit) el.classList.add('is-focus')
@@ -170,7 +181,7 @@ function showFocus() {
 
 /** Brings up the diagram a section is about, when the one on screen does not have its boxes. */
 function showDiagramOf(s) {
-  if (!s?.focus?.length || s.focus.some(on => boxOf(on))) return
+  if (!s?.focus?.length || s.focus.some(on => focusIn(canvas, on).length)) return
   const d = diagramWith(s.focus)
   if (d) select(diagrams.indexOf(d))
 }

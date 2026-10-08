@@ -215,9 +215,11 @@ investigation. A one-off answer needs no brief.
   title and a stable `id` (`flow`, `risks`). Detail goes in `body` only when
   the user asks for it ("More detail" on the page sends that) or the line
   cannot stand alone.
-- **Point at the picture**: `focus` lists the node ids (or chart labels) a
-  section is about; they light up when the user points at the section. If no
-  section can point at the diagram, the diagram is decoration.
+- **Point at the picture**: `focus` lists what a section is about, as named
+  in the Mermaid: a flowchart's node ids, a sequence diagram's participant ids,
+  or a chart's labels. They light up when the user points at the section
+  (other diagram types do not light up yet). If no section can point at the
+  diagram, the diagram is decoration.
 - **Cite** where a claim comes from: the spec or doc with its address, or the
   file as `src/auth.ts:42`. Never cite what you did not read.
 - **Change it in place, never post it again.** With `edit_board`:

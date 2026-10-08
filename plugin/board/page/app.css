@@ -309,6 +309,9 @@ a.cite:hover { color: var(--accent); border-color: var(--accent); }
 /* The boxes the section being pointed at is about: they stay, the rest fade (the board is white in both themes). */
 .canvas.brief-focus g.node:not(.is-focus), .canvas.brief-focus [data-mark]:not(.is-focus) { opacity: .3; transition: opacity .2s; }
 .canvas.brief-focus .edgePaths, .canvas.brief-focus .edgeLabels, .canvas.brief-focus .flowchart-link { opacity: .4; transition: opacity .2s; }
+.canvas.brief-focus rect.actor:not(.is-focus), .canvas.brief-focus g.actor-man:not(.is-focus) { opacity: .35; transition: opacity .2s; }
+.canvas.brief-focus rect.actor.is-focus { stroke: #2563eb !important; stroke-width: 3px !important; fill: #e8f0ff !important; }
+.canvas.brief-focus line.actor-line.is-focus { stroke: #2563eb !important; stroke-width: 2.5px !important; }
 .canvas.brief-focus g.node.is-focus rect, .canvas.brief-focus g.node.is-focus polygon, .canvas.brief-focus g.node.is-focus circle, .canvas.brief-focus g.node.is-focus path { stroke: #2563eb !important; stroke-width: 3px !important; }
 
 /* A banner at the bottom (wrapped up, lost connection) takes the key hint's place. */

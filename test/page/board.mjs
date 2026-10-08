@@ -53,7 +53,8 @@ export async function board() {
     page.errors = []
     page.on('pageerror', e => page.errors.push(String(e)))
     await page.goto(ready.url)
-    await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 10_000 })
+    // A fresh CI runner's first Chrome page can take longer than ten seconds.
+    await page.waitForFunction(() => document.getElementById('conn')?.classList.contains('on'), { timeout: 30_000 })
     pages.push(page)
     return page
   }
