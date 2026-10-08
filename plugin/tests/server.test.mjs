@@ -468,3 +468,67 @@ test('an update refused on a settled constraint changes nothing; choices are nev
   k = (await cardsNow()).brief.sections[0]
   assert.deepEqual([k.title, k.status], ['Old', 'settled'])
 })
+
+// ---------------------------------------------------------------- side boards
+
+test('a side board: opened for a constraint, posts go where the person is, and its decision settles the main board', async () => {
+  await briefPost({ isNew: true, board: 'main', brief: { mode: 'decide', bottomLine: 'Main.', sections: [{ id: 'database', kind: 'constraint', title: 'Database', line: 'Where do orders live?', choices: [{ id: 'rel', label: 'Relational' }] }, { id: 'note', line: 'A point.' }] } })
+  // Only a main-board constraint can be decided by a side board; ids are checked.
+  assert.match((await briefPost({ sideBoard: { id: 'x', title: 'X', for: 'note' }, brief: { bottomLine: 'b', sections: [] } })).boardError, /no constraint note/)
+  assert.match((await briefPost({ sideBoard: { id: 'main', title: 'X' }, brief: { bottomLine: 'b', sections: [] } })).boardError, /not a board id/)
+  const opened = await briefPost({
+    sideBoard: { id: 'db', title: 'Relational vs not', for: 'database' },
+    title: 'Fit', mermaid: 'flowchart LR\n  a --> b',
+    brief: { bottomLine: 'Relational is safer.', options: [{ id: 'rel', label: 'Relational' }, { id: 'doc', label: 'Documents' }], sections: [{ id: 'tx', title: 'Together', line: 'One step.', cells: { rel: { mark: 'yes', text: 'Transactions.' }, doc: { mark: 'odd', text: 'Some.\nmore' }, 'bad id': { mark: 'no' } } }] },
+  })
+  assert.equal(opened.ok, true)
+  let now = await cardsNow()
+  assert.equal(now.viewing, 'db')
+  const db = now.boards.find(b => b.id === 'db')
+  assert.deepEqual([db.title, db.for, db.state, db.brief.mode], ['Relational vs not', 'database', 'open', 'decide'])
+  assert.deepEqual(db.brief.sections[0].cells, { rel: { mark: 'yes', text: 'Transactions.' }, doc: { mark: 'unknown', text: 'Some. more' } })
+  assert.equal(now.cards.findLast(c => c.kind === 'diagram').board, 'db')
+  assert.equal(now.brief.bottomLine, 'Main.', 'the main brief is unchanged')
+  // Claude's next change, naming no board, goes where the person is.
+  await briefPost({ briefOps: [{ op: 'update', id: 'tx', cells: { doc: { mark: 'part', text: 'Multi-document transactions.' } } }] })
+  now = await cardsNow()
+  assert.deepEqual(now.boards.find(b => b.id === 'db').brief.sections[0].cells.doc, { mark: 'part', text: 'Multi-document transactions.' })
+  assert.deepEqual(now.boards.find(b => b.id === 'db').brief.sections[0].cells.rel, { mark: 'yes', text: 'Transactions.' })
+  // What the person types on it says where it comes from; their decision settles the main constraint and brings them back.
+  const before = lines.length
+  await postJson('/say', { text: 'I decide: Documents.', board: 'db', choices: [{ id: 'db', board: 'main', choice: 'doc' }] })
+  await new Promise(r => setTimeout(r, 50))
+  const said = lines.slice(before).at(-1).say
+  assert.match(said, /^\(On the side board `db`, "Relational vs not":\)\nI decide: Documents\./)
+  assert.match(said, /back on the main board, where "Database" is settled on Documents/)
+  now = await cardsNow()
+  const database = now.brief.sections.find(s => s.id === 'database')
+  assert.deepEqual([database.status, database.chosen, database.settledBy, database.choices.map(c => c.id)], ['settled', 'doc', 'you', ['rel', 'doc']])
+  assert.deepEqual([now.boards.find(b => b.id === 'db').state, now.viewing], ['decided', 'main'])
+  // A decided board is decided once.
+  await postJson('/say', { text: 'again', board: 'db', choices: [{ id: 'db', board: 'main', choice: 'rel' }] })
+  assert.equal((await cardsNow()).brief.sections.find(s => s.id === 'database').chosen, 'doc')
+})
+
+test('side boards are parked, dropped or returned by Claude; three open at most; the person switching boards is where posts go', async () => {
+  const open = id => briefPost({ sideBoard: { id, title: id.toUpperCase() }, brief: { bottomLine: id, sections: [] } })
+  for (const id of ['s1', 's2', 's3']) assert.equal((await open(id)).ok, true)
+  assert.match((await open('s4')).boardError, /3 side boards are open/)
+  assert.equal((await briefPost({ sideBoardOp: { op: 'park', id: 's1' } })).ok, true)
+  assert.equal((await briefPost({ sideBoardOp: { op: 'drop', id: 's2', why: 'not needed' } })).ok, true)
+  assert.match((await briefPost({ sideBoardOp: { op: 'fly', id: 's3' } })).boardError, /return, park or drop/)
+  assert.match((await briefPost({ sideBoardOp: { op: 'return', id: 's3', choice: 'nope' } })).boardError, /not one of the side board's options/)
+  let now = await cardsNow()
+  assert.deepEqual(now.boards.filter(b => b.id !== 'main' && b.id !== 'db').map(b => [b.id, b.state, b.why ?? null]), [['s1', 'parked', null], ['s2', 'dropped', 'not needed'], ['s3', 'open', null]])
+  // The person goes to s3: Claude's next post, naming no board, lands there.
+  assert.equal((await postJson('/view', { board: 's3' })).status, 200)
+  assert.equal((await postJson('/view', { board: 'nope' })).status, 400)
+  await briefPost({ bottomLine: 'S3, changed.' })
+  now = await cardsNow()
+  assert.equal(now.boards.find(b => b.id === 's3').brief.bottomLine, 'S3, changed.')
+  // A post can name its board.
+  await briefPost({ board: 'main', bottomLine: 'Main, changed.' })
+  assert.equal((await cardsNow()).brief.bottomLine, 'Main, changed.')
+  await briefPost({ sideBoardOp: { op: 'return', id: 's3' } })
+  assert.equal((await cardsNow()).viewing, 'main')
+})

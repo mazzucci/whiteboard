@@ -353,3 +353,33 @@ body.has-banner .stage .hint { display: none; }
   content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%;
   background: currentColor; vertical-align: 1px; animation: blink 1.2s infinite ease-in-out;
 }
+
+/* ---------------------------------------------------------------- side boards
+   A side board's breadcrumb, the main board's list of them, and a comparison:
+   the brief's column widens to fit options as columns. */
+@media (min-width: 901px) { body.comparing .layout { grid-template-columns: minmax(0, 1fr) clamp(520px, 50vw, 860px); } }
+.brief .crumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.brief .crumbs b { color: var(--ink); }
+.brief .crumbs .back { padding: 3px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); cursor: pointer; font-size: 12.5px; }
+.brief .crumbs .back:hover { border-color: var(--accent); color: var(--accent); }
+.brief .crumbs-for { margin-bottom: 10px; font-size: 12.5px; color: var(--muted); }
+.brief .sides { margin-top: 14px; padding-top: 8px; border-top: 1px dashed var(--line); display: grid; gap: 4px; }
+.brief .sides .k { color: var(--muted); }
+.brief .side { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; font-size: 13px; text-align: left; }
+.brief .side:hover { border-color: var(--accent); }
+.brief .pill.decided { color: #17733d; background: #e3f6ea; }
+.brief .pill.parked, .brief .pill.dropped { color: var(--muted); background: var(--soft); }
+.brief .cmp-wrap { overflow-x: auto; margin: 12px 0 4px; }
+.brief .cmp { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.4; }
+.brief .cmp th { text-align: left; vertical-align: bottom; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+.brief .cmp th small { display: block; font-weight: 400; }
+.brief .cmp td { vertical-align: top; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.brief .cmp td.crit { font-weight: 600; width: 28%; }
+.brief .cmp td.crit small { display: block; margin-top: 2px; font-weight: 400; color: var(--muted); }
+.brief .cmp tr.crit-row { cursor: pointer; }
+.brief .cmp tr.crit-row:hover td { background: color-mix(in srgb, var(--soft) 60%, transparent); }
+.brief .cmp tr.crit-row.picked td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.brief .mk { display: inline-grid; place-items: center; width: 17px; height: 17px; margin-right: 6px; border-radius: 50%; font-size: 10.5px; font-weight: 700; vertical-align: 1px; }
+.brief .mk.yes { background: #dcf3e4; color: #17733d; } .brief .mk.part { background: #fff1d6; color: #8a5a00; }
+.brief .mk.no { background: #fde2e1; color: #b42318; } .brief .mk.unknown { border: 1.5px dashed #d97706; color: #b45309; }
+.brief .decide { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }

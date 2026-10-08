@@ -1,0 +1,88 @@
+// Side boards: a question with a board of its own, opened by Claude from the
+// main board. It has its own brief and diagrams; a comparison shows options as
+// columns; picking one decides it, settles the main board's constraint, and
+// brings the person back. Switching boards tells the server where they are.
+import { after, before, test } from 'node:test'
+import assert from 'node:assert/strict'
+import { board, look, send, sleep } from './board.mjs'
+
+let b
+let page
+before(async () => {
+  b = await board()
+  page = await b.open()
+})
+after(() => b.close())
+
+/** The page: which board, its tabs, its brief's state, the comparison. */
+const where = () =>
+  page.evaluate(() => ({
+    board: boardOn,
+    crumbs: document.querySelector('.brief .crumbs b')?.textContent ?? null,
+    tabs: [...document.querySelectorAll('.tab')].map(t => t.textContent),
+    bottomLine: document.querySelector('.bottom-line p')?.textContent ?? null,
+    head: [...document.querySelectorAll('.cmp th')].map(th => th.childNodes[0]?.textContent ?? ''),
+    rows: [...document.querySelectorAll('.cmp tr.crit-row')].map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent.trim())),
+    sides: [...document.querySelectorAll('.brief .side')].map(s => s.textContent),
+    comparing: document.body.classList.contains('comparing'),
+  }))
+
+test('Claude opens a side board: the page goes there, with its own brief, diagram and comparison', async () => {
+  // Past the page's first moments, when what arrives counts as replayed.
+  await sleep(600)
+  await b.call('/post', {
+    title: 'Checkout', mermaid: 'flowchart TB\n  Pay[Payment] -.- Db[(Orders)]',
+    brief: { mode: 'decide', bottomLine: 'Waiting on the database.', sections: [{ id: 'database', kind: 'constraint', title: 'Database', line: 'Where do orders live?', focus: ['Db'], choices: [{ id: 'rel', label: 'Relational' }] }] },
+  })
+  await b.until(async () => (await where()).bottomLine === 'Waiting on the database.', 'the main board')
+  await b.call('/post', {
+    sideBoard: { id: 'db', title: 'Relational vs not', for: 'database' },
+    title: 'Fit', mermaid: 'flowchart LR\n  rel[Relational] --- doc[Documents]',
+    brief: {
+      bottomLine: 'Relational is the safer default.',
+      options: [{ id: 'rel', label: 'Relational' }, { id: 'doc', label: 'Documents' }],
+      sections: [{ id: 'tx', title: 'Together', line: 'One step.', cells: { rel: { mark: 'yes', text: 'Transactions.' }, doc: { mark: 'part', text: 'Sometimes.' } } }],
+    },
+  })
+  await b.until(async () => (await where()).board === 'db' && (await where()).tabs.length === 1, 'on the side board')
+  const now = await where()
+  assert.deepEqual([now.crumbs, now.tabs, now.bottomLine, now.comparing], ['Relational vs not', ['1Fit'], 'Relational is the safer default.', true])
+  assert.deepEqual(now.head, ['', 'Relational', 'Documents'])
+  assert.deepEqual(now.rows, [['TogetherOne step.', '✓Transactions.', '~Sometimes.']])
+  assert.deepEqual((await page.$$eval('#messages .brief-event', els => els.map(el => el.textContent))).slice(-2), ['Claude opened a side board: “Relational vs not”', 'Claude laid out the comparison'])
+  assert.deepEqual(page.errors, [])
+})
+
+test('back to the main board and to the side board again: the server knows where the person is', async () => {
+  await page.click('.brief .crumbs .back')
+  await b.until(async () => (await where()).board === 'main', 'the main board')
+  let now = await where()
+  assert.deepEqual([now.tabs, now.comparing, now.sides], [['1Checkout'], false, ['↳ Relational vs notopen']])
+  await b.until(async () => (await b.call('/cards')).viewing === 'main', 'the server told')
+  await page.click('.brief .side')
+  await b.until(async () => (await b.call('/cards')).viewing === 'db' && (await where()).board === 'db', 'back on the side board')
+  // Claude's change on a board the person is not looking at: noted in the conversation, the page stays.
+  await b.call('/post', { board: 'main', briefOps: [{ op: 'update', id: 'database', line: 'Where do orders and stock live?' }] })
+  await b.until(async () => (await page.$eval('#messages .brief-event:last-of-type', el => el.textContent)) === 'Claude rewrote “Database”', 'noted')
+  assert.equal((await where()).board, 'db')
+})
+
+test('picking an option decides the side board: the main board’s constraint is settled and the person is back', async () => {
+  await page.click('[data-decide="doc"]')
+  assert.match(await page.$eval('#choices-text', el => el.textContent), /I decide on the side board “Relational vs not”: Documents\./)
+  await send(page, 'Documents it is.')
+  await b.until(async () => (await where()).board === 'main', 'back on the main board')
+  assert.match(b.said.at(-1), /^\(On the side board `db`, "Relational vs not":\)\nI decide on the side board “Relational vs not”: Documents\.\n\nDocuments it is\./)
+  const now = await where()
+  assert.deepEqual(now.sides, ['↳ Relational vs notdecided'])
+  assert.equal(await page.$eval('.brief .sec[data-id="database"] .settled-line', el => el.textContent), '✓ Documents · your choice')
+  // Its box on the main diagram is green now.
+  assert.equal(await page.$eval('#canvas g.node[id*="flowchart-Db-"]', g => g.classList.contains('st-settled')), true)
+})
+
+test('saved as Markdown: the main brief, then each side board with its comparison as a table', async () => {
+  const md = await page.evaluate(() => boardMarkdown())
+  assert.ok(md.indexOf('## The brief') < md.indexOf('## Side board: Relational vs not (decided)'))
+  assert.match(md, /\| \| Relational \| Documents \|\n\|---\|---\|---\|\n\| \*\*Together\*\* \| ✓ Transactions\. \| ~ Sometimes\. \|/)
+  assert.deepEqual(page.errors, [])
+})

@@ -262,6 +262,35 @@ constraints that decide it, then your proposal once they are settled.
   design in a sentence or two, with its risks and what to build first as
   sections. Until then the bottom line says what you are waiting on.
 
+## Side boards: one question on its own board
+
+When a question inside a decision deserves a picture of its own (relational
+or not, which rate limiter, which payment provider), it gets a side board:
+its own brief and diagrams, opened from the main board and closed back into
+it. Open one when the user asks ("let's whiteboard this"), or offer it in a
+line and open it when they agree; never on your own.
+
+- **Open it** with `post_to_board` `side_board: { id, title, for }`, `for`
+  being the main board's constraint it decides, with its brief (and a
+  diagram, if one helps). The user is taken there. One level deep: a side
+  board opens no other; three open at most.
+- **A comparison** is a side board with `options` (two to four, the columns;
+  use the ids of the constraint's choices where they match) and sections as
+  criteria, each with `cells` by option: a `mark` (yes, part, no, unknown)
+  and one short clause. Five or six criteria from this project's own
+  constraints. No scores or weights. A mark that is a fact about a
+  technology needs a source (`cites`); one about this project names the
+  constraint it comes from; otherwise it is your judgement, and `part` or
+  `unknown` says so. A criterion only the user can answer is a constraint
+  with choices, as on the main board.
+- **Their decision comes back**: picking an option on the page settles the
+  main board's constraint and returns them there. When they decide in words,
+  `edit_board` `side_board: { op: 'return', id, choice }`. A question that
+  went away is `park`ed or `drop`ped (with why). Then carry the decision into
+  the main board: its line, its diagram.
+- Posts and edits go to the board the user is on; name `board` to change
+  another.
+
 ## Sticky notes
 
 A proposal, a question or an aside about one box goes on a sticky note
