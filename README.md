@@ -1,46 +1,37 @@
 # Whiteboard
 
-**A whiteboard beside your Claude Code session: Claude draws as it explains, you answer on the board, and you can edit a diagram together.**
+**A whiteboard beside your Claude Code session: Claude draws as it explains, you answer and decide on the board, and the whole discussion stays in the session.**
 
 - **Diagrams as Claude explains.** Real [Mermaid](https://mermaid.js.org), every
-  diagram type, on a page in your browser. One tab per diagram, with zoom, pan,
-  a legend and sticky notes.
-- **A two-way board.** Type on the page and your words go into the same Claude
-  Code session. Claude answers on the board, with another drawing when one
-  helps.
-- **Edit together.** Switch a diagram to a canvas: drag, write and connect
-  boxes. Claude reads what you changed and what you selected, and amends the
-  diagram in place.
+  type, on a page in your browser, with zoom, a legend and sticky notes.
+- **A two-way board.** What you type or click there goes into the same Claude
+  Code session; Claude answers on the board.
+- **Decide together.** Claude lays out what decides a design, you settle it
+  with clicks, and one question can get a board of its own.
 - **Nothing to set up.** Node.js 18 and the plugin. The board runs on
   127.0.0.1, downloads nothing, and ends with the session.
 
-![In Claude Code, Claude opens the whiteboard and walks through a slow checkout investigation: the request path, the p95 trace with the problem in red and a sticky note proposing a fix; the user answers on the board and Claude draws the proposal in lavender; the user switches to a canvas, moves a box, selects it and asks for a cache beside it, and Claude adds it in place; after the wrap-up the summary arrives in Claude Code](media/whiteboard.gif)
+![In Claude Code, Claude opens the whiteboard to design a checkout: a diagram of the flow beside a decision with constraints, each with its choices and Claude's lean; the user clicks their choices and asks to whiteboard where orders and stock should live; Claude opens a side board comparing relational, document and key-value stores criterion by criterion; the user picks relational, is back on the main board with that constraint settled, and Claude writes the proposal](media/whiteboard.gif)
 
-<sub>A recording of a real Claude Code session, sped up while Claude works. The project is simulated (`demo/checkout-service/`); Claude, the plugin and every diagram are real, and the replies on the board were typed by a script standing in for the user.</sub>
+<sub>A real Claude Code session, sped up while Claude works. The clicks and words on the board were made by a script standing in for the user.</sub>
 
-Works in any terminal, and in the Code tab of the Claude desktop app. It draws
-for questions about your project ("how does checkout work?") and for general
-ones ("how does OAuth work?").
+> **Open source, not affiliated with or endorsed by Anthropic.** Claude and
+> Claude Code are trademarks of Anthropic, PBC. For Claude Code in a terminal
+> or the Code tab of the Claude desktop app (not its Chat or Cowork modes,
+> claude.ai or `claude -p`). **Experimental:** built on Claude Code's mods,
+> which are new. Tested on macOS with Claude Code 2.1.295.
 
-> **Open source project, not affiliated with or endorsed by Anthropic.** Claude and
-> Claude Code are trademarks of Anthropic, PBC.
->
-> **For Claude Code,** in a terminal or in the Code tab of the Claude desktop
-> app. It does not work in the desktop app's **Claude** (chat) or **Cowork**
-> modes, on claude.ai, or with `claude -p`.
->
-> **Experimental.** Built on Claude Code's mods, which are new and may change
-> between releases. Tested in macOS Terminal with Claude Code 2.1.290.
+## Try it
 
-## Try it: three prompts to paste
+Install it (below), start a new session, and paste one of these:
 
 ```
 How does OAuth work? Show me on the whiteboard.
 ```
 
 ```
-Walk me through how a request travels through this project, on the
-whiteboard: the big picture first, then one level down each time I ask.
+Let's design the checkout flow for our shop on the whiteboard. Settle the
+constraints with me before proposing anything.
 ```
 
 ```
@@ -49,193 +40,46 @@ draw the request path with every step grey, redraw it as you find evidence,
 and pin any fix as a sticky note before you draw it in.
 ```
 
-Then answer in the box on the page. Your reply goes into the session, and
-Claude answers on the board.
-
-## A question, drawn
-
-The same question, "How does OAuth work?", asked twice in Claude Code. First
-the answer streams by in the terminal. Then, with the plugin, Claude draws the
-flow as a sequence diagram in your browser and pins the gotchas (PKCE, the
-`state` parameter) beside it as sticky notes. A follow-up typed on the board
-arrives in the terminal session and gets a diagram of its own.
-
-![Claude Code answers "How does OAuth work?" as text in the terminal; then, with the plugin, Claude draws the OAuth flow as a sequence diagram with sticky notes in the browser and answers a follow-up typed on the board, which arrives in the terminal session, with a second diagram](media/whiteboard-before-after.gif)
-
-<sub>Both halves are real Claude Code sessions. The first is snapshots of the Terminal window as the answer streamed in; the second is a recording of the board, with snapshots of the same session's Terminal, and the follow-up typed by a script standing in for the user.</sub>
-
-## Charts you can click
-
-When the numbers are the point, Claude draws a chart. Click a bar, a slice or a
-point and ask: your question goes to Claude with what you selected.
-
-![Claude charts where the 3,400 ms of a slow checkout request go, as horizontal bars with a sticky note on inventory.check; the user clicks the inventory.check bar and asks "Why is this one so big?", and Claude answers on the board; then the user Shift+clicks two bars and asks which to fix first, and Claude weighs the two](media/whiteboard-charts.gif)
-
-<sub>A recording of a real Claude Code session on the same simulated investigation, sped up while Claude works; the clicks and questions on the board were made by a script standing in for the user.</sub>
+Then answer on the page: your reply goes into the session, and Claude answers
+on the board.
 
 ## What the board does
 
-Claude puts a picture on the board whenever a picture says it better, and
-redraws as the conversation moves: the hypothesis first, then what the
-evidence shows, then a proposed fix.
-
-- **One tab per diagram.** Each diagram is a tab across the top; the newest
-  opens as it arrives. A redraw of the same flowchart keeps its zoom and place,
-  so stepping between the tabs shows only what changed.
-- **Zoom, pan, source.** Pinch or Ctrl+scroll to zoom, drag or use the arrow
-  keys to pan, **Fit** to see it whole, **Code** for the Mermaid source with a
-  Copy button.
-- **Colours that each answer one question,** with a legend above the diagram:
-  grey, not measured yet; green, no problem; red, a problem; lavender, a
-  proposed change.
-- **Charts you can click.** When the numbers are the point, Claude draws a pie,
-  a bar or line chart, or a quadrant chart. Click a slice, a bar or a point
-  (Shift+click for more) and it goes with your next message: "why is this one
-  so big?" means that slice. Claude can drill into it with the next chart.
-- **A brief beside the diagrams.** For an explanation or a review, Claude can
-  write a brief next to the diagram: the bottom line, then a few one-line
-  sections. Point at one and its boxes light up; click it to ask about it, and
-  the answer lands under it. The brief changes as you talk: rewritten lines
-  show what they replaced, new ideas become sections, dropped ones are listed.
-- **Decide together.** When you are designing something, Claude can lay out
-  the constraints that decide it, each with its choices and Claude's lean.
-  Click yours; the diagram marks what is still open, and Claude proposes the
-  design once nothing is.
+- **Diagrams, one tab each.** A redraw keeps its zoom and place, so stepping
+  through the tabs shows what changed. Colours say what is known: grey not
+  checked, green fine, red a problem, lavender a proposed change.
+- **A brief beside them.** The bottom line first, then a few one-line
+  sections. Point at one and its boxes light up; click it to ask, and the
+  answer lands under it. Rewritten lines show what they replaced.
+- **Decisions.** Constraints, each with its choices and the one Claude leans
+  towards. Click yours; the diagram dashes what is still open, and Claude
+  proposes the design once nothing is.
 - **Side boards.** Say "let's whiteboard this" about one question and Claude
-  opens a board just for it, such as a comparison of the options. Pick one,
-  and the main board's decision is settled; you are back where you were.
-- **Sticky notes.** Claude pins a proposal, a question or a gotcha beside the
-  box it is about (in a flowchart, or on a chart's slice, bar or point; beside
-  the diagram in other types), without
-  changing the diagram. It proposes, asks whether you
-  want to see the change, and draws it in lavender when you say yes.
-- **Mermaid errors go back to Claude.** The page draws each diagram and reports
-  how it went. When Mermaid rejects one, Claude gets the error, corrects the
-  source and draws again. You only see the result.
-- **Your replies go into the session.** Claude's notes appear beside the
-  diagrams. What you type there goes into the same Claude Code session, as if
-  you had typed it in the terminal, and the session remembers the whole
-  discussion. The page shows **Sent** when your message is delivered and
-  **Claude is working** while Claude answers. What you ask on the board is
-  answered on the board; when you type in the terminal again, Claude answers
-  there.
-- **Two modes.** **Diagrams**: Claude's diagrams as drawn, each new one a
-  tab, for explaining and investigating. **Canvas**: you and Claude edit every
-  diagram together, for designing. Switch at the top of the page, with
-  `/whiteboard canvas`, or let Claude pick when it opens the board. Switching
-  makes the diagram on screen editable, and every new one; earlier diagrams
-  stay as they were drawn. **Edit** on a diagram makes just that one
-  editable, in either mode.
-- **Edit a diagram yourself.** On a canvas, drag boxes, write, add boxes,
-  arrows and sticky notes. Your changes go to
-  Claude in words with your next message ("moved `cache` below `api`; added a
-  box "Redis?""), and Claude amends the diagram in place, keeping your layout,
-  instead of drawing it again. Flowcharts, sequence, class, state and ER
-  diagrams.
-- **Claude can read the board back:** every diagram's source, its sticky notes,
-  what you changed on a canvas and your messages, including a sample or a file
-  you opened yourself; and a picture of a diagram when words are not enough.
-- **Closed the tab?** Claude's next post opens it again, with everything so far.
-- **Export a diagram, or save the board.** **Export** on a diagram downloads it
-  as an SVG or a PNG, or copies its Mermaid source; a diagram you edited
-  downloads as a PNG or an `.excalidraw` file that opens, still editable, at
-  excalidraw.com. **Save board** (top right, and on the wrap-up banner)
-  downloads the whole board as one file: a web page with every diagram, its
-  sticky notes and source, and the conversation, which opens anywhere without
-  the plugin; or Markdown, to paste into an issue, a pull request or a
-  postmortem: each diagram as a `mermaid` block with its colours, legend and
-  sticky notes, its latest version open and the ones before it folded away.
-- **Wrap up.** One button asks Claude to summarise what you concluded in the
-  conversation; then the page says so and closes its tab (or, if the browser
-  does not let a page close itself, tells you it is done).
-- **Narrow windows and touch screens.** Below 900 px wide, the board and the
-  conversation become two views, switched at the top, with a count of Claude's
-  new messages. Drag to pan, pinch to zoom, double-tap to fit.
+  opens a board for it, such as a comparison of the options. Pick one: the
+  main board's constraint is settled and you are back there.
+- **Charts you can click.** Click a slice, bar or point and it goes with your
+  question.
+- **Edit together.** On a canvas, drag, write and connect boxes; Claude reads
+  your changes and amends the diagram in place.
+- **Sticky notes** for a proposal or a question, beside the box it is about.
+- **Mermaid errors go back to Claude,** which fixes the source and draws again.
+- **Save it.** Export a diagram (SVG, PNG, `.excalidraw`), or save the board as
+  one web page or as Markdown for a pull request or a postmortem.
+- **Wrap up.** One button: Claude sums up in the conversation and the page
+  closes.
 
-## How it works
-
-```mermaid
-flowchart LR
-  you(["`**You**`"])
-  subgraph cc["Claude Code"]
-    direction TB
-    claude["`**Claude**
-    writes Mermaid and notes`"]
-    mod["`**Whiteboard mod**
-    tool, /whiteboard`"]
-  end
-  subgraph host["Your machine"]
-    direction TB
-    server["`**Board server**
-    Node, 127.0.0.1 only`"]
-    page["`**Board page**
-    your browser, Mermaid 12.1`"]
-  end
-
-  you -- asks --> claude
-  claude -- "post_to_board" --> mod
-  mod -- "cards" --> server
-  server -- "live updates" --> page
-  page -. "drawn, or Mermaid's error" .-> server
-  page -. "your replies" .-> server
-  server -. "your words" .-> mod
-  mod -. "error, or your message" .-> claude
-  you -- "reads, replies" --> page
-
-  classDef person fill:#08427b,stroke:#052e56,color:#ffffff
-  classDef part fill:#438dd5,stroke:#2e6295,color:#ffffff
-  classDef local fill:#85bbf0,stroke:#5d82a8,color:#0b2540
-  class you person
-  class claude,mod part
-  class server,page local
-  style cc fill:#f5f9ff,stroke:#1168bd,stroke-dasharray:6 4,color:#0b4884
-  style host fill:#f7f7f7,stroke:#8a8a8a,stroke-dasharray:6 4,color:#555555
-```
-
-The mod gives Claude three tools, `post_to_board`, `edit_board` and
-`read_board`, and the `/whiteboard` command.
-The first post starts a small server for the session (Node's standard library,
-nothing installed) and opens its page in your browser. The page draws with the
-Mermaid bundled in the plugin, and edits with the bundled Excalidraw, so
-nothing is downloaded and no CDN is used.
-Each session has its own board, labelled with its folder's name.
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor You
-  participant C as Claude
-  participant W as Whiteboard mod
-  participant P as Board page
-
-  You->>C: "Walk me through the slow checkout"
-  C->>W: post_to_board(mermaid, note)
-  W->>P: start the board, open the browser
-  P-->>W: Parse error on line 4
-  W-->>C: Mermaid's error (the card is withdrawn)
-  C->>W: post_to_board(fixed source)
-  P-->>W: Drawn
-  C->>W: post_to_board(sticky note, "want the details?")
-  You->>P: "yes"
-  P->>W: your words
-  W->>C: "(on the whiteboard) yes"
-  C->>W: post_to_board(the proposal, in lavender)
-```
+It works for questions about your project ("how does checkout work?") and
+general ones ("how does TLS work?"). Desktop windows get the most out of it;
+on a narrow screen the board and the conversation take turns.
 
 ## Install
 
-Requirements: Claude Code 2.1.287 or later (mods are on by default from that
-version) and Node.js 18 or later, on macOS. The plugin finds Node on your PATH
-or where nvm, volta, fnm, asdf or mise put it. Linux should work but is
-untested; Windows is not supported yet.
+Requirements: Claude Code 2.1.287 or later and Node.js 18 or later, on macOS
+(found on your PATH or where nvm, volta, fnm, asdf or mise put it). Linux
+should work but is untested; Windows is not supported yet.
 
-This repository is its own plugin source: Claude Code reads the plugin list in
-`.claude-plugin/marketplace.json` and installs `whiteboard` from the `plugin/`
-folder, nothing else. Add the repository as a marketplace, then install
-`whiteboard` from it:
-
-- **In the Claude desktop app:** open Settings, find the plugins section, add
-  the marketplace `mazzucci/whiteboard`, then install **whiteboard** from it.
+- **In the Claude desktop app:** Settings, plugins section: add the
+  marketplace `mazzucci/whiteboard`, then install **whiteboard**.
 - **In a terminal:**
 
   ```bash
@@ -246,46 +90,21 @@ folder, nothing else. Add the repository as a marketplace, then install
   claude plugin install whiteboard@mazzucci
   ```
 
-  `whiteboard@mazzucci` is the plugin `whiteboard` from the marketplace
-  `mazzucci`, the name this repository's plugin list goes by.
+Then start a new session; the first diagram opens the board. The desktop app
+warns that a third-party plugin runs code on your machine: see
+[Security and privacy](#security-and-privacy) for what this one runs.
 
-The desktop app warns that this marketplace is not Anthropic's and that a
-plugin runs code on your machine. That is expected for a third-party plugin:
-see [Security and privacy](#security-and-privacy) for what this one runs.
+**Update:** `claude plugin marketplace update mazzucci`, then
+`claude plugin update whiteboard@mazzucci`, and a new session.
+**Uninstall:** `claude plugin uninstall whiteboard@mazzucci`.
+**From a clone:** `claude --plugin-dir /path/to/whiteboard/plugin`.
 
-Then start a new session. There is no setup step: the first diagram opens the
-board.
+Or ask Claude: _"Install the whiteboard plugin from
+https://github.com/mazzucci/whiteboard, following the Instructions for Claude
+in its README."_
 
-**To update:** refresh the marketplace first so Claude Code sees the new
-version, then update the plugin and start a new session. Desktop app: Settings,
-plugins section. Terminal: `claude plugin marketplace update mazzucci`, then
-`claude plugin update whiteboard@mazzucci`.
-
-**To uninstall:** `claude plugin uninstall whiteboard@mazzucci`, and
-optionally `claude plugin marketplace remove mazzucci`.
-
-**Installed as `whiteboard@whiteboard`?** The marketplace was called
-`whiteboard` until version 0.2.2. Your install keeps working and updating
-under that name (use `whiteboard` in place of `mazzucci` above). To move to
-the new name: `claude plugin marketplace remove whiteboard`, then add
-`mazzucci/whiteboard` again and install `whiteboard@mazzucci`.
-
-**Upgrading from 0.1?** Version 0.1 drew in a pane of the desktop app with a
-headless Chrome that its `/whiteboard setup` downloaded into
-`~/.cache/whiteboard`. Later versions need none of it: delete
-`~/.cache/whiteboard` after updating (or run 0.1's `/whiteboard uninstall`
-before).
-
-### Ask Claude to install it
-
-In Claude Code, paste:
-
-```
-Install the whiteboard plugin from https://github.com/mazzucci/whiteboard,
-following the "Instructions for Claude" in its README.
-```
-
-### Instructions for Claude
+<details>
+<summary>Instructions for Claude</summary>
 
 You are installing this plugin for the person you are working with. Follow
 these steps in order, and stop to tell them if one fails.
@@ -304,10 +123,9 @@ these steps in order, and stop to tell them if one fails.
    update it instead with `claude plugin marketplace update mazzucci` and
    `claude plugin update whiteboard@mazzucci` (an older install goes by
    `whiteboard@whiteboard`: use `whiteboard` as the marketplace name in both
-   commands). If `claude` is not on the
-   PATH (often the case for desktop app users), ask the person to add the
-   marketplace `mazzucci/whiteboard` in the desktop app's Settings, plugins
-   section, and install **whiteboard** from it.
+   commands). If `claude` is not on the PATH (often the case for desktop app
+   users), ask the person to add the marketplace `mazzucci/whiteboard` in the
+   desktop app's Settings, plugins section, and install **whiteboard** from it.
 4. **Tell the person the next steps:** start a new Claude Code session (plugins
    load when a session starts), then ask for a walkthrough or a diagram. If
    `/whiteboard` is missing in the new session, the mod did not load: check
@@ -316,123 +134,115 @@ these steps in order, and stop to tell them if one fails.
 Do not clone the repository by hand, and do not change their Claude Code
 settings, permissions or other plugins as part of this install.
 
-### Try it from a clone
+</details>
 
-`claude --plugin-dir /path/to/whiteboard/plugin` loads a local copy for one
-session.
+<details>
+<summary>Older installs</summary>
+
+**Installed as `whiteboard@whiteboard`?** The marketplace was called
+`whiteboard` until 0.2.2. Your install keeps updating under that name (use
+`whiteboard` in place of `mazzucci` above), or move: `claude plugin marketplace
+remove whiteboard`, add `mazzucci/whiteboard` again and install
+`whiteboard@mazzucci`.
+
+**Upgrading from 0.1?** Delete `~/.cache/whiteboard` after updating: later
+versions need no headless Chrome.
+
+</details>
 
 ## Use
 
-Ask for a walkthrough ("walk me through this investigation", "how does
-checkout work?"), a picture ("draw the auth flow"), or an explanation ("how
-does TLS work?"). Claude draws when a diagram helps; say "on the whiteboard" to
-be sure. The bundled `whiteboard:drawing` skill teaches it to keep diagrams
-legible and honest.
-
-To move a discussion to the board, run `/whiteboard focus`: Claude answers on
-the board, and you discuss there until you press **Wrap up**.
-
-### Commands
+Ask for a walkthrough, a picture or a decision; say "on the whiteboard" to be
+sure. `/whiteboard focus` moves the discussion to the board until you press
+**Wrap up**.
 
 | Command | |
 |---|---|
 | `/whiteboard` | Open the board (again, if you closed its tab) |
 | `/whiteboard focus` | Discuss on the board until you wrap up |
-| `/whiteboard canvas` | Open the board in canvas mode: edit the diagrams together |
-| `/whiteboard path/to/file.mmd` | Show a Mermaid file (or the first `mermaid` block of a Markdown file) |
+| `/whiteboard canvas` | Open it in canvas mode: edit the diagrams together |
+| `/whiteboard path/to/file.mmd` | Show a Mermaid file (or a Markdown file's first `mermaid` block) |
 | `/whiteboard sample` | Draw a sample |
 
-### Keys on the board
+<details>
+<summary>Keys on the board</summary>
 
 | | |
 |---|---|
 | Tabs, or `[` / `]` | previous / next diagram |
 | `i` / `o`, pinch, Ctrl+scroll | zoom in / out |
-| `f`, double-click, double-tap | fit the diagram to the board |
+| `f`, double-click, double-tap | fit the diagram |
 | drag, arrow keys | pan |
 | `c` | Mermaid source, with Copy |
-| Enter | send your reply (Shift+Enter for a new line) |
+| Enter | send (Shift+Enter for a new line) |
 
-## Reading the diagrams
+</details>
 
-A polished diagram makes a guess look like a fact, so the bundled skill asks
-Claude to show the difference: real module, file and service names, the
-mechanism on each edge, `file:line` citations in the answer, and colours that
-say how much is known. Each colour answers one question, and has its own
-border so it reads without colour too:
+<details>
+<summary>How it works</summary>
 
-| | |
-|---|---|
-| grey, dashed | not checked or measured yet |
-| green | checked, no problem |
-| red | checked, a problem |
-| lavender, dashed | a proposed change, not made or measured yet |
+The plugin gives Claude three tools, `post_to_board`, `edit_board` and
+`read_board`, and the `/whiteboard` command. The first post starts a small
+server for the session (Node's standard library, nothing installed) and opens
+its page in your browser. The page draws with the Mermaid bundled in the
+plugin and edits with the bundled Excalidraw; what you type or click there is
+submitted into the session as your own words. Each session has its own board,
+labelled with its folder's name. The bundled `whiteboard:drawing` skill teaches
+Claude to keep diagrams legible and honest: real names, `file:line`
+citations, and colours that say how much is known.
 
-While troubleshooting, Claude starts from a hypothesis with every step grey,
-and redraws the same diagram as evidence comes in, so the tabs read as the
-investigation. A fix starts as a sticky note on the box it changes; when you
-want it, Claude redraws the diagram with the change in lavender.
+```mermaid
+flowchart LR
+  you(["You"])
+  subgraph cc["Claude Code"]
+    claude["Claude"] -- "post_to_board" --> mod["Whiteboard mod"]
+  end
+  subgraph host["Your machine"]
+    server["Board server<br/>127.0.0.1 only"] -- "live updates" --> page["Board page<br/>your browser"]
+  end
+  you -- asks --> claude
+  mod -- cards --> server
+  page -. "drawn, errors, your replies" .-> server
+  server -. "your words" .-> mod
+  you -- "reads, replies, decides" --> page
+```
 
-The same recipe colours a diagram by any **lens**: risk across a change, test
-coverage, the progress of a CI pipeline or a migration, or one you invent ("by
-owner", "by latency"). These are conventions in the skill, not features of the
-board: any Mermaid works.
+</details>
 
 ## Security and privacy
 
 The board is a small web server on your machine, and what is typed on its page
-goes into your Claude Code session as your own words. So:
+goes into your session as your own words.
 
-- **The board's link is a key.** The address the plugin opens carries a random
-  token. Whoever has it, a person or a program on your machine, can send
-  messages into your session as you, and Claude acts on them with the
-  permissions you have given it (in auto mode, without asking). Don't share the
-  link. Once the page has loaded, the token leaves the address bar and the page
-  keeps it in that tab; the address first opened may stay in your browser's
-  history, which is harmless once the session has ended.
-- **Local only.** The server listens on 127.0.0.1, on a random port. It answers
-  only its own host name (so a website cannot reach it by pointing a domain at
-  127.0.0.1), refuses requests from any other website even when they carry the
-  token, and accepts only JSON.
-- **Nothing downloaded, nothing sent.** Mermaid and the canvas editor
-  (Excalidraw) are bundled in the plugin. The page's security policy lets it
-  load only the board itself, it passes no
-  referrer on, and it cannot be framed by another site.
-- **Diagrams and notes are inert.** Mermaid runs in strict mode (no scripts or
-  click callbacks), and any links it draws are removed. Notes are a small
-  Markdown subset, escaped, with links only to http and https.
-- **Only what you type.** The page sends a message only when you press Send or
-  Wrap up. It cannot answer Claude Code's permission prompts: a request Claude
-  makes because of your message still asks you, unless you already allowed it.
-- **Pictures only when Claude asks.** When Claude reads the board with a
-  picture, the page draws the diagram as an image and it goes into the
-  conversation, like a screenshot you pasted.
-- **Gone with the session.** The board keeps everything in memory and stops
-  when the session ends or after Wrap up. Nothing is written anywhere unless
-  you export or save: those are ordinary downloads, made in the page, and the
-  saved web page runs no scripts.
+- **The board's link is a key.** Its random token lets whoever has it send
+  messages into your session as you. Don't share it; once the page loads, the
+  token leaves the address bar.
+- **Local only.** 127.0.0.1, a random port, its own host name only, no other
+  website even with the token, JSON only.
+- **Nothing downloaded, nothing sent.** Mermaid and Excalidraw are bundled;
+  the page loads only from the board itself.
+- **Inert content.** Mermaid runs in strict mode; notes are an escaped
+  Markdown subset with http(s) links only.
+- **Only what you do.** The page sends a message only when you press Send or
+  Wrap up, and cannot answer Claude Code's permission prompts.
+- **Gone with the session.** Everything is in memory; nothing is written unless
+  you export or save, and a saved page runs no scripts.
 
-## Limits
+<details>
+<summary>Limits</summary>
 
-- One board per session. Restarting Claude Code (or the plugin) ends it; the
-  open page then says so and stays readable.
-- `claude -p` has no board: nobody could reply to it.
-- The board opens in your default browser (in the desktop app too, not inside
-  the app). To use another, set `BROWSER` to its command before starting
-  Claude Code: its words are split on spaces, and `%s` stands for the address
-  (otherwise the address goes last).
-- The board is on 127.0.0.1, so it opens only on the machine running Claude
-  Code, not on a phone or another computer.
-- A brief has at most nine sections at a time, so it fits one screen. It is
-  made for a desktop window; on a phone it shares the Chat view.
-- Sticky notes sit beside a box in flowcharts; in other diagram types they line
-  up beside the diagram.
-- An exported diagram is the diagram alone: its sticky notes are in the saved
-  board. A diagram you edited exports as a PNG or an `.excalidraw` file, not an
-  SVG.
+- One board per session; restarting Claude Code ends it (the page stays
+  readable). `claude -p` has no board.
+- The board opens in your default browser (set `BROWSER` to use another) and
+  only on the machine running Claude Code.
+- A brief has at most nine sections; side boards are one level deep, three
+  open at a time.
+- Sticky notes sit beside a box in flowcharts, beside the diagram otherwise.
+  Section highlights work on flowcharts, sequence diagrams and charts.
 - A diagram you edit keeps its boxes, colours and arrows but not every Mermaid
-  detail (a database cylinder becomes a box, for one); gantt, pie and the
-  other types without boxes and arrows cannot be edited.
+  detail; gantt, pie and other types without boxes cannot be edited.
+
+</details>
 
 ## Development
 
@@ -440,34 +250,24 @@ goes into your Claude Code session as your own words. So:
 claude plugin validate --strict plugin
 claude plugin test plugin
 node --test plugin/tests/server.test.mjs
-cd test && npm ci && npm test            # the board's page in headless Chrome (CHROME_PATH if not found)
-cd editor && npm ci && node check-build.mjs   # the vendored editor is what its source builds
+cd test && npm ci && npm test            # the page in headless Chrome (FIREFOX_PATH=… for Firefox)
+cd editor && npm ci && node check-build.mjs   # the vendored editor matches its source
 ```
 
-CI runs all four on every pull request (`.github/workflows/ci.yml`); changes
-reach `main` through pull requests.
-
-`plugin/` is everything Claude Code loads, and all an install copies: the mod
-(`hooks/`), the board server and its page (`board/`, with Mermaid and the
-built canvas editor in `board/vendor/`), the drawing skill (`skills/`) and the
-tests. The rest of the repository is the project around it: `editor/` builds
-the canvas editor (`cd editor && npm install && npm run build`); `demo/` holds the simulated checkout
-investigation and the recording guide; `fixtures/` one diagram per type;
-`media/` the README's GIFs and the scripts that record and edit them
-(`media/board-demo/`). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
-
-## Support
-
-Questions, bugs and ideas: [GitHub Issues](https://github.com/mazzucci/whiteboard/issues).
+CI runs them on every pull request. `plugin/` is all an install copies;
+`editor/` builds the canvas editor, `demo/` holds the simulated investigation
+and the recording guide, `media/` the GIF and its scripts. Changes are in
+[CHANGELOG.md](CHANGELOG.md). Questions, bugs and ideas:
+[GitHub Issues](https://github.com/mazzucci/whiteboard/issues).
 
 ## License
 
-MIT. The bundled Mermaid is MIT licensed; the libraries inside its bundle keep
-their own licences, including the Eclipse Layout Kernel under EPL-2.0. The
+MIT. The bundled Mermaid is MIT licensed (the libraries in its bundle keep
+their own licences, including the Eclipse Layout Kernel under EPL-2.0); the
 canvas editor bundles Excalidraw, its Mermaid converter and React (MIT) and
 fonts under the SIL Open Font License or MIT. See
 [`plugin/board/vendor/README.md`](plugin/board/vendor/README.md).
 
-This is an independent, unofficial project. It is not affiliated with, endorsed
-by or supported by Anthropic. Claude and Claude Code are trademarks of
-Anthropic, PBC, used here only to describe what the project works with.
+This is an independent, unofficial project, not affiliated with, endorsed by or
+supported by Anthropic. Claude and Claude Code are trademarks of Anthropic,
+PBC, used here only to describe what the project works with.

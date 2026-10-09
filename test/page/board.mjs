@@ -1,7 +1,8 @@
 // What the page tests share: a board server of their own, a headless Chrome,
 // the plugin's side of the board (posts, reads), and the canvas on a page.
 //
-// Chrome: CHROME_PATH, else the usual place on macOS or Linux.
+// Chrome: CHROME_PATH, else the usual place on macOS or Linux. Firefox instead:
+// FIREFOX_PATH (npx browsers install firefox@stable prints where it went).
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import puppeteer from 'puppeteer-core'
@@ -14,10 +15,13 @@ const CHROME = [
   '/usr/bin/chromium',
 ].find(p => p && existsSync(p))
 
+/** Whether the tests run in Firefox (FIREFOX_PATH) rather than Chrome. */
+export const firefox = !!process.env.FIREFOX_PATH
+
 export const sleep = ms => new Promise(r => setTimeout(r, ms))
 
-/** A board server, as the plugin starts one, and a browser to open its page in. */
-export async function board() {
+/** A board server, as the plugin starts one, and a browser to open its page in (downloads go to `downloads`, if given). */
+export async function board({ downloads } = {}) {
   const server = spawn(process.execPath, [new URL('../../plugin/board/server.mjs', import.meta.url).pathname, '--label', 'tests'], {
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -32,13 +36,15 @@ export async function board() {
       }
     })
   })
-  if (!CHROME) throw new Error('no Chrome: set CHROME_PATH')
+  if (!firefox && !CHROME) throw new Error('no Chrome: set CHROME_PATH')
   const browser = await puppeteer.launch({
-    executablePath: CHROME,
+    ...(firefox ? { browser: 'firefox', executablePath: process.env.FIREFOX_PATH } : { executablePath: CHROME }),
     headless: true,
     defaultViewport: { width: 1280, height: 860 },
-    args: process.env.CI ? ['--no-sandbox'] : [],
+    args: process.env.CI && !firefox ? ['--no-sandbox'] : [],
   })
+  // Pages open in a context of their own, which is where downloads are allowed (in Chrome and Firefox alike).
+  const context = downloads ? await browser.createBrowserContext({ downloadBehavior: { policy: 'allow', downloadPath: downloads } }) : browser.defaultBrowserContext()
   /** The plugin's side: a POST to /post (or another route), or a GET. */
   const call = (path, body) =>
     fetch(`http://127.0.0.1:${ready.port}${path}`, {
@@ -49,7 +55,7 @@ export async function board() {
   const pages = []
   /** A page of the board, as the person opens it; its errors are kept. `prepare` runs before it loads. */
   async function open(prepare) {
-    const page = await browser.newPage()
+    const page = await context.newPage()
     page.errors = []
     page.on('pageerror', e => page.errors.push(String(e)))
     if (prepare) await prepare(page)
@@ -60,6 +66,7 @@ export async function board() {
     return page
   }
   return {
+    context,
     call,
     open,
     said,
