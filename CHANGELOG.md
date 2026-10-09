@@ -40,6 +40,10 @@
 - **A shorter README,** with one GIF: a design session, from constraints to a
   side board to the proposal. The earlier GIFs' scripts are still in
   `media/board-demo/`.
+- **Tested in Firefox too.** The page tests run in Firefox as well as Chrome
+  (`FIREFOX_PATH=… npm test` in `test/`), and all pass. The page no longer
+  asks for a `favicon.ico` its own security policy then blocks, which Firefox
+  reported as an error.
 
 ## 0.5.1
 

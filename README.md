@@ -250,7 +250,7 @@ goes into your session as your own words.
 claude plugin validate --strict plugin
 claude plugin test plugin
 node --test plugin/tests/server.test.mjs
-cd test && npm ci && npm test            # the page in headless Chrome
+cd test && npm ci && npm test            # the page in headless Chrome (FIREFOX_PATH=… for Firefox)
 cd editor && npm ci && node check-build.mjs   # the vendored editor matches its source
 ```
 

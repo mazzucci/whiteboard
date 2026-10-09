@@ -6,18 +6,17 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { board, look, send, sleep } from './board.mjs'
+import { board, firefox, look, send, sleep } from './board.mjs'
 
 let b
 let page
 let dir
 before(async () => {
-  b = await board()
-  page = await b.open()
   dir = mkdtempSync(join(tmpdir(), 'wb-export-'))
-  const cdp = await page.createCDPSession()
-  await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir, eventsEnabled: true })
-  await page.browserContext().overridePermissions(new URL(page.url()).origin, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write'])
+  b = await board({ downloads: dir })
+  page = await b.open()
+  // Firefox has no clipboard permissions to grant: there the test sees what the page writes.
+  if (!firefox) await b.context.overridePermissions(new URL(page.url()).origin, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write'])
 })
 after(() => {
   rmSync(dir, { recursive: true, force: true })
@@ -31,7 +30,7 @@ after(() => {
  */
 let kept = 0
 async function downloaded(pattern) {
-  const name = await b.until(() => readdirSync(dir).find(n => pattern.test(n) && !n.endsWith('.crdownload') && statSync(join(dir, n)).size > 0), `a download like ${pattern}`)
+  const name = await b.until(() => readdirSync(dir).find(n => pattern.test(n) && !/\.(crdownload|part)$/.test(n) && statSync(join(dir, n)).size > 0), `a download like ${pattern}`)
   await sleep(200)
   const path = join(dir, `kept-${++kept}-${name}`)
   renameSync(join(dir, name), path)
@@ -63,8 +62,9 @@ test('a drawn diagram downloads as an SVG and a PNG, named after the board and t
 })
 
 test('Copy Mermaid source puts the source on the clipboard and says so', async () => {
+  if (firefox) await page.evaluate(() => { navigator.clipboard.writeText = async text => { window.copied = text } })
   await choose('#export', 'mermaid')
-  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), FLOW)
+  assert.equal(await page.evaluate(() => (window.copied ?? navigator.clipboard.readText())), FLOW)
   assert.equal(await page.$eval('#export .lbl', el => el.textContent), 'Copied')
 })
 
